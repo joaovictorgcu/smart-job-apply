@@ -1,0 +1,50 @@
+# Keep the build context small and free of secrets. Everything here is either
+# regenerated inside the image or must never reach it.
+
+# Secrets — the container reads configuration from env_file at run time.
+.env
+.env.*
+!.env.example
+
+# Runtime state: database, LinkedIn session cookies, resumes, screenshots.
+# This lives in a Docker volume, never baked into the image.
+backend/data/
+
+# Version control and CI
+.git/
+.gitignore
+.github/
+
+# Python build artefacts and caches
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node: reinstalled by the frontend build stage
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Test and debug output
+playwright-report/
+test-results/
+*.log
+logs/
+
+# Editors / OS
+.vscode/
+.idea/
+.claude/
+.DS_Store
+Thumbs.db
+
+# Docs that do not affect the build (README.md is kept: pyproject references it)
+docs/
