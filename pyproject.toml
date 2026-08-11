@@ -14,7 +14,8 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.36,<2.1",
     "alembic>=1.14,<2",
     "aiosqlite>=0.20",
-    "pydantic>=2.10,<3",
+    # [email] pulls in email-validator, which EmailStr needs at schema build time.
+    "pydantic[email]>=2.10,<3",
     "pydantic-settings>=2.7,<3",
     "python-jose[cryptography]>=3.3",
     # bcrypt is used directly. passlib 1.7.4 (unmaintained since 2020) cannot read
