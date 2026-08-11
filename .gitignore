@@ -103,5 +103,9 @@ Desktop.ini
 .agent/
 .assistant/
 
+# Claude Code: the shared project settings are committed, the personal grants are
+# not — settings.local.json is per-developer and holds machine-specific paths.
+.claude/settings.local.json
+
 # TypeScript incremental build cache
 *.tsbuildinfo
