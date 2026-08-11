@@ -1,0 +1,193 @@
+import { Send } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+
+import { EmptyState } from '@/components/EmptyState';
+import { Pagination } from '@/components/Pagination';
+import { Card, Field, PageHeader, Select, Skeleton } from '@/components/primitives';
+import { ScoreBadge } from '@/components/ScoreBadge';
+import { StatusBadge } from '@/components/StatusBadge';
+import { useApplications, useJobs } from '@/hooks/useApi';
+import { applicationStatusLabel, badgeClass, formatDateTime, formatNumber } from '@/lib/format';
+import { APPLICATION_STATUSES, type ApplicationStatus, type Job } from '@/types/api';
+
+const PAGE_SIZE = 20;
+const JOB_JOIN_LIMIT = 200;
+
+function parseStatus(value: string | null): ApplicationStatus | 'all' {
+  if (value && (APPLICATION_STATUSES as readonly string[]).includes(value)) {
+    return value as ApplicationStatus;
+  }
+  return 'all';
+}
+
+export function Applications() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [offset, setOffset] = useState(0);
+  const status = parseStatus(searchParams.get('status'));
+
+  const { data, isLoading } = useApplications({
+    status: status === 'all' ? undefined : status,
+    limit: PAGE_SIZE,
+    offset,
+  });
+  const { data: jobsPage } = useJobs({ limit: JOB_JOIN_LIMIT });
+
+  // Applications carry only a job_id, so the job columns are joined client-side.
+  const jobByApplication = useMemo(() => {
+    const map = new Map<number, Job>();
+    for (const job of jobsPage?.items ?? []) {
+      if (job.application_id !== null) map.set(job.application_id, job);
+    }
+    return map;
+  }, [jobsPage]);
+
+  const changeStatus = (next: string) => {
+    setOffset(0);
+    if (next === 'all') {
+      searchParams.delete('status');
+    } else {
+      searchParams.set('status', next);
+    }
+    setSearchParams(searchParams, { replace: true });
+  };
+
+  const items = data?.items ?? [];
+
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        title="Applications"
+        description="Every draft the automation filled and every application you approved."
+      />
+
+      <Card className="px-4 py-3.5 sm:px-5">
+        <div className="grid gap-3 sm:max-w-xs">
+          <Field label="Status" htmlFor="application-status">
+            <Select
+              id="application-status"
+              value={status}
+              onChange={(event) => changeStatus(event.target.value)}
+            >
+              <option value="all">Any status</option>
+              {APPLICATION_STATUSES.map((value) => (
+                <option key={value} value={value}>
+                  {applicationStatusLabel(value)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+      </Card>
+
+      <Card className="overflow-hidden">
+        {isLoading ? (
+          <div className="space-y-2 p-4" aria-busy="true">
+            <Skeleton className="h-10" />
+            <Skeleton className="h-10" />
+            <Skeleton className="h-10" />
+            <Skeleton className="h-10" />
+          </div>
+        ) : items.length === 0 ? (
+          <EmptyState
+            icon={Send}
+            title={status === 'all' ? 'No applications yet' : 'Nothing with this status'}
+            description={
+              status === 'all'
+                ? 'Pick jobs on the Jobs page to fill their forms. They will appear here waiting for your review.'
+                : 'Try another status filter.'
+            }
+            action={
+              <Link to="/jobs" className="btn btn-primary">
+                Go to jobs
+              </Link>
+            }
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="table-base">
+              <caption className="sr-only">
+                Applications, {formatNumber(data?.total ?? 0)} in total
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Status</th>
+                  <th scope="col">Score</th>
+                  <th scope="col">Job</th>
+                  <th scope="col">Company</th>
+                  <th scope="col">Last update</th>
+                  <th scope="col">Submitted</th>
+                  <th scope="col">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((application) => {
+                  const job = jobByApplication.get(application.id);
+                  const flagged = application.screening_answers.filter(
+                    (answer) => answer.needs_review,
+                  ).length;
+
+                  return (
+                    <tr key={application.id}>
+                      <td>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <StatusBadge kind="application" status={application.status} />
+                          {application.was_dry_run ? (
+                            <span className={badgeClass('neutral')}>dry run</span>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td>
+                        <ScoreBadge score={job?.score ?? null} size="sm" />
+                      </td>
+                      <td className="max-w-[18rem]">
+                        <Link
+                          to={`/applications/${application.id}`}
+                          className="block truncate font-medium text-content hover:text-accent-400 hover:underline"
+                          title={job?.title ?? undefined}
+                        >
+                          {job?.title ?? `Application #${application.id}`}
+                        </Link>
+                        {flagged > 0 ? (
+                          <span className="text-2xs text-warning">
+                            {flagged} {flagged === 1 ? 'answer needs' : 'answers need'} review
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="max-w-[12rem]">
+                        <span className="block truncate">{job?.company ?? '—'}</span>
+                      </td>
+                      <td className="tabular whitespace-nowrap text-xs">
+                        {formatDateTime(application.updated_at ?? application.created_at)}
+                      </td>
+                      <td className="tabular whitespace-nowrap text-xs">
+                        {application.submitted_at ? formatDateTime(application.submitted_at) : '—'}
+                      </td>
+                      <td className="text-right">
+                        <Link to={`/applications/${application.id}`} className="btn btn-sm">
+                          {application.status === 'awaiting_review' ? 'Review' : 'Open'}
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {data && data.total > PAGE_SIZE ? (
+        <Pagination
+          total={data.total}
+          limit={data.limit}
+          offset={data.offset}
+          onOffsetChange={setOffset}
+          unit="applications"
+        />
+      ) : null}
+    </div>
+  );
+}

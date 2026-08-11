@@ -9,7 +9,6 @@ import { ScoreBadge } from '@/components/ScoreBadge';
 import { ScoreChart } from '@/components/ScoreChart';
 import { SessionStatusCard } from '@/components/SessionStatusCard';
 import { StatsCards } from '@/components/StatsCards';
-import { StatusBadge } from '@/components/StatusBadge';
 import { useApplications, useJobs, useStats } from '@/hooks/useApi';
 import { useRecentEvents } from '@/hooks/useEvents';
 import { formatRelativeTime } from '@/lib/format';
