@@ -1,0 +1,68 @@
+# One container runs the whole application. Start it with:
+#
+#     cp .env.example .env      # then set ANTHROPIC_API_KEY
+#     docker compose up -d --build
+#
+# Then open the two ports below in your browser.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: linkedin-auto-apply:latest
+    container_name: linkedin-auto-apply
+
+    # Every setting lives in .env (copy it from .env.example first).
+    # SECRET_KEY and ENCRYPTION_KEY may be left empty: the entrypoint generates
+    # them once and stores them on the volume so sessions survive restarts.
+    env_file:
+      - .env
+
+    environment:
+      # Absolute path inside the container; matches the volume mount below.
+      DATA_DIR: /app/backend/data
+      # The frontend is served by the backend on this same port, so the browser
+      # origin is the app's own origin.
+      CORS_ORIGINS: http://localhost:8000,http://127.0.0.1:8000
+
+    ports:
+      # The application: UI and API.
+      - "8000:8000"
+      # noVNC. THIS IS HOW YOU LOG IN TO LINKEDIN: open http://localhost:6080
+      # and you are looking at the real Chromium window the automation drives.
+      # Sign in there once — only the session cookies are kept, encrypted, and
+      # come back here whenever LinkedIn asks you to verify something.
+      # Port 5900 (raw VNC) is deliberately not published; x11vnc is bound to
+      # localhost inside the container and reachable only through this bridge.
+      - "6080:6080"
+
+    volumes:
+      # Everything worth keeping: app.db, browser_profiles/ (the encrypted
+      # LinkedIn session), resumes/ and screenshots/. Removing this volume means
+      # signing in to LinkedIn again and losing your application history.
+      - app-data:/app/backend/data
+
+    # Chromium allocates its renderer heap in /dev/shm. Docker's 64 MB default
+    # makes tabs crash with no useful error.
+    shm_size: 1gb
+
+    restart: unless-stopped
+
+    healthcheck:
+      # urllib rather than curl so the check has no extra dependency.
+      test:
+        - CMD-SHELL
+        - >-
+          python3 -c "import urllib.request,sys;
+          sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health',
+          timeout=5).status == 200 else 1)"
+      interval: 30s
+      timeout: 10s
+      # Migrations and the first browser launch make the first boot slow.
+      start_period: 60s
+      retries: 3
+
+volumes:
+  app-data:
+    name: linkedin-auto-apply-data
