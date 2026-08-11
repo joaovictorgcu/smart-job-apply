@@ -1,25 +1,55 @@
-"""Base declarativa e mixins compartilhados pelos modelos."""
+"""Declarative base and mixins shared by the models."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
-from sqlalchemy import DateTime, func
+from sqlalchemy import DateTime, Dialect, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.types import TypeDecorator
 
 
 def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-class Base(DeclarativeBase):
-    """Base de todos os modelos.
+class UtcDateTime(TypeDecorator[datetime]):
+    """A datetime that is always timezone-aware and in UTC on the Python side.
 
-    `type_annotation_map` mantém os `datetime` com timezone em qualquer backend,
-    para que a troca de SQLite por PostgreSQL não mude a semântica.
+    SQLite has no native timezone support and hands back naive datetimes, so
+    `DateTime(timezone=True)` alone is not enough: an aware value written on one
+    backend comes back naive on the other, and `utcnow() - row.created_at` then
+    raises TypeError. Normalizing in both directions keeps the semantics
+    identical across SQLite and PostgreSQL.
     """
 
-    type_annotation_map = {datetime: DateTime(timezone=True)}
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value: Any, dialect: Dialect) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+
+    def process_result_value(self, value: Any, dialect: Dialect) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+
+
+class Base(DeclarativeBase):
+    """Base of every model.
+
+    `type_annotation_map` keeps `datetime` columns timezone-aware on any backend,
+    so swapping SQLite for PostgreSQL does not change the semantics.
+    """
+
+    type_annotation_map = {datetime: UtcDateTime()}
 
 
 class TimestampMixin:
