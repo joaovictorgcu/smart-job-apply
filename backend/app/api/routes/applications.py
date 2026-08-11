@@ -9,10 +9,12 @@ from fastapi import APIRouter, BackgroundTasks, Query
 from app.api.deps import CurrentUser, LimitDep, OffsetDep, SessionDep
 from app.models import ApplicationStatus
 from app.schemas.application import (
+    ApplicationCard,
     ApplicationDetail,
     ApplicationEventOut,
     ApplicationRead,
     ApplicationUpdate,
+    OutcomeUpdate,
 )
 from app.schemas.automation import SubmitRequest
 from app.schemas.common import Page
@@ -41,11 +43,40 @@ async def list_applications(
     )
 
 
+@router.get("/board", response_model=list[ApplicationCard])
+async def read_board(user: CurrentUser, session: SessionDep) -> list[ApplicationCard]:
+    """Submitted applications for the pipeline board.
+
+    Returned flat, most recently moved first; the dashboard groups them into
+    outcome columns (Applied / Interview / Offer / Rejected / Ghosted).
+    """
+    applications = await application_service.list_board(session, user)
+    return [application_service.to_application_card(item) for item in applications]
+
+
 @router.get("/{application_id}", response_model=ApplicationDetail)
 async def read_application(
     application_id: int, user: CurrentUser, session: SessionDep
 ) -> ApplicationDetail:
     """Return the draft with its job and its full event trail."""
+    application = await application_service.get_application(session, user, application_id)
+    return application_service.to_application_detail(application)
+
+
+@router.patch("/{application_id}/outcome", response_model=ApplicationDetail)
+async def set_application_outcome(
+    application_id: int,
+    payload: OutcomeUpdate,
+    user: CurrentUser,
+    session: SessionDep,
+) -> ApplicationDetail:
+    """Record what happened after applying (interview, offer, rejection, no reply).
+
+    Only a submitted application can be moved; this never submits anything.
+    """
+    await application_service.set_outcome(
+        session, user, application_id, payload.outcome, note=payload.note
+    )
     application = await application_service.get_application(session, user, application_id)
     return application_service.to_application_detail(application)
 

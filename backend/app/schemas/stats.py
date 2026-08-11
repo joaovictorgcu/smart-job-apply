@@ -15,6 +15,34 @@ class DailyCount(BaseModel):
     count: int
 
 
+class OutcomeCount(BaseModel):
+    outcome: str  # applied | interview | offer | rejected | ghosted
+    count: int
+    avg_score: float | None = None
+
+
+class ScoreBandRate(BaseModel):
+    """How often submitted applications in one score band reached an interview."""
+
+    label: str  # e.g. "90-100"
+    total: int
+    interviews: int  # outcome in {interview, offer}
+    rate: float | None = None  # interviews / total, or null when total is 0
+
+
+class OutcomeStats(BaseModel):
+    """Does a high AI match score actually lead to interviews?"""
+
+    total_submitted: int = 0
+    interviews: int = 0  # outcome in {interview, offer}
+    offers: int = 0
+    rejected: int = 0
+    ghosted: int = 0
+    interview_rate: float | None = None
+    by_outcome: list[OutcomeCount] = Field(default_factory=list)
+    interview_rate_by_band: list[ScoreBandRate] = Field(default_factory=list)
+
+
 class DashboardStats(BaseModel):
     jobs_total: int = 0
     jobs_by_status: dict[str, int] = Field(default_factory=dict)

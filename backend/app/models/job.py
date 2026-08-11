@@ -22,6 +22,7 @@ from app.database.base import Base, TimestampMixin
 from app.models.enums import (
     AnalysisKind,
     ApplicationEventType,
+    ApplicationOutcome,
     ApplicationStatus,
     JobStatus,
 )
@@ -130,6 +131,12 @@ class Application(Base, TimestampMixin):
     approved_at: Mapped[datetime | None] = mapped_column(default=None)
     submitted_at: Mapped[datetime | None] = mapped_column(default=None)
     error_message: Mapped[str | None] = mapped_column(Text, default=None)
+
+    # Post-submission result, tracked by the user on the pipeline board. Null until
+    # the application is submitted (then it starts at APPLIED).
+    outcome: Mapped[ApplicationOutcome | None] = mapped_column(String(20), default=None, index=True)
+    outcome_updated_at: Mapped[datetime | None] = mapped_column(default=None)
+    outcome_note: Mapped[str | None] = mapped_column(Text, default=None)
 
     user: Mapped[User] = relationship(back_populates="applications")
     job: Mapped[Job] = relationship(back_populates="application")

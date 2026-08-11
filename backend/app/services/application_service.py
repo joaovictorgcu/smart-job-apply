@@ -14,6 +14,7 @@ from app.models import (
     Application,
     ApplicationEvent,
     ApplicationEventType,
+    ApplicationOutcome,
     ApplicationStatus,
     Job,
     JobStatus,
@@ -21,6 +22,7 @@ from app.models import (
 )
 from app.observability import get_logger, record_event
 from app.schemas.application import (
+    ApplicationCard,
     ApplicationDetail,
     ApplicationEventOut,
     ApplicationRead,
@@ -190,6 +192,11 @@ async def mark_submitted(
     application.submitted_at = utcnow()
     application.was_dry_run = was_dry_run
     application.error_message = None
+    # A submitted application enters the pipeline board at APPLIED, waiting for the
+    # user to record what happens next (interview, offer, rejection).
+    if application.outcome is None:
+        application.outcome = ApplicationOutcome.APPLIED
+        application.outcome_updated_at = utcnow()
     if application.job is not None:
         application.job.status = JobStatus.APPLIED
     await session.flush()
@@ -200,6 +207,67 @@ async def mark_submitted(
         message="Application submitted." if not was_dry_run else "Dry run: nothing was submitted.",
         payload={"dry_run": was_dry_run},
         run_id=run_id,
+        job_id=application.job_id,
+        user_id=user.id,
+    )
+    return application
+
+
+async def list_board(session: AsyncSession, user: User) -> list[Application]:
+    """Submitted applications, with their job, for the pipeline board.
+
+    Most recently moved first, so a card the user just dragged stays near the top
+    of its column.
+    """
+    result = await session.execute(
+        select(Application)
+        .options(selectinload(Application.job))
+        .where(
+            Application.user_id == user.id,
+            Application.status == ApplicationStatus.SUBMITTED,
+        )
+        .order_by(
+            Application.outcome_updated_at.desc().nullslast(),
+            Application.submitted_at.desc(),
+            Application.id.desc(),
+        )
+    )
+    return list(result.scalars().all())
+
+
+async def set_outcome(
+    session: AsyncSession,
+    user: User,
+    application_id: int,
+    outcome: ApplicationOutcome,
+    *,
+    note: str | None = None,
+) -> Application:
+    """Record the real-world outcome of a submitted application.
+
+    Only a submitted application has an outcome to track — an unsubmitted draft is
+    rejected, since the board is about what happened *after* applying.
+    """
+    application = await get_application(session, user, application_id)
+    if application.status != ApplicationStatus.SUBMITTED:
+        raise PreconditionFailedError(
+            "Only a submitted application has an outcome to track "
+            f"(current status: '{application.status}')."
+        )
+    # `outcome` on the ORM row reads back as a plain string (String column), so it
+    # is already the enum value; the incoming `outcome` is the parsed enum.
+    previous = application.outcome
+    application.outcome = outcome
+    application.outcome_updated_at = utcnow()
+    if note is not None:
+        application.outcome_note = note or None
+    await session.flush()
+    await record_event(
+        session,
+        application_id=application.id,
+        event_type=ApplicationEventType.OUTCOME_CHANGED,
+        message=f"Outcome set to {outcome.value}.",
+        payload={"from": str(previous) if previous else None, "to": outcome.value},
         job_id=application.job_id,
         user_id=user.id,
     )
@@ -280,6 +348,22 @@ async def submitted_last_days(session: AsyncSession, user: User, days: int = 7) 
 
 def to_application_read(application: Application) -> ApplicationRead:
     return ApplicationRead.model_validate(application)
+
+
+def to_application_card(application: Application) -> ApplicationCard:
+    """A board card. The job is expected to be eagerly loaded (see `list_board`)."""
+    job = application.job
+    return ApplicationCard(
+        id=application.id,
+        job_id=application.job_id,
+        title=job.title if job else "(job removed)",
+        company=job.company if job else "",
+        location=job.location if job else None,
+        score=job.score if job else None,
+        outcome=application.outcome or ApplicationOutcome.APPLIED,
+        submitted_at=application.submitted_at,
+        outcome_updated_at=application.outcome_updated_at,
+    )
 
 
 def to_application_detail(application: Application) -> ApplicationDetail:

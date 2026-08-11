@@ -32,6 +32,21 @@ class ApplicationStatus(StrEnum):
     FAILED = "failed"
 
 
+class ApplicationOutcome(StrEnum):
+    """Real-world result of an application, tracked after it was submitted.
+
+    Distinct from `ApplicationStatus`, which is the submission *flow* (draft →
+    awaiting_review → submitted). Outcome is what happened next, and it is what
+    lets the project ask whether a high AI score actually leads to interviews.
+    """
+
+    APPLIED = "applied"  # submitted, still waiting for a response
+    INTERVIEW = "interview"  # reached at least one interview
+    OFFER = "offer"  # received an offer
+    REJECTED = "rejected"  # turned down
+    GHOSTED = "ghosted"  # no response after a reasonable wait
+
+
 class ApplicationEventType(StrEnum):
     """Per-application audit trail (for debugging and history)."""
 
@@ -47,6 +62,7 @@ class ApplicationEventType(StrEnum):
     USER_EDITED = "user_edited"
     USER_APPROVED = "user_approved"
     SUBMITTED = "submitted"
+    OUTCOME_CHANGED = "outcome_changed"
     DISCARDED = "discarded"
     ERROR = "error"
 
