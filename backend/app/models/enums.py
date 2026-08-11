@@ -1,4 +1,4 @@
-"""Enums compartilhados entre ORM, schemas e serviços."""
+"""Enums shared between the ORM, the schemas and the services."""
 
 from __future__ import annotations
 
@@ -6,21 +6,21 @@ from enum import StrEnum
 
 
 class JobStatus(StrEnum):
-    """Ciclo de vida de uma vaga descoberta."""
+    """Lifecycle of a discovered job."""
 
-    DISCOVERED = "discovered"  # encontrada na busca, ainda sem análise
-    ANALYZED = "analyzed"  # a IA pontuou
-    SKIPPED = "skipped"  # descartada (nota baixa ou decisão do usuário)
-    QUEUED = "queued"  # aprovada para preparar candidatura
-    APPLIED = "applied"  # candidatura enviada
-    FAILED = "failed"  # erro irrecuperável no fluxo
+    DISCOVERED = "discovered"  # found by the search, not analyzed yet
+    ANALYZED = "analyzed"  # the AI scored it
+    SKIPPED = "skipped"  # discarded (low score or user decision)
+    QUEUED = "queued"  # approved for application preparation
+    APPLIED = "applied"  # application submitted
+    FAILED = "failed"  # unrecoverable error in the flow
 
 
 class ApplicationStatus(StrEnum):
-    """Ciclo de vida de uma candidatura.
+    """Lifecycle of an application.
 
-    `AWAITING_REVIEW` é o estado central do modo assistido: o formulário está
-    preenchido e parado na etapa de revisão, esperando a confirmação humana.
+    `AWAITING_REVIEW` is the pivotal state of assisted mode: the form is filled in
+    and halted at the review step, waiting for human confirmation.
     """
 
     DRAFT = "draft"
@@ -33,7 +33,7 @@ class ApplicationStatus(StrEnum):
 
 
 class ApplicationEventType(StrEnum):
-    """Trilha de auditoria por candidatura (para debug e histórico)."""
+    """Per-application audit trail (for debugging and history)."""
 
     JOB_FOUND = "job_found"
     JOB_ANALYZED = "job_analyzed"
@@ -58,7 +58,7 @@ class AutomationRunStatus(StrEnum):
     COMPLETED = "completed"
     STOPPED = "stopped"  # kill switch
     FAILED = "failed"
-    BLOCKED = "blocked"  # CAPTCHA / verificação de segurança
+    BLOCKED = "blocked"  # CAPTCHA / security verification
 
 
 class AutomationRunKind(StrEnum):
@@ -76,4 +76,4 @@ class AnalysisKind(StrEnum):
 class AnswerConfidence(StrEnum):
     HIGH = "high"
     MEDIUM = "medium"
-    LOW = "low"  # exige revisão humana antes do envio
+    LOW = "low"  # requires human review before submitting

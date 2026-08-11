@@ -1,4 +1,4 @@
-"""Busca, vaga, candidatura, eventos de candidatura e análises de IA."""
+"""Search, job, application, application events and AI analyses."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
 
 class Search(Base, TimestampMixin):
-    """Conjunto de filtros salvo e reutilizável."""
+    """A saved, reusable set of filters."""
 
     __tablename__ = "searches"
 
@@ -57,7 +57,7 @@ class Search(Base, TimestampMixin):
 
 
 class Job(Base, TimestampMixin):
-    """Vaga descoberta. Único por (usuário, id externo) — garante o dedup."""
+    """A discovered job. Unique per (user, external id) — this enforces dedup."""
 
     __tablename__ = "jobs"
     __table_args__ = (
@@ -99,9 +99,9 @@ class Job(Base, TimestampMixin):
 
 
 class Application(Base, TimestampMixin):
-    """Uma candidatura a uma vaga.
+    """An application to a job.
 
-    Fica em `AWAITING_REVIEW` com o formulário preenchido até o usuário aprovar.
+    It sits in `AWAITING_REVIEW` with the form filled in until the user approves it.
     """
 
     __tablename__ = "applications"
@@ -138,10 +138,10 @@ class Application(Base, TimestampMixin):
 
 
 class ApplicationEvent(Base):
-    """Trilha append-only do que aconteceu em cada candidatura.
+    """Append-only trail of what happened in each application.
 
-    É o que transforma um bug em algo depurável: cada passo do formulário, cada
-    pergunta respondida e cada erro fica registrado com horário e detalhes.
+    This is what makes a bug debuggable: every form step, every answered question
+    and every error is recorded with its timestamp and details.
     """
 
     __tablename__ = "application_events"
@@ -171,7 +171,7 @@ class ApplicationEvent(Base):
 
 
 class AIAnalysis(Base, TimestampMixin):
-    """Saída bruta de uma chamada de IA — auditoria e controle de custo."""
+    """Raw output of an AI call — for auditing and cost tracking."""
 
     __tablename__ = "ai_analyses"
 
@@ -187,7 +187,7 @@ class AIAnalysis(Base, TimestampMixin):
     input_tokens: Mapped[int | None] = mapped_column(Integer, default=None)
     output_tokens: Mapped[int | None] = mapped_column(Integer, default=None)
     latency_ms: Mapped[int | None] = mapped_column(Integer, default=None)
-    # A IA pode recusar (stop_reason="refusal"); registramos para cair no manual.
+    # The AI may refuse (stop_reason="refusal"); we record it to fall back to manual.
     was_refusal: Mapped[bool] = mapped_column(Boolean, default=False)
     error_message: Mapped[str | None] = mapped_column(Text, default=None)
     cost_usd: Mapped[float | None] = mapped_column(Float, default=None)

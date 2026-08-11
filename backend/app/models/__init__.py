@@ -1,4 +1,4 @@
-"""Modelos ORM. Importar este módulo registra tudo no metadata do SQLAlchemy."""
+"""ORM models. Importing this module registers everything in SQLAlchemy's metadata."""
 
 from app.models.automation import AutomationRun
 from app.models.enums import (

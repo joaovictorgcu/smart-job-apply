@@ -1,7 +1,7 @@
 [project]
 name = "linkedin-auto-apply"
 version = "0.1.0"
-description = "Assistente de candidaturas no LinkedIn: busca vagas, avalia com IA e preenche a Candidatura Simplificada para você revisar e aprovar."
+description = "LinkedIn application assistant: finds jobs, scores them with AI and fills the Easy Apply form for you to review and approve."
 requires-python = ">=3.11"
 readme = "README.md"
 license = { text = "MIT" }

@@ -1,4 +1,4 @@
-"""Engine e sessões assíncronas do SQLAlchemy."""
+"""SQLAlchemy async engine and sessions."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ def get_engine() -> AsyncEngine:
         url = settings.resolved_database_url
         kwargs: dict[str, object] = {"echo": settings.debug, "future": True}
         if url.startswith("sqlite"):
-            # SQLite precisa permitir uso entre tasks; o engine async serializa o acesso.
+            # SQLite must allow use across tasks; the async engine serializes access.
             kwargs["connect_args"] = {"check_same_thread": False}
         else:
             kwargs["pool_pre_ping"] = True
@@ -44,7 +44,7 @@ def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
-    """Dependência do FastAPI: uma sessão por request, commit no fim."""
+    """FastAPI dependency: one session per request, committed at the end."""
     async with get_sessionmaker()() as session:
         try:
             yield session
@@ -56,7 +56,7 @@ async def get_session() -> AsyncIterator[AsyncSession]:
 
 @asynccontextmanager
 async def session_scope() -> AsyncIterator[AsyncSession]:
-    """Sessão para uso fora de um request (engine de automação, scripts)."""
+    """Session for use outside a request (automation engine, scripts)."""
     async with get_sessionmaker()() as session:
         try:
             yield session
@@ -67,16 +67,16 @@ async def session_scope() -> AsyncIterator[AsyncSession]:
 
 
 async def init_models() -> None:
-    """Cria as tabelas que faltam.
+    """Create the missing tables.
 
-    Conveniência para desenvolvimento e para quem roda sem Alembic; o caminho
-    canônico de evolução do schema é `alembic upgrade head`.
+    A convenience for development and for anyone running without Alembic; the
+    canonical path for schema evolution is `alembic upgrade head`.
     """
-    import app.models  # noqa: F401  (registra os modelos no metadata)
+    import app.models  # noqa: F401  (registers the models in the metadata)
 
     engine = get_engine()
     if engine.url.get_backend_name() == "sqlite":
-        # Menos travamento de escrita quando a API e o engine escrevem juntos.
+        # Less write locking when the API and the engine write at the same time.
         async with engine.begin() as conn:
             await conn.exec_driver_sql("PRAGMA journal_mode=WAL")
     async with engine.begin() as conn:

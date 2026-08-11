@@ -1,4 +1,4 @@
-"""Configuração da aplicação, carregada de variáveis de ambiente / .env."""
+"""Application configuration, loaded from environment variables / .env."""
 
 from __future__ import annotations
 
@@ -20,49 +20,49 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # --- Aplicação ---
+    # --- Application ---
     app_name: str = "LinkedIn Auto Apply"
     environment: str = "development"
     debug: bool = False
 
-    # --- Segurança ---
-    # Assina os JWTs. Em produção defina explicitamente; sem valor, geramos um
-    # aleatório por processo (todas as sessões caem a cada restart).
+    # --- Security ---
+    # Signs the JWTs. Set it explicitly in production; without a value we generate
+    # a random one per process (every session is dropped on each restart).
     secret_key: str = Field(default_factory=lambda: secrets.token_urlsafe(48))
-    # Deriva a chave que criptografa os dados sensíveis em repouso (cookies de
-    # sessão do LinkedIn). Trocar este valor torna os dados já salvos ilegíveis.
+    # Derives the key that encrypts sensitive data at rest (LinkedIn session
+    # cookies). Changing this value makes already stored data unreadable.
     encryption_key: str = ""
     jwt_algorithm: str = "HS256"
     access_token_ttl_minutes: int = 60 * 12
 
-    # --- IA ---
+    # --- AI ---
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-opus-5"
-    # Effort usado na pontuação em massa (mais barato); a carta usa "high".
+    # Effort used for bulk scoring (cheaper); the cover letter uses "high".
     scoring_effort: str = "low"
 
-    # --- Banco ---
-    # SQLite por padrão; troque por postgresql+asyncpg://... sem mexer no código.
+    # --- Database ---
+    # SQLite by default; switch to postgresql+asyncpg://... without touching code.
     database_url: str = ""
 
-    # --- Automação ---
+    # --- Automation ---
     headless: bool = False
     max_concurrent_sessions: int = 1
-    # Guarda-corpos padrão (conservadores) — o usuário pode ajustar nas configurações.
+    # Conservative default guardrails — the user can adjust them in settings.
     default_daily_cap: int = 15
     default_min_score: int = 70
     default_action_delay_range: tuple[float, float] = (2.5, 7.0)
     default_apply_delay_range: tuple[float, float] = (45.0, 120.0)
     default_working_hours: tuple[int, int] = (8, 20)
-    # Nunca envia candidatura sem confirmação explícita do usuário.
+    # Never submits an application without explicit confirmation from the user.
     assisted_mode_only: bool = True
 
-    # --- Rede ---
+    # --- Network ---
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
     rate_limit_default: str = "120/minute"
     rate_limit_auth: str = "10/minute"
 
-    # --- Caminhos ---
+    # --- Paths ---
     data_dir: Path = BACKEND_DIR / "data"
 
     @field_validator("cors_origins", mode="before")

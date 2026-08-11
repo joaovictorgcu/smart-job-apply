@@ -1,4 +1,4 @@
-"""Usuário da aplicação, perfil profissional e configurações."""
+"""Application user, professional profile and settings."""
 
 from __future__ import annotations
 
@@ -16,11 +16,11 @@ if TYPE_CHECKING:
 
 
 class User(Base, TimestampMixin):
-    """Conta local da aplicação.
+    """Local application account.
 
-    Só guardamos credenciais **da nossa aplicação** (hash bcrypt). A senha do
-    LinkedIn nunca é armazenada: o usuário faz login manualmente no navegador e
-    a sessão persiste como cookies criptografados (ver `LinkedInAccount`).
+    We only keep credentials for **our own application** (a bcrypt hash). The
+    LinkedIn password is never stored: the user logs in manually in the browser and
+    the session is persisted as encrypted cookies (see `LinkedInAccount`).
     """
 
     __tablename__ = "users"
@@ -55,7 +55,7 @@ class User(Base, TimestampMixin):
 
 
 class Profile(Base, TimestampMixin):
-    """Currículo em texto + banco de respostas usado pela IA."""
+    """Resume as text plus the answer bank used by the AI."""
 
     __tablename__ = "profiles"
 
@@ -73,16 +73,16 @@ class Profile(Base, TimestampMixin):
     resume_filename: Mapped[str | None] = mapped_column(String(255), default=None)
     skills: Mapped[list[str]] = mapped_column(JSON, default=list)
     preferred_languages: Mapped[list[str]] = mapped_column(JSON, default=list)
-    # Respostas padrão para perguntas recorrentes de triagem, ex.:
-    # {"salary_expectation": "R$ 15.000", "notice_period": "30 dias",
-    #  "work_authorization": "Sim", "years_python": "6"}
+    # Default answers for recurring screening questions, e.g.:
+    # {"salary_expectation": "15,000", "notice_period": "30 days",
+    #  "work_authorization": "Yes", "years_python": "6"}
     answer_bank: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 
     user: Mapped[User] = relationship(back_populates="profile")
 
 
 class UserSettings(Base, TimestampMixin):
-    """Guarda-corpos de automação e preferências de IA, por usuário."""
+    """Per-user automation guardrails and AI preferences."""
 
     __tablename__ = "user_settings"
 
@@ -91,7 +91,7 @@ class UserSettings(Base, TimestampMixin):
         ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True
     )
 
-    # --- Guarda-corpos ---
+    # --- Guardrails ---
     daily_cap: Mapped[int] = mapped_column(Integer, default=15)
     min_score: Mapped[int] = mapped_column(Integer, default=70)
     action_delay_min: Mapped[float] = mapped_column(default=2.5)
@@ -100,14 +100,15 @@ class UserSettings(Base, TimestampMixin):
     apply_delay_max: Mapped[float] = mapped_column(default=120.0)
     working_hour_start: Mapped[int] = mapped_column(Integer, default=8)
     working_hour_end: Mapped[int] = mapped_column(Integer, default=20)
-    # Nenhum envio sem confirmação explícita. Desligar exige entender o risco.
+    # No submission without explicit confirmation. Turning this off means
+    # accepting the risk knowingly.
     require_manual_approval: Mapped[bool] = mapped_column(Boolean, default=True)
     dry_run: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    # --- IA ---
+    # --- AI ---
     ai_model: Mapped[str | None] = mapped_column(String(100), default=None)
     cover_letter_tone: Mapped[str] = mapped_column(String(50), default="profissional")
-    # "job" = seguir o idioma da vaga; ou fixar "pt-BR" / "en".
+    # "job" = follow the job posting's language; or pin "pt-BR" / "en".
     content_language: Mapped[str] = mapped_column(String(20), default="job")
     generate_cover_letter: Mapped[bool] = mapped_column(Boolean, default=True)
 
@@ -115,11 +116,11 @@ class UserSettings(Base, TimestampMixin):
 
 
 class LinkedInAccount(Base, TimestampMixin):
-    """Sessão do LinkedIn do usuário — **cookies criptografados em repouso**.
+    """The user's LinkedIn session — **cookies encrypted at rest**.
 
-    Nunca armazenamos e-mail/senha do LinkedIn. O usuário loga manualmente no
-    navegador; persistimos apenas o estado de sessão, cifrado com AES-GCM
-    (Fernet) via `app.auth.crypto`.
+    We never store the LinkedIn email/password. The user logs in manually in the
+    browser; we persist only the session state, encrypted with Fernet (AES-CBC
+    plus HMAC) via `app.auth.crypto`.
     """
 
     __tablename__ = "linkedin_accounts"
@@ -130,7 +131,7 @@ class LinkedInAccount(Base, TimestampMixin):
         ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True
     )
 
-    # Rótulo apenas informativo (ex.: nome exibido no LinkedIn).
+    # Informational label only (e.g. the display name shown on LinkedIn).
     display_name: Mapped[str | None] = mapped_column(String(200), default=None)
     encrypted_storage_state: Mapped[str | None] = mapped_column(Text, default=None)
     browser_profile_dir: Mapped[str | None] = mapped_column(String(500), default=None)
