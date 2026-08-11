@@ -23,8 +23,8 @@ If you already have somewhere, rotate the key.
 ## Did the LinkedIn UI change?
 
 A large share of bugs here are LinkedIn shipping a redesign, and the fix is usually one line in
-`backend/app/automation/linkedin/selectors.py`. This answer often routes the issue straight to the
-right file.
+`backend/app/automation/selectors.py`. This answer often routes the issue straight to the right
+file.
 
 - [ ] The page or modal looked different from what I expected
 - [ ] No, the UI looked normal

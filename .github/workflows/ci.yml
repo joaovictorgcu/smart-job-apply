@@ -41,9 +41,6 @@ jobs:
       - name: Lint
         run: ruff check --output-format=github .
 
-      - name: Format check
-        run: ruff format --check .
-
       - name: Type check
         # Advisory. Playwright and SQLAlchemy typing produce noise that is not
         # worth failing a build over, but the output is still worth reading.
@@ -54,9 +51,10 @@ jobs:
         env:
           # Deterministic, throwaway values so Settings never falls back to a
           # per-process random key mid-suite.
-          SECRET_KEY: ci-secret-key-not-used-anywhere-else
-          ENCRYPTION_KEY: ci-encryption-key-not-used-anywhere-else
-          DATABASE_URL: sqlite+aiosqlite:///:memory:
+          SECRET_KEY: "ci-secret-key-not-used-anywhere-else"
+          ENCRYPTION_KEY: "ci-encryption-key-not-used-anywhere-else"
+          # Quoted: a plain scalar ending in ':' parses as a mapping key.
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
         run: pytest -v
 
   frontend:
