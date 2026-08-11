@@ -16,6 +16,7 @@ import { JobDetail } from "@/pages/JobDetail";
 import { Jobs } from "@/pages/Jobs";
 import { Login } from "@/pages/Login";
 import { NotFound } from "@/pages/NotFound";
+import { Pipeline } from "@/pages/Pipeline";
 import { Profile } from "@/pages/Profile";
 import { Register } from "@/pages/Register";
 import { Searches } from "@/pages/Searches";
@@ -72,6 +73,7 @@ export function App() {
                   <Route path="/jobs/:id" element={<JobDetail />} />
                   <Route path="/applications" element={<Applications />} />
                   <Route path="/applications/:id" element={<ApplicationDetail />} />
+                  <Route path="/pipeline" element={<Pipeline />} />
                   <Route path="/searches" element={<Searches />} />
                   <Route path="/profile" element={<Profile />} />
                   <Route path="/settings" element={<Settings />} />

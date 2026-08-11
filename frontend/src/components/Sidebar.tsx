@@ -1,6 +1,7 @@
 import {
   Activity,
   Briefcase,
+  Columns3,
   LayoutDashboard,
   Search,
   Send,
@@ -25,6 +26,7 @@ const NAV: NavEntry[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/jobs', label: 'Jobs', icon: Briefcase },
   { to: '/applications', label: 'Applications', icon: Send },
+  { to: '/pipeline', label: 'Pipeline', icon: Columns3 },
   { to: '/searches', label: 'Searches', icon: Search },
   { to: '/activity', label: 'Activity', icon: Activity },
   { to: '/profile', label: 'Profile', icon: User },

@@ -26,6 +26,14 @@ export type ApplicationStatus =
   | "discarded"
   | "failed";
 
+/** Real-world result after an application was submitted (the pipeline board). */
+export type ApplicationOutcome =
+  | "applied"
+  | "interview"
+  | "offer"
+  | "rejected"
+  | "ghosted";
+
 export type ApplicationEventType =
   | "job_found"
   | "job_analyzed"
@@ -39,6 +47,7 @@ export type ApplicationEventType =
   | "user_edited"
   | "user_approved"
   | "submitted"
+  | "outcome_changed"
   | "discarded"
   | "error";
 
@@ -347,8 +356,54 @@ export interface Application {
   approved_at: string | null;
   submitted_at: string | null;
   error_message: string | null;
+  outcome: ApplicationOutcome | null;
+  outcome_updated_at: string | null;
+  outcome_note: string | null;
   created_at: string | null;
   updated_at: string | null;
+}
+
+/** A submitted application as it appears on the pipeline board. */
+export interface ApplicationCard {
+  id: number;
+  job_id: number;
+  title: string;
+  company: string;
+  location: string | null;
+  score: number | null;
+  outcome: ApplicationOutcome;
+  submitted_at: string | null;
+  outcome_updated_at: string | null;
+}
+
+export interface OutcomeUpdate {
+  outcome: ApplicationOutcome;
+  note?: string | null;
+}
+
+export interface OutcomeCount {
+  outcome: ApplicationOutcome;
+  count: number;
+  avg_score: number | null;
+}
+
+export interface ScoreBandRate {
+  /** e.g. "90-100" */
+  label: string;
+  total: number;
+  interviews: number;
+  rate: number | null;
+}
+
+export interface OutcomeStats {
+  total_submitted: number;
+  interviews: number;
+  offers: number;
+  rejected: number;
+  ghosted: number;
+  interview_rate: number | null;
+  by_outcome: OutcomeCount[];
+  interview_rate_by_band: ScoreBandRate[];
 }
 
 export interface ApplicationEvent {

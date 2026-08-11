@@ -26,12 +26,15 @@ import type { ApiError } from "@/services/client";
 import type {
   AIStatus,
   Application,
+  ApplicationCard,
   ApplicationDetail,
   ApplicationEvent,
   ApplicationListQuery,
+  ApplicationOutcome,
   ApplicationUpdate,
   AutomationRun,
   DashboardStats,
+  OutcomeStats,
   Job,
   JobDetail,
   JobListQuery,
@@ -71,6 +74,8 @@ export const queryKeys = {
     ["applications", "list", query] as const,
   application: (id: number) => ["applications", "detail", id] as const,
   applicationEvents: (id: number) => ["applications", "events", id] as const,
+  board: () => ["applications", "board"] as const,
+  outcomeStats: () => ["stats", "outcomes"] as const,
 
   automation: () => ["automation"] as const,
   session: () => ["automation", "session"] as const,
@@ -414,6 +419,87 @@ export function useDiscardApplication(
       void client.invalidateQueries({ queryKey: queryKeys.jobs() });
       void client.invalidateQueries({ queryKey: queryKeys.stats() });
     },
+    ...options,
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Pipeline board                                                             */
+/* -------------------------------------------------------------------------- */
+
+export function useBoard(
+  options?: QueryOpts<ApplicationCard[]>,
+): UseQueryResult<ApplicationCard[], ApiError> {
+  return useQuery<ApplicationCard[], ApiError>({
+    queryKey: queryKeys.board(),
+    queryFn: ({ signal }) => applicationsService.fetchBoard(signal),
+    ...options,
+  });
+}
+
+interface OutcomeVars {
+  id: number;
+  outcome: ApplicationOutcome;
+  note?: string | null;
+}
+
+interface BoardContext {
+  previous?: ApplicationCard[];
+}
+
+/**
+ * Move a card to a new outcome, optimistically.
+ *
+ * The board cache is updated before the request returns so a drag feels instant;
+ * a failure rolls back to the snapshot. This hook owns the board/analytics cache,
+ * so it composes any caller `onSuccess`/`onError` rather than letting them replace
+ * the rollback and invalidation.
+ */
+export function useUpdateOutcome(
+  options?: MutationOpts<ApplicationDetail, OutcomeVars>,
+): UseMutationResult<ApplicationDetail, ApiError, OutcomeVars> {
+  const client = useQueryClient();
+  return useMutation<ApplicationDetail, ApiError, OutcomeVars, BoardContext>({
+    mutationFn: ({ id, outcome, note }) =>
+      applicationsService.updateOutcome(id, outcome, note),
+    onMutate: async ({ id, outcome }) => {
+      await client.cancelQueries({ queryKey: queryKeys.board() });
+      const previous = client.getQueryData<ApplicationCard[]>(queryKeys.board());
+      if (previous) {
+        client.setQueryData<ApplicationCard[]>(
+          queryKeys.board(),
+          previous.map((card) =>
+            card.id === id
+              ? { ...card, outcome, outcome_updated_at: new Date().toISOString() }
+              : card,
+          ),
+        );
+      }
+      return { previous };
+    },
+    onError: (error, vars, context) => {
+      if (context?.previous) {
+        client.setQueryData(queryKeys.board(), context.previous);
+      }
+      options?.onError?.(error, vars, context);
+    },
+    onSuccess: (data, vars, context) => {
+      options?.onSuccess?.(data, vars, context);
+    },
+    onSettled: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.board() });
+      void client.invalidateQueries({ queryKey: queryKeys.outcomeStats() });
+      void client.invalidateQueries({ queryKey: queryKeys.applications() });
+    },
+  });
+}
+
+export function useOutcomeStats(
+  options?: QueryOpts<OutcomeStats>,
+): UseQueryResult<OutcomeStats, ApiError> {
+  return useQuery<OutcomeStats, ApiError>({
+    queryKey: queryKeys.outcomeStats(),
+    queryFn: ({ signal }) => statsService.fetchOutcomeStats(signal),
     ...options,
   });
 }

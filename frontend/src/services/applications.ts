@@ -2,9 +2,11 @@ import { api } from "@/services/client";
 import { buildQuery } from "@/lib/utils";
 import type {
   Application,
+  ApplicationCard,
   ApplicationDetail,
   ApplicationEvent,
   ApplicationListQuery,
+  ApplicationOutcome,
   ApplicationUpdate,
   Page,
 } from "@/types/api";
@@ -60,4 +62,18 @@ export function fetchApplicationEvents(
   signal?: AbortSignal,
 ): Promise<ApplicationEvent[]> {
   return api.get<ApplicationEvent[]>(`/applications/${id}/events`, { signal });
+}
+
+/** GET /api/applications/board — submitted applications for the pipeline board. */
+export function fetchBoard(signal?: AbortSignal): Promise<ApplicationCard[]> {
+  return api.get<ApplicationCard[]>("/applications/board", { signal });
+}
+
+/** PATCH /api/applications/{id}/outcome — record what happened after applying. */
+export function updateOutcome(
+  id: number,
+  outcome: ApplicationOutcome,
+  note?: string | null,
+): Promise<ApplicationDetail> {
+  return api.patch<ApplicationDetail>(`/applications/${id}/outcome`, { outcome, note });
 }
