@@ -38,7 +38,7 @@ Specifically, this PR does **not**:
 ## Testing
 
 - [ ] `pytest` passes
-- [ ] `ruff check .` and `ruff format --check .` pass
+- [ ] `make lint` passes, and `make format` leaves nothing to change
 - [ ] `mypy backend/app` introduces no new errors
 - [ ] `npm run typecheck` and `npm run build` pass (if the frontend changed)
 - [ ] New behavior has a test; a fixed bug has a regression test

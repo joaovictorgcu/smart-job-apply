@@ -155,8 +155,12 @@ Configured in [`pyproject.toml`](../pyproject.toml) — read it rather than gues
        widgets, total = await widget_service.list_widgets(
            session, user_id=user.id, limit=limit, offset=offset
        )
-       return Page(items=[WidgetRead.model_validate(w) for w in widgets], total=total,
-                   limit=limit, offset=offset)
+       return Page(
+           items=[WidgetRead.model_validate(w) for w in widgets],
+           total=total,
+           limit=limit,
+           offset=offset,
+       )
    ```
 
    `LimitDep` and `OffsetDep` carry the pagination bounds (1–200 and ≥ 0), so every list endpoint validates
@@ -188,8 +192,7 @@ async def prepare_application(
     job: Job,
     linkedin: LinkedInService,
     ai: AIClient,
-) -> Application:
-    ...
+) -> Application: ...
 ```
 
 Passing `LinkedInService` and `AIClient` in as parameters — rather than constructing them inside — is what
@@ -412,7 +415,7 @@ configure_logging(level="DEBUG", as_json=False)
 ```
 
 **Under Docker**, the browser is on the virtual display: open <http://localhost:6080> and watch it there.
-`docker compose logs -f backend` gives you the structured log alongside it.
+`docker compose logs -f` gives you the structured log alongside it.
 
 ## Migrations
 
