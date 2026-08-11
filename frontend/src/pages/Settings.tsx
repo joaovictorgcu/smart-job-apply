@@ -18,7 +18,7 @@ import {
 import { useToast } from '@/components/ToastProvider';
 import { useSettings, useUpdateSettings } from '@/hooks/useApi';
 import { errorMessage } from '@/services/client';
-import type { UserSettings } from '@/types/api';
+import type { UserSettings, UserSettingsUpdate } from '@/types/api';
 
 const TONES = ['professional', 'friendly', 'direct', 'enthusiastic'] as const;
 
@@ -118,8 +118,9 @@ export function Settings() {
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
-    // dry_run is owned by the topbar toggle, which has its own confirmation step.
-    const { dry_run: _ignored, ...payload } = draft;
+    // dry_run is owned by the dedicated toggle, which has its own confirmation step.
+    const payload: UserSettingsUpdate = { ...draft };
+    delete payload.dry_run;
     update.mutate(payload);
   };
 

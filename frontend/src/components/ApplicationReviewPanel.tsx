@@ -1,5 +1,5 @@
 import { Info, Save, Send, Sparkles, Trash2, TriangleAlert } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import {
   useDiscardApplication,
@@ -52,10 +52,15 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
 
-  // Server state wins whenever the application itself changes underneath us.
-  useEffect(() => {
+  // Server state wins whenever the application itself changes underneath us, but
+  // a plain refetch of identical data must not wipe edits in progress — so the
+  // draft resets during render only when the identity/version key moves.
+  const syncKey = `${application.id}:${application.updated_at ?? ''}`;
+  const [syncedKey, setSyncedKey] = useState(syncKey);
+  if (syncKey !== syncedKey) {
+    setSyncedKey(syncKey);
     setDraft(draftFrom(application));
-  }, [application.id, application.updated_at]);
+  }
 
   const update = useUpdateApplication({
     onSuccess: () => toast.success('Changes saved'),

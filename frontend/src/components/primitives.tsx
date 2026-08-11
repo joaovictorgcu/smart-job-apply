@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- the shared class helper belongs next to the components that use it */
 /**
  * Typed React wrappers over the component classes defined in index.css.
  *

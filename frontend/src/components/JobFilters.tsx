@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- the filter shape and its defaults belong with the control */
 import { RotateCcw, SlidersHorizontal } from 'lucide-react';
 
 import { useSearches } from '@/hooks/useApi';

@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- the dismissable-layer hook is shared with Drawer */
 import { X } from 'lucide-react';
 import { useCallback, useEffect, useId, useRef } from 'react';
 import type { ReactNode, RefObject } from 'react';

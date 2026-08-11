@@ -42,14 +42,15 @@ export function Applications() {
     return map;
   }, [jobsPage]);
 
-  const changeStatus = (next: string) => {
+  const changeStatus = (value: string) => {
     setOffset(0);
-    if (next === 'all') {
-      searchParams.delete('status');
+    const next = new URLSearchParams(searchParams);
+    if (value === 'all') {
+      next.delete('status');
     } else {
-      searchParams.set('status', next);
+      next.set('status', value);
     }
-    setSearchParams(searchParams, { replace: true });
+    setSearchParams(next, { replace: true });
   };
 
   const items = data?.items ?? [];
