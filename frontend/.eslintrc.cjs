@@ -14,6 +14,14 @@ module.exports = {
   },
   plugins: ["@typescript-eslint", "react-refresh"],
   ignorePatterns: ["dist", "node_modules", "*.cjs", "*.config.js"],
+  overrides: [
+    {
+      // Context providers intentionally ship their provider and their hook side
+      // by side, which fast refresh cannot support. The trade-off is deliberate.
+      files: ["src/hooks/**/*.tsx", "src/lib/**/*.tsx"],
+      rules: { "react-refresh/only-export-components": "off" },
+    },
+  ],
   rules: {
     "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
     "@typescript-eslint/consistent-type-imports": ["warn", { prefer: "type-imports" }],
