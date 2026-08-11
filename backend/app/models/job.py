@@ -1,0 +1,195 @@
+"""Busca, vaga, candidatura, eventos de candidatura e análises de IA."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
+
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.database.base import Base, TimestampMixin
+from app.models.enums import (
+    AnalysisKind,
+    ApplicationEventType,
+    ApplicationStatus,
+    JobStatus,
+)
+
+if TYPE_CHECKING:
+    from app.models.automation import AutomationRun
+    from app.models.user import User
+
+
+class Search(Base, TimestampMixin):
+    """Conjunto de filtros salvo e reutilizável."""
+
+    __tablename__ = "searches"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+
+    name: Mapped[str] = mapped_column(String(200))
+    keywords: Mapped[str] = mapped_column(String(300))
+    location: Mapped[str | None] = mapped_column(String(200), default=None)
+    # remote/hybrid/onsite
+    remote_filter: Mapped[str | None] = mapped_column(String(50), default=None)
+    experience_levels: Mapped[list[str]] = mapped_column(JSON, default=list)
+    date_posted: Mapped[str | None] = mapped_column(String(30), default=None)  # day/week/month
+    easy_apply_only: Mapped[bool] = mapped_column(Boolean, default=True)
+    max_results: Mapped[int] = mapped_column(Integer, default=25)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(default=None)
+
+    user: Mapped[User] = relationship(back_populates="searches")
+    jobs: Mapped[list[Job]] = relationship(back_populates="search")
+    runs: Mapped[list[AutomationRun]] = relationship(back_populates="search")
+
+
+class Job(Base, TimestampMixin):
+    """Vaga descoberta. Único por (usuário, id externo) — garante o dedup."""
+
+    __tablename__ = "jobs"
+    __table_args__ = (
+        UniqueConstraint("user_id", "external_id", name="uq_job_user_external"),
+        Index("ix_job_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    search_id: Mapped[int | None] = mapped_column(
+        ForeignKey("searches.id", ondelete="SET NULL"), default=None, index=True
+    )
+
+    external_id: Mapped[str] = mapped_column(String(100), index=True)
+    title: Mapped[str] = mapped_column(String(300))
+    company: Mapped[str] = mapped_column(String(300))
+    location: Mapped[str | None] = mapped_column(String(200), default=None)
+    url: Mapped[str | None] = mapped_column(String(1000), default=None)
+    description: Mapped[str | None] = mapped_column(Text, default=None)
+    workplace_type: Mapped[str | None] = mapped_column(String(50), default=None)
+    easy_apply: Mapped[bool] = mapped_column(Boolean, default=False)
+    detected_language: Mapped[str | None] = mapped_column(String(20), default=None)
+    posted_at: Mapped[datetime | None] = mapped_column(default=None)
+
+    status: Mapped[JobStatus] = mapped_column(String(30), default=JobStatus.DISCOVERED, index=True)
+    score: Mapped[int | None] = mapped_column(Integer, default=None, index=True)
+    score_reasons: Mapped[list[str]] = mapped_column(JSON, default=list)
+    missing_requirements: Mapped[list[str]] = mapped_column(JSON, default=list)
+    skip_reason: Mapped[str | None] = mapped_column(String(300), default=None)
+
+    user: Mapped[User] = relationship(back_populates="jobs")
+    search: Mapped[Search | None] = relationship(back_populates="jobs")
+    application: Mapped[Application | None] = relationship(
+        back_populates="job", cascade="all, delete-orphan", uselist=False
+    )
+    analyses: Mapped[list[AIAnalysis]] = relationship(
+        back_populates="job", cascade="all, delete-orphan"
+    )
+
+
+class Application(Base, TimestampMixin):
+    """Uma candidatura a uma vaga.
+
+    Fica em `AWAITING_REVIEW` com o formulário preenchido até o usuário aprovar.
+    """
+
+    __tablename__ = "applications"
+    __table_args__ = (UniqueConstraint("job_id", name="uq_application_job"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    job_id: Mapped[int] = mapped_column(
+        ForeignKey("jobs.id", ondelete="CASCADE"), unique=True, index=True
+    )
+
+    status: Mapped[ApplicationStatus] = mapped_column(
+        String(30), default=ApplicationStatus.DRAFT, index=True
+    )
+    cover_letter: Mapped[str | None] = mapped_column(Text, default=None)
+    # [{"question", "answer", "type", "options", "confidence", "needs_review", "field_id"}]
+    screening_answers: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    resume_filename: Mapped[str | None] = mapped_column(String(255), default=None)
+    total_steps: Mapped[int | None] = mapped_column(Integer, default=None)
+    current_step: Mapped[int | None] = mapped_column(Integer, default=None)
+    needs_human_input: Mapped[bool] = mapped_column(Boolean, default=False)
+    was_dry_run: Mapped[bool] = mapped_column(Boolean, default=False)
+    approved_at: Mapped[datetime | None] = mapped_column(default=None)
+    submitted_at: Mapped[datetime | None] = mapped_column(default=None)
+    error_message: Mapped[str | None] = mapped_column(Text, default=None)
+
+    user: Mapped[User] = relationship(back_populates="applications")
+    job: Mapped[Job] = relationship(back_populates="application")
+    events: Mapped[list[ApplicationEvent]] = relationship(
+        back_populates="application",
+        cascade="all, delete-orphan",
+        order_by="ApplicationEvent.created_at",
+    )
+
+
+class ApplicationEvent(Base):
+    """Trilha append-only do que aconteceu em cada candidatura.
+
+    É o que transforma um bug em algo depurável: cada passo do formulário, cada
+    pergunta respondida e cada erro fica registrado com horário e detalhes.
+    """
+
+    __tablename__ = "application_events"
+    __table_args__ = (Index("ix_event_application_created", "application_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    application_id: Mapped[int] = mapped_column(
+        ForeignKey("applications.id", ondelete="CASCADE"), index=True
+    )
+    run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("automation_runs.id", ondelete="SET NULL"), default=None
+    )
+
+    event_type: Mapped[ApplicationEventType] = mapped_column(String(40), index=True)
+    message: Mapped[str | None] = mapped_column(Text, default=None)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    is_error: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(default=None, index=True)
+
+    application: Mapped[Application] = relationship(back_populates="events")
+
+    def __init__(self, **kwargs: Any) -> None:
+        from app.database.base import utcnow
+
+        kwargs.setdefault("created_at", utcnow())
+        super().__init__(**kwargs)
+
+
+class AIAnalysis(Base, TimestampMixin):
+    """Saída bruta de uma chamada de IA — auditoria e controle de custo."""
+
+    __tablename__ = "ai_analyses"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    job_id: Mapped[int | None] = mapped_column(
+        ForeignKey("jobs.id", ondelete="CASCADE"), default=None, index=True
+    )
+
+    kind: Mapped[AnalysisKind] = mapped_column(String(30), index=True)
+    model: Mapped[str] = mapped_column(String(100))
+    result: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    input_tokens: Mapped[int | None] = mapped_column(Integer, default=None)
+    output_tokens: Mapped[int | None] = mapped_column(Integer, default=None)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, default=None)
+    # A IA pode recusar (stop_reason="refusal"); registramos para cair no manual.
+    was_refusal: Mapped[bool] = mapped_column(Boolean, default=False)
+    error_message: Mapped[str | None] = mapped_column(Text, default=None)
+    cost_usd: Mapped[float | None] = mapped_column(Float, default=None)
+
+    job: Mapped[Job | None] = relationship(back_populates="analyses")
