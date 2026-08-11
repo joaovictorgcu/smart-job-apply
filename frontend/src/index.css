@@ -1,0 +1,356 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Palette tokens are stored as bare "R G B" triplets so Tailwind can apply
+   <alpha-value> to any of them (e.g. bg-accent-500/20). */
+@layer base {
+  :root {
+    --surface: 248 250 252;
+    --surface-raised: 255 255 255;
+    --surface-sunken: 241 245 249;
+    --surface-overlay: 255 255 255;
+
+    --line: 226 232 240;
+    --line-strong: 203 213 225;
+
+    --text: 15 23 42;
+    --text-muted: 71 85 105;
+    --text-subtle: 100 116 139;
+    --text-inverted: 248 250 252;
+
+    --accent-50: 238 242 255;
+    --accent-100: 224 231 255;
+    --accent-200: 199 210 254;
+    --accent-300: 165 180 252;
+    --accent-400: 129 140 248;
+    --accent-500: 99 102 241;
+    --accent-600: 79 70 229;
+    --accent-700: 67 56 202;
+    --accent-800: 55 48 163;
+    --accent-900: 49 46 129;
+
+    --violet-400: 167 139 250;
+    --violet-500: 139 92 246;
+    --violet-600: 124 58 237;
+
+    --success: 22 163 74;
+    --success-soft: 220 252 231;
+    --success-strong: 21 128 61;
+
+    --warning: 217 119 6;
+    --warning-soft: 254 243 199;
+    --warning-strong: 180 83 9;
+
+    --danger: 220 38 38;
+    --danger-soft: 254 226 226;
+    --danger-strong: 185 28 28;
+
+    --info: 2 132 199;
+    --info-soft: 224 242 254;
+
+    --shadow: 15 23 42;
+    --ring: var(--accent-500);
+
+    color-scheme: light;
+  }
+
+  .dark {
+    --surface: 8 11 20;
+    --surface-raised: 17 22 35;
+    --surface-sunken: 4 7 13;
+    --surface-overlay: 22 28 44;
+
+    --line: 35 43 62;
+    --line-strong: 55 65 88;
+
+    --text: 232 237 247;
+    --text-muted: 155 167 190;
+    --text-subtle: 118 130 154;
+    --text-inverted: 8 11 20;
+
+    --accent-50: 49 46 129;
+    --accent-100: 55 48 163;
+    --accent-200: 67 56 202;
+    --accent-300: 79 70 229;
+    --accent-400: 129 140 248;
+    --accent-500: 111 114 250;
+    --accent-600: 91 94 240;
+    --accent-700: 129 140 248;
+    --accent-800: 165 180 252;
+    --accent-900: 199 210 254;
+
+    --violet-400: 183 160 253;
+    --violet-500: 154 111 250;
+    --violet-600: 139 92 246;
+
+    --success: 52 199 123;
+    --success-soft: 6 46 30;
+    --success-strong: 110 231 168;
+
+    --warning: 245 176 65;
+    --warning-soft: 58 36 4;
+    --warning-strong: 253 208 122;
+
+    --danger: 248 113 113;
+    --danger-soft: 60 15 15;
+    --danger-strong: 252 165 165;
+
+    --info: 56 176 233;
+    --info-soft: 8 42 60;
+
+    --shadow: 0 0 0;
+
+    color-scheme: dark;
+  }
+
+  * {
+    @apply border-line;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-surface text-content antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    text-rendering: optimizeLegibility;
+    min-height: 100vh;
+  }
+
+  /* A single focus treatment everywhere, keyboard-only. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent-500/70 ring-offset-2 ring-offset-surface;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-semibold tracking-tight text-content;
+  }
+
+  ::selection {
+    background-color: rgb(var(--accent-500) / 0.3);
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: rgb(var(--line-strong) / 0.7);
+    border: 2px solid transparent;
+    background-clip: content-box;
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(var(--text-subtle) / 0.8);
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--line-strong) / 0.8) transparent;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-line bg-surface-raised shadow-card;
+  }
+
+  .card-hover {
+    @apply transition duration-200 ease-snap hover:border-line-strong hover:shadow-lifted;
+  }
+
+  .card-header {
+    @apply flex items-center justify-between gap-3 border-b border-line px-5 py-4;
+  }
+
+  .card-body {
+    @apply px-5 py-4;
+  }
+
+  .btn {
+    @apply inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg
+      border border-line bg-surface-raised px-3.5 py-2 text-sm font-medium text-content
+      transition duration-150 ease-snap
+      hover:border-line-strong hover:bg-surface-overlay
+      active:translate-y-px
+      disabled:pointer-events-none disabled:opacity-45;
+  }
+
+  .btn-primary {
+    @apply border-transparent bg-accent-600 text-white shadow-glow-sm
+      hover:bg-accent-500 hover:shadow-glow
+      focus-visible:ring-offset-1;
+  }
+
+  .btn-ghost {
+    @apply border-transparent bg-transparent text-content-muted
+      hover:bg-surface-overlay hover:text-content;
+  }
+
+  .btn-danger {
+    @apply border-transparent bg-danger text-white
+      hover:brightness-110;
+  }
+
+  .btn-sm {
+    @apply px-2.5 py-1.5 text-xs;
+  }
+
+  .btn-lg {
+    @apply px-5 py-2.5 text-md;
+  }
+
+  .btn-icon {
+    @apply h-9 w-9 p-0;
+  }
+
+  .input {
+    @apply block w-full rounded-lg border border-line bg-surface-sunken px-3 py-2 text-sm
+      text-content placeholder:text-content-subtle
+      transition duration-150 ease-snap
+      hover:border-line-strong
+      focus:border-accent-500 focus:bg-surface-raised
+      disabled:cursor-not-allowed disabled:opacity-55;
+  }
+
+  textarea.input {
+    @apply min-h-[6rem] resize-y leading-relaxed;
+  }
+
+  select.input {
+    @apply cursor-pointer pr-8;
+  }
+
+  .label {
+    @apply mb-1.5 block text-xs font-medium uppercase tracking-wider text-content-subtle;
+  }
+
+  .hint {
+    @apply mt-1.5 text-xs text-content-subtle;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border
+      border-line bg-surface-sunken px-2.5 py-0.5 text-xs font-medium text-content-muted;
+  }
+
+  .badge-accent {
+    @apply border-accent-500/35 bg-accent-500/12 text-accent-400;
+  }
+
+  .badge-success {
+    @apply border-success/35 bg-success/12 text-success;
+  }
+
+  .badge-warning {
+    @apply border-warning/35 bg-warning/12 text-warning;
+  }
+
+  .badge-danger {
+    @apply border-danger/35 bg-danger/12 text-danger;
+  }
+
+  .badge-info {
+    @apply border-info/35 bg-info/12 text-info;
+  }
+
+  .live-dot {
+    @apply inline-block h-2 w-2 shrink-0 rounded-full bg-success animate-pulse-soft;
+  }
+
+  .live-dot-idle {
+    @apply animate-none bg-content-subtle;
+  }
+
+  .divider {
+    @apply h-px w-full bg-line;
+  }
+
+  .nav-item {
+    @apply flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-content-muted
+      transition duration-150 ease-snap
+      hover:bg-surface-overlay hover:text-content;
+  }
+
+  .nav-item-active {
+    @apply bg-accent-500/12 text-accent-400 hover:bg-accent-500/16 hover:text-accent-400;
+  }
+
+  .table-base {
+    @apply w-full border-collapse text-left text-sm;
+  }
+
+  .table-base th {
+    @apply border-b border-line px-4 py-2.5 text-xs font-semibold uppercase
+      tracking-wider text-content-subtle;
+  }
+
+  .table-base td {
+    @apply border-b border-line/70 px-4 py-3 align-middle text-content-muted;
+  }
+
+  .table-base tbody tr {
+    @apply transition-colors duration-150 hover:bg-surface-overlay/60;
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden rounded-md bg-surface-overlay;
+  }
+
+  .skeleton::after {
+    content: "";
+    @apply absolute inset-0 animate-shimmer;
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      rgb(var(--text) / 0.06),
+      transparent
+    );
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-accent-400 to-violet-400 bg-clip-text text-transparent;
+  }
+
+  .scroll-area {
+    @apply overflow-y-auto overscroll-contain;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
