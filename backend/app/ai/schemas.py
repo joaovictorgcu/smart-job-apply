@@ -10,9 +10,9 @@ Formato consolidado (`JobAnalysis`):
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.enums import AnswerConfidence
 
@@ -58,12 +58,15 @@ class ScreeningAnswer(BaseModel):
     # Identificador do campo no formulário, quando conhecido (preenchido pela automação).
     field_id: str | None = None
 
-    @field_validator("needs_review", mode="after")
-    @classmethod
-    def _low_confidence_needs_review(cls, value: bool, info: Any) -> bool:
-        if info.data.get("confidence") == AnswerConfidence.LOW:
-            return True
-        return value
+    # A model validator, not a field validator: field validators are skipped when
+    # the field falls back to its default, which is the common case here (the model
+    # returns a confidence but no needs_review) and would leave a low-confidence
+    # answer unflagged for review.
+    @model_validator(mode="after")
+    def _low_confidence_needs_review(self) -> ScreeningAnswer:
+        if self.confidence == AnswerConfidence.LOW and not self.needs_review:
+            self.needs_review = True
+        return self
 
 
 class ScreeningAnswerSet(BaseModel):
