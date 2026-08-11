@@ -144,7 +144,16 @@ export function ScreeningAnswerEditor({
                 <Button
                   size="sm"
                   disabled={disabled}
-                  onClick={() => patch(index, { needs_review: false })}
+                  // The backend re-derives needs_review from the confidence and
+                  // re-flags anything still marked "low", so clearing the flag on
+                  // its own would not survive a save. A human confirming the
+                  // answer is precisely what raises its confidence.
+                  onClick={() =>
+                    patch(index, {
+                      needs_review: false,
+                      confidence: answer.confidence === 'low' ? 'high' : answer.confidence,
+                    })
+                  }
                   icon={<Check aria-hidden className="h-3.5 w-3.5" />}
                 >
                   This is correct
