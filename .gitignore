@@ -99,8 +99,9 @@ Desktop.ini
 .vscode/*
 !.vscode/extensions.json
 
-# Claude Code local config (machine-specific absolute paths)
-.claude/
+# Local agent/editor config directories (machine-specific absolute paths)
+.agent/
+.assistant/
 
 # TypeScript incremental build cache
 *.tsbuildinfo
