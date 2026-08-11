@@ -107,7 +107,7 @@ class UserSettings(Base, TimestampMixin):
 
     # --- AI ---
     ai_model: Mapped[str | None] = mapped_column(String(100), default=None)
-    cover_letter_tone: Mapped[str] = mapped_column(String(50), default="profissional")
+    cover_letter_tone: Mapped[str] = mapped_column(String(50), default="professional")
     # "job" = follow the job posting's language; or pin "pt-BR" / "en".
     content_language: Mapped[str] = mapped_column(String(20), default="job")
     generate_cover_letter: Mapped[bool] = mapped_column(Boolean, default=True)
