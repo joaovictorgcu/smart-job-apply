@@ -25,9 +25,10 @@ you to read it and approve** before anything is sent.
 > browser. It is not a justification — it is the reason the risk exists and cannot be engineered away.
 >
 > **The guard rails reduce that risk. They do not eliminate it.** Randomized delays, a daily cap, a
-> working-hours window, and mandatory human approval make the traffic look like a person using LinkedIn
-> attentively. They do nothing about browser fingerprinting, and there is no safe threshold — one unlucky
-> session can trip a check.
+> working-hours window, and mandatory human approval keep the tool operating conservatively — a modest
+> volume you can actually read, at an unhurried pace, with a person approving every submission. They do
+> nothing about browser fingerprinting, and there is no safe threshold — one unlucky session can trip a
+> check.
 >
 > **You are responsible for your own account.** Nobody here can get a restriction reversed for you. Weigh
 > the time saved against what losing the account would cost you. For plenty of people the honest answer is
@@ -117,15 +118,18 @@ Dry-run mode is on by default: the whole flow runs, right up to the final click,
 
 ## Screenshots
 
-*Images are not in the repository yet.* Add them at the paths below and they will appear here; until then
-these render as alt text, which is why the captions carry the description.
+**Tailored resume with an invention guard.** The AI reorganizes and re-emphasizes your CV for one posting —
+it never adds experience you do not have — and a guard flags any technology that appears in the tailored
+text but not in your profile, so a fabrication cannot slip past unseen.
+
+![CV tailoring panel — the change list, requirements the resume does not cover, and a warning flagging "Kubernetes" as present in the tailored CV but not in the profile](docs/images/cv-tailoring.png)
 
 | | |
 |---|---|
-| ![Dashboard — stats, score distribution, live activity feed](docs/images/dashboard.png) | ![Job list — scores, reasons, missing requirements](docs/images/jobs.png) |
-| **Dashboard** — counters, score distribution, live activity | **Jobs** — scored, with reasons and gaps |
-| ![Application review — cover letter and screening answers, low-confidence answers highlighted](docs/images/review.png) | ![Settings — guard rails and AI preferences](docs/images/settings.png) |
-| **Review** — the approval gate, with flagged answers | **Settings** — guard rails, dry-run toggle |
+| ![Dashboard — submitted-today and awaiting-review counters, average score, live activity feed](docs/images/dashboard.png) | ![Job list — scores, reasons, missing requirements](docs/images/jobs.png) |
+| **Dashboard** — counters, average score, what is waiting on you | **Jobs** — scored, with reasons and gaps |
+| ![Application review — the approval gate: editable cover letter, screening answers with a low-confidence one flagged, and the full event timeline](docs/images/review.png) | ![Settings — guard rails and AI preferences](docs/images/settings.png) |
+| **Review** — the approval gate, a flagged answer, and the audit timeline | **Settings** — guard rails, dry-run toggle |
 
 To capture your own: run the app, populate it with a dry-run search so the screens have real content, then
 take a viewport screenshot at 1440×900 (`Ctrl/Cmd+Shift+P` → "Capture screenshot" in Chrome DevTools) and

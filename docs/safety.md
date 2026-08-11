@@ -22,7 +22,7 @@ it, and the right answer is to close this repository and apply by hand.
 
 | Guard rail | What it actually protects against |
 |---|---|
-| Randomized action delays (2.5–7 s) | Uniform, machine-timed click intervals — a trivially detectable pattern |
+| Randomized action delays (2.5–7 s) | Machine-timed clicks firing back-to-back, hammering the service with no room for you to step in |
 | Randomized apply delays (45–120 s) | Bursts of applications inside a few seconds |
 | Daily cap (15, hard max 50) | Volume that no human job search produces |
 | Working-hours window (08:00–20:00) | Activity at 4 a.m. every day |
@@ -31,12 +31,14 @@ it, and the right answer is to close this repository and apply by hand.
 | Visible (non-headless) browser | Silent failure — you can see what is happening and take over |
 | Human approval before every submission | Sending applications you did not read |
 
-Together these make the traffic pattern look like a person using LinkedIn attentively rather than a script
-hammering it. That is a meaningful reduction in risk.
+Together these keep the tool operating conservatively — modest volume, unhurried pacing, one session at a
+time, and a human approving every submission rather than a script running unattended. That is a meaningful
+reduction in risk, and it is also simply the responsible way to drive someone else's service.
 
 ## What the guard rails do not do
 
-They do not make you undetectable, and it would be dishonest to imply otherwise.
+They do not make automation acceptable to LinkedIn, and they cannot hide that it is automation — it would be
+dishonest to imply otherwise.
 
 - **Browser fingerprinting still applies.** Playwright-driven Chromium is distinguishable from a
   hand-driven browser through automation flags, rendering and timing characteristics, and behavioral
@@ -47,8 +49,9 @@ They do not make you undetectable, and it would be dishonest to imply otherwise.
   change without notice. Nothing here can be tuned against them.
 - **The risk is not proportional to volume alone.** A single unlucky session can trip a check. A cautious
   configuration lowers the odds; it does not create a safe threshold.
-- **No guard rail protects you from a bad application.** Delays and caps are about detection. Whether the
-  cover letter is accurate and the screening answers are true is entirely on the human review step.
+- **No guard rail protects you from a bad application.** Delays and caps govern pace and volume, not
+  correctness. Whether the cover letter is accurate and the screening answers are true is entirely on the
+  human review step.
 
 **Do not loosen the guard rails to go faster.** Every knob in
 [configuration.md](configuration.md#guard-rails) says what you are trading. The defaults are conservative
