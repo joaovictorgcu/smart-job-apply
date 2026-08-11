@@ -90,9 +90,14 @@ async def prepare(
 
 @router.post("/stop", response_model=Message)
 async def stop(user: CurrentUser, session: SessionDep) -> Message:
-    """Kill switch: flag every live run so the engine stands down at its next step."""
+    """Kill switch: tell the engine to stand down at its next step.
+
+    Responds immediately. The stop is cooperative, so an application that is being
+    filled is left as it is rather than half-submitted; the browser window stays
+    open so you can see where it stopped.
+    """
     flagged = await automation_service.stop_all(session, user)
-    return Message(detail=f"Stop requested. {flagged} active run(s) flagged.")
+    return Message(detail=f"Stop requested. {flagged} active run(s) affected.")
 
 
 @router.get("/runs", response_model=list[AutomationRunRead])

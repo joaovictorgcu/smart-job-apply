@@ -27,7 +27,9 @@ def _token_response(user_id: int, user: UserRead) -> TokenResponse:
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(settings.rate_limit_auth)
-async def register(request: Request, payload: RegisterRequest, session: SessionDep) -> TokenResponse:
+async def register(
+    request: Request, payload: RegisterRequest, session: SessionDep
+) -> TokenResponse:
     """Create an account with an empty profile and conservative default guardrails.
 
     The new account starts in dry-run mode with manual approval required, so it
@@ -46,9 +48,7 @@ async def register(request: Request, payload: RegisterRequest, session: SessionD
 @limiter.limit(settings.rate_limit_auth)
 async def login(request: Request, payload: LoginRequest, session: SessionDep) -> TokenResponse:
     """Exchange email and password for a bearer token."""
-    user = await user_service.authenticate(
-        session, email=payload.email, password=payload.password
-    )
+    user = await user_service.authenticate(session, email=payload.email, password=payload.password)
     return _token_response(user.id, UserRead.model_validate(user))
 
 

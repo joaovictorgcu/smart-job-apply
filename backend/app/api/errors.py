@@ -73,6 +73,13 @@ class AuthenticationError(AppError):
     default_detail = "Invalid credentials."
 
 
+class UpstreamError(AppError):
+    """A dependency we do not control (the AI, LinkedIn's UI) failed."""
+
+    status_code = status.HTTP_502_BAD_GATEWAY
+    default_detail = "An upstream service failed."
+
+
 class PreconditionFailedError(AppError):
     """The resource is not in a state that allows this action.
 

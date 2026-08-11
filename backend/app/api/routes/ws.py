@@ -43,8 +43,6 @@ async def event_feed(
             # Keeps the socket open; the payload itself carries no commands.
             await websocket.receive_text()
     except WebSocketDisconnect:
-        logger.info(
-            "WebSocket closed.", extra={"action": "ws.disconnect", "user_id": user.id}
-        )
+        logger.info("WebSocket closed.", extra={"action": "ws.disconnect", "user_id": user.id})
     finally:
         await manager.disconnect(user.id, websocket)
