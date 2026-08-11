@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { AppShell } from "@/components/AppShell";
@@ -15,6 +15,7 @@ import { Dashboard } from "@/pages/Dashboard";
 import { JobDetail } from "@/pages/JobDetail";
 import { Jobs } from "@/pages/Jobs";
 import { Login } from "@/pages/Login";
+import { NotFound } from "@/pages/NotFound";
 import { Profile } from "@/pages/Profile";
 import { Register } from "@/pages/Register";
 import { Searches } from "@/pages/Searches";
@@ -43,21 +44,6 @@ function createQueryClient(): QueryClient {
       },
     },
   });
-}
-
-function NotFound() {
-  return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 text-center">
-      <p className="text-4xl font-semibold text-gradient">404</p>
-      <h1 className="text-xl">This page does not exist</h1>
-      <p className="max-w-sm text-sm text-content-muted">
-        The link may be outdated, or the resource was removed.
-      </p>
-      <Link to="/" className="btn btn-primary">
-        Back to dashboard
-      </Link>
-    </div>
-  );
 }
 
 export function App() {
