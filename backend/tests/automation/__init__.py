@@ -10,9 +10,10 @@ The engine is a process-wide singleton driven by ids, not ORM objects:
 The `automation_engine` fixture hands out a fresh instance per test, and
 `wire_fakes` replaces the browser service it builds internally.
 
-The reload helpers take plain ids on purpose. They expire the session so the
-engine's own committed writes become visible, and reading an attribute off an
-expired ORM instance would emit IO from a synchronous context.
+The engine commits through its own sessions, so the test's session has to be told
+to re-read. The reload helpers do that with `populate_existing`, which refreshes
+only the rows they return — expiring the whole session instead would leave every
+other object in the test emitting IO from synchronous attribute access.
 """
 
 from __future__ import annotations
@@ -48,20 +49,30 @@ ai_seam = pytest.mark.xfail(reason=AI_SEAM_REASON, strict=False)
 
 
 async def reload_run(session: AsyncSession, run_id: int) -> AutomationRun:
-    session.expire_all()
     return (
-        await session.execute(select(AutomationRun).where(AutomationRun.id == run_id))
+        await session.execute(
+            select(AutomationRun)
+            .where(AutomationRun.id == run_id)
+            .execution_options(populate_existing=True)
+        )
     ).scalar_one()
 
 
 async def application_for_job(session: AsyncSession, job_id: int) -> Application | None:
-    session.expire_all()
     return (
-        await session.execute(select(Application).where(Application.job_id == job_id))
+        await session.execute(
+            select(Application)
+            .where(Application.job_id == job_id)
+            .execution_options(populate_existing=True)
+        )
     ).scalar_one_or_none()
 
 
 async def jobs_of(session: AsyncSession, user_id: int) -> list[Job]:
-    session.expire_all()
-    result = await session.execute(select(Job).where(Job.user_id == user_id).order_by(Job.id))
+    result = await session.execute(
+        select(Job)
+        .where(Job.user_id == user_id)
+        .order_by(Job.id)
+        .execution_options(populate_existing=True)
+    )
     return list(result.scalars().all())

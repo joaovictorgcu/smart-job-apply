@@ -334,8 +334,14 @@ class TestLivePrepareStopsAtReview:
 
         await automation_engine.prepare_applications(user.id, run.id, [blocked_id, usable_id])
 
-        assert await application_for_job(session, blocked_id) is None
-        assert await application_for_job(session, usable_id) is not None
+        failed = await application_for_job(session, blocked_id)
+        assert failed is not None
+        assert failed.status == ApplicationStatus.FAILED
+        assert failed.error_message
+        # The rest of the batch still ran, and the run is not a failure.
+        prepared = await application_for_job(session, usable_id)
+        assert prepared is not None
+        assert prepared.status == ApplicationStatus.AWAITING_REVIEW
         assert (await reload_run(session, run.id)).status == AutomationRunStatus.COMPLETED
         assert fake_linkedin.submit_called is False
 
@@ -350,7 +356,10 @@ class TestLivePrepareStopsAtReview:
 
         await automation_engine.prepare_applications(user.id, run.id, [job_id])
 
-        assert await application_for_job(session, job_id) is None
+        application = await application_for_job(session, job_id)
+        assert application is not None
+        assert application.status == ApplicationStatus.FAILED
+        assert application.error_message
         assert fake_linkedin.submit_called is False
 
     async def test_a_job_belonging_to_someone_else_is_refused(

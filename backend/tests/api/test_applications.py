@@ -248,7 +248,6 @@ class TestSubmitHappyPath:
         )
 
         assert response.status_code in (200, 202), response.text
-        session.expire_all()
         await session.refresh(application)
         assert application.approved_at is not None
 

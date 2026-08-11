@@ -44,18 +44,21 @@ async def prepare_run(session: AsyncSession, user: Any) -> Any:
 
 
 async def events_for(session: AsyncSession, application_id: int) -> list[ApplicationEvent]:
-    session.expire_all()
     result = await session.execute(
         select(ApplicationEvent)
         .where(ApplicationEvent.application_id == application_id)
         .order_by(ApplicationEvent.created_at, ApplicationEvent.id)
+        .execution_options(populate_existing=True)
     )
     return list(result.scalars().all())
 
 
 async def analyses_for(session: AsyncSession, job_id: int) -> list[AIAnalysis]:
-    session.expire_all()
-    result = await session.execute(select(AIAnalysis).where(AIAnalysis.job_id == job_id))
+    result = await session.execute(
+        select(AIAnalysis)
+        .where(AIAnalysis.job_id == job_id)
+        .execution_options(populate_existing=True)
+    )
     return list(result.scalars().all())
 
 
@@ -194,7 +197,6 @@ class TestPrepareThenSubmit:
 
         await automation_engine.submit_application(user_id, application.id)
 
-        session.expire_all()
         await session.refresh(job)
         assert job.status == JobStatus.APPLIED
 
