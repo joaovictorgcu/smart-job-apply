@@ -59,7 +59,7 @@ function invalidateForEvent(client: QueryClient, event: AppEvent): void {
       break;
 
     case "automation.progress":
-      invalidate(queryKeys.runs());
+      invalidate(queryKeys.runsAll());
       if (event.run_id !== null) invalidate(queryKeys.run(event.run_id));
       break;
 

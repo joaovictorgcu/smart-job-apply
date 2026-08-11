@@ -71,6 +71,9 @@ export const queryKeys = {
 
   automation: () => ["automation"] as const,
   session: () => ["automation", "session"] as const,
+  // Prefix over every runs list: `runs(limit)` appends the limit, so invalidating
+  // `runs()` alone would miss `runs(8)` and leave the caller's list stale.
+  runsAll: () => ["automation", "runs"] as const,
   runs: (limit?: number) => ["automation", "runs", limit ?? null] as const,
   run: (id: number) => ["automation", "run", id] as const,
 
