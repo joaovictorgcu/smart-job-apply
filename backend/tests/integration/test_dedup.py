@@ -1,8 +1,8 @@
 """Job deduplication.
 
-`UNIQUE(user_id, external_id)` is the invariant; the upsert is what honors it.
-Re-discovering a posting must refresh it, never duplicate it, and never walk an
-already-applied job back to `discovered`.
+`UNIQUE(user_id, external_id)` is the invariant; `upsert_job_from_posting` is what
+honors it. Re-discovering a posting must refresh it, never duplicate it, and never
+walk an already-applied job back to an earlier state.
 """
 
 from __future__ import annotations
@@ -15,26 +15,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Application, ApplicationStatus, Job, JobStatus
-from tests import find_attr, missing
-from tests.automation import invoke
+from app.services.job_service import upsert_job_from_posting
 from tests.fixtures.factories import (
     create_application,
     create_job,
     create_search,
     create_user,
     make_job_posting,
-)
-
-DEDUP_MODULES = (
-    "app.services.jobs",
-    "app.services.dedup",
-    "app.services.job_service",
-    "app.services.discovery",
-)
-
-upsert_job = find_attr(
-    ("upsert_job", "upsert_job_posting", "save_posting", "store_posting", "sync_job"),
-    *DEDUP_MODULES,
 )
 
 
@@ -44,19 +31,15 @@ async def count_jobs(session: AsyncSession, user: Any) -> int:
     ).scalar_one()
 
 
-async def do_upsert(session: AsyncSession, user: Any, posting: Any, search: Any = None) -> Any:
-    return await invoke(
-        upsert_job,
-        ((session, user, posting), {"search": search}),
-        ((session, user, posting), {"search_id": getattr(search, "id", None)}),
-        ((session, user, posting), {}),
-        ((session, user.id, posting), {}),
-    )
+async def job_by_external_id(session: AsyncSession, user: Any, external_id: str) -> Job:
+    return (
+        await session.execute(
+            select(Job).where(Job.user_id == user.id, Job.external_id == external_id)
+        )
+    ).scalar_one()
 
 
 class TestDatabaseInvariant:
-    """Holds without any service layer: the constraint is in the schema."""
-
     async def test_the_same_external_id_cannot_be_stored_twice_for_one_user(
         self, session: AsyncSession
     ) -> None:
@@ -70,9 +53,7 @@ class TestDatabaseInvariant:
             await session.flush()
         await session.rollback()
 
-    async def test_two_users_may_each_hold_the_same_posting(
-        self, session: AsyncSession
-    ) -> None:
+    async def test_two_users_may_each_hold_the_same_posting(self, session: AsyncSession) -> None:
         first = await create_user(session, email="dedup2a@example.com")
         second = await create_user(session, email="dedup2b@example.com")
 
@@ -93,20 +74,18 @@ class TestDatabaseInvariant:
         await session.rollback()
 
 
-@pytest.mark.xfail(upsert_job is None, reason=missing("upsert_job", *DEDUP_MODULES))
 class TestUpsert:
     async def test_the_first_upsert_creates_the_job(self, session: AsyncSession) -> None:
         user = await create_user(session, email="upsert1@example.com")
-        posting = make_job_posting(external_id="ext-100", title="Backend Engineer")
 
-        await do_upsert(session, user, posting)
+        job, created = await upsert_job_from_posting(
+            session, user, make_job_posting(external_id="ext-100", title="Backend Engineer")
+        )
         await session.commit()
 
-        job = (
-            await session.execute(select(Job).where(Job.external_id == "ext-100"))
-        ).scalar_one()
+        assert created is True
         assert job.title == "Backend Engineer"
-        assert job.user_id == user.id
+        assert job.status == JobStatus.DISCOVERED
 
     async def test_upserting_the_same_posting_twice_yields_one_row(
         self, session: AsyncSession
@@ -114,23 +93,26 @@ class TestUpsert:
         user = await create_user(session, email="upsert2@example.com")
         posting = make_job_posting(external_id="ext-101")
 
-        await do_upsert(session, user, posting)
+        first, created_first = await upsert_job_from_posting(session, user, posting)
         await session.commit()
-        await do_upsert(session, user, posting)
+        second, created_second = await upsert_job_from_posting(session, user, posting)
         await session.commit()
 
+        assert created_first is True
+        assert created_second is False
+        assert first.id == second.id
         assert await count_jobs(session, user) == 1
 
     async def test_a_second_discovery_refreshes_the_details(
         self, session: AsyncSession
     ) -> None:
         user = await create_user(session, email="upsert3@example.com")
-        await do_upsert(
+        await upsert_job_from_posting(
             session, user, make_job_posting(external_id="ext-102", description="Short blurb.")
         )
         await session.commit()
 
-        await do_upsert(
+        await upsert_job_from_posting(
             session,
             user,
             make_job_posting(
@@ -139,89 +121,123 @@ class TestUpsert:
         )
         await session.commit()
 
-        job = (
-            await session.execute(select(Job).where(Job.external_id == "ext-102"))
-        ).scalar_one()
+        job = await job_by_external_id(session, user, "ext-102")
         assert job.description == "The full description, fetched later."
         assert await count_jobs(session, user) == 1
 
-    async def test_an_applied_job_is_never_walked_back_to_discovered(
+    async def test_a_listing_without_a_description_does_not_erase_the_stored_one(
         self, session: AsyncSession
     ) -> None:
-        """Re-finding a posting must not erase the fact that it was applied to."""
+        """Search results are summaries; they must not overwrite a fetched detail page."""
         user = await create_user(session, email="upsert4@example.com")
-        await create_job(session, user, external_id="ext-103", status=JobStatus.APPLIED, score=95)
-
-        await do_upsert(session, user, make_job_posting(external_id="ext-103"))
+        await upsert_job_from_posting(
+            session, user, make_job_posting(external_id="ext-103", description="The full text.")
+        )
         await session.commit()
 
-        job = (
-            await session.execute(select(Job).where(Job.external_id == "ext-103"))
-        ).scalar_one()
+        await upsert_job_from_posting(
+            session, user, make_job_posting(external_id="ext-103", description=None)
+        )
+        await session.commit()
+
+        job = await job_by_external_id(session, user, "ext-103")
+        assert job.description == "The full text."
+
+    async def test_an_applied_job_is_never_walked_back(self, session: AsyncSession) -> None:
+        """Re-finding a posting must not erase the fact that it was applied to."""
+        user = await create_user(session, email="upsert5@example.com")
+        await create_job(session, user, external_id="ext-104", status=JobStatus.APPLIED, score=95)
+
+        await upsert_job_from_posting(
+            session, user, make_job_posting(external_id="ext-104")
+        )
+        await session.commit()
+
+        job = await job_by_external_id(session, user, "ext-104")
         assert job.status == JobStatus.APPLIED
         assert job.score == 95
+        assert await count_jobs(session, user) == 1
 
-    async def test_a_skipped_job_keeps_its_skip_reason(self, session: AsyncSession) -> None:
-        user = await create_user(session, email="upsert5@example.com")
+    async def test_a_skipped_job_keeps_its_status_and_reason(
+        self, session: AsyncSession
+    ) -> None:
+        user = await create_user(session, email="upsert6@example.com")
         await create_job(
             session,
             user,
-            external_id="ext-104",
+            external_id="ext-105",
             status=JobStatus.SKIPPED,
             score=20,
             skip_reason="Score 20 is below the minimum of 70.",
         )
 
-        await do_upsert(session, user, make_job_posting(external_id="ext-104"))
+        await upsert_job_from_posting(session, user, make_job_posting(external_id="ext-105"))
         await session.commit()
 
-        job = (
-            await session.execute(select(Job).where(Job.external_id == "ext-104"))
-        ).scalar_one()
+        job = await job_by_external_id(session, user, "ext-105")
         assert job.status == JobStatus.SKIPPED
         assert job.skip_reason
+
+    async def test_a_posting_linkedin_reports_as_applied_is_marked_applied(
+        self, session: AsyncSession
+    ) -> None:
+        user = await create_user(session, email="upsert7@example.com")
+
+        await upsert_job_from_posting(
+            session, user, make_job_posting(external_id="ext-106", already_applied=True)
+        )
+        await session.commit()
+
+        job = await job_by_external_id(session, user, "ext-106")
+        assert job.status == JobStatus.APPLIED
 
     async def test_one_users_upsert_does_not_touch_another_users_row(
         self, session: AsyncSession
     ) -> None:
-        first = await create_user(session, email="upsert6a@example.com")
-        second = await create_user(session, email="upsert6b@example.com")
-        await create_job(session, first, external_id="ext-105", title="Owned by first")
+        first = await create_user(session, email="upsert8a@example.com")
+        second = await create_user(session, email="upsert8b@example.com")
+        await create_job(session, first, external_id="ext-107", title="Owned by first")
 
-        await do_upsert(
-            session, second, make_job_posting(external_id="ext-105", title="Owned by second")
+        await upsert_job_from_posting(
+            session, second, make_job_posting(external_id="ext-107", title="Owned by second")
         )
         await session.commit()
 
-        theirs = (
-            await session.execute(
-                select(Job).where(Job.user_id == first.id, Job.external_id == "ext-105")
-            )
-        ).scalar_one()
+        theirs = await job_by_external_id(session, first, "ext-107")
         assert theirs.title == "Owned by first"
         assert await count_jobs(session, second) == 1
 
     async def test_the_search_that_found_the_job_is_recorded(
         self, session: AsyncSession
     ) -> None:
-        user = await create_user(session, email="upsert7@example.com")
+        user = await create_user(session, email="upsert9@example.com")
         search = await create_search(session, user)
 
-        await do_upsert(session, user, make_job_posting(external_id="ext-106"), search)
+        job, _ = await upsert_job_from_posting(
+            session, user, make_job_posting(external_id="ext-108"), search_id=search.id
+        )
         await session.commit()
 
-        job = (
-            await session.execute(select(Job).where(Job.external_id == "ext-106"))
-        ).scalar_one()
         assert job.search_id == search.id
+
+    async def test_a_repeat_search_does_not_multiply_the_rows(
+        self, session: AsyncSession
+    ) -> None:
+        """Running the same saved search twice is the normal case, not an error."""
+        user = await create_user(session, email="upsert10@example.com")
+        search = await create_search(session, user)
+        postings = [make_job_posting(external_id=f"ext-2{index}") for index in range(5)]
+
+        for _ in range(3):
+            for posting in postings:
+                await upsert_job_from_posting(session, user, posting, search_id=search.id)
+            await session.commit()
+
+        assert await count_jobs(session, user) == 5
 
 
 class TestApplicationUniqueness:
-    async def test_an_awaiting_review_application_is_reused_not_duplicated(
-        self, session: AsyncSession
-    ) -> None:
-        """One job, one application — the schema enforces it, so nothing may retry
-        preparation into a second row."""
+    async def test_one_job_keeps_exactly_one_application(self, session: AsyncSession) -> None:
         user = await create_user(session, email="dedup4@example.com")
         job = await create_job(session, user, status=JobStatus.QUEUED)
         application = await create_application(
@@ -229,7 +245,8 @@ class TestApplicationUniqueness:
         )
 
         found = (
-            await session.execute(select(Application).where(Application.job_id == job.id))
-        ).scalars().all()
-        assert len(found) == 1
-        assert found[0].id == application.id
+            (await session.execute(select(Application).where(Application.job_id == job.id)))
+            .scalars()
+            .all()
+        )
+        assert [row.id for row in found] == [application.id]

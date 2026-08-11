@@ -13,10 +13,12 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.security import create_access_token
+from app.database.base import utcnow
 from app.models import (
     Application,
     ApplicationStatus,
     AutomationRun,
+    AutomationRunKind,
     AutomationRunStatus,
     JobStatus,
 )
@@ -28,6 +30,22 @@ from tests.fixtures.factories import (
     create_user,
 )
 from tests.fixtures.fake_linkedin import FakeLinkedInService
+
+
+async def spent_cap_user(session: AsyncSession, email: str) -> Any:
+    """A user whose daily cap of one has already been used today."""
+    user = await create_user(
+        session, email=email, settings={"daily_cap": 1, "dry_run": False}
+    )
+    spent = await create_job(session, user, status=JobStatus.APPLIED)
+    await create_application(
+        session,
+        user,
+        spent,
+        status=ApplicationStatus.SUBMITTED,
+        submitted_at=utcnow(),
+    )
+    return user
 
 
 async def count_applications(session: AsyncSession, user: Any) -> int:
@@ -188,36 +206,57 @@ class TestPrepareNeedsConfirmation:
         assert response.status_code in (200, 201, 202), response.text
         assert fake_linkedin.submit_called is False
 
-    async def test_a_run_beyond_the_daily_cap_is_refused(
+    async def test_preparing_beyond_the_daily_cap_is_allowed_but_warned(
         self,
         client: AsyncClient,
         session: AsyncSession,
         fake_linkedin: FakeLinkedInService,
     ) -> None:
-        capped = await create_user(
-            session, email="over-cap@example.com", settings={"daily_cap": 1, "dry_run": False}
-        )
+        """Drafts may pile up past the cap; it is *submitting* that the cap stops.
+
+        The preview has to say so, so the user is never surprised by drafts they
+        cannot send today.
+        """
+        capped = await spent_cap_user(session, "over-cap@example.com")
         headers = {"Authorization": f"Bearer {create_access_token(capped.id)}"}
-        spent = await create_job(session, capped, status=JobStatus.APPLIED)
-        await create_application(
-            session, capped, spent, status=ApplicationStatus.SUBMITTED, submitted_at=None
-        )
-        from app.database.base import utcnow
-
-        application = (
-            await session.execute(select(Application).where(Application.job_id == spent.id))
-        ).scalar_one()
-        application.submitted_at = utcnow()
-        await session.commit()
-
         job = await create_job(session, capped, status=JobStatus.ANALYZED, score=95)
-        response = await client.post(
+
+        preview = await client.post(
+            "/api/automation/preview",
+            headers=headers,
+            json={"job_ids": [job.id], "confirmed": False},
+        )
+        prepare = await client.post(
             "/api/automation/prepare",
             headers=headers,
             json={"job_ids": [job.id], "confirmed": True},
         )
 
-        assert 400 <= response.status_code < 500, response.text
+        assert preview.json()["remaining_today"] == 0
+        assert any("cap" in warning.lower() for warning in preview.json()["warnings"])
+        assert prepare.status_code in (200, 201, 202), prepare.text
+        assert fake_linkedin.submit_called is False
+
+    async def test_submitting_beyond_the_daily_cap_is_refused(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        fake_linkedin: FakeLinkedInService,
+    ) -> None:
+        capped = await spent_cap_user(session, "over-cap-submit@example.com")
+        headers = {"Authorization": f"Bearer {create_access_token(capped.id)}"}
+        job = await create_job(session, capped, status=JobStatus.QUEUED, score=95)
+        application = await create_application(
+            session, capped, job, status=ApplicationStatus.AWAITING_REVIEW
+        )
+
+        response = await client.post(
+            f"/api/applications/{application.id}/submit",
+            headers=headers,
+            json={"confirm": True},
+        )
+
+        assert response.status_code == 429, response.text
         assert fake_linkedin.submit_called is False
 
 
@@ -439,4 +478,4 @@ class TestRunsAreRecorded:
             .all()
         )
         assert runs
-        assert runs[0].kind.value == "search"
+        assert runs[0].kind == AutomationRunKind.SEARCH

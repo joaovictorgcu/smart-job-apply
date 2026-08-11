@@ -8,7 +8,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import AIAnalysis, Job, JobStatus
+from app.models import AIAnalysis, JobStatus
 from tests.fixtures.factories import create_job, create_search, create_user
 from tests.fixtures.fake_ai import FakeAIClient
 

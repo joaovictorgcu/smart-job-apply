@@ -37,7 +37,9 @@ NON_REVIEWABLE = [
 ]
 
 
-async def live_user(session: AsyncSession, email: str, **settings: Any) -> tuple[Any, dict[str, str]]:
+async def live_user(
+    session: AsyncSession, email: str, **settings: Any
+) -> tuple[Any, dict[str, str]]:
     """A user with `dry_run` off — the only user who could ever submit."""
     values = {"dry_run": False}
     values.update(settings)
@@ -224,9 +226,15 @@ class TestSubmitRequiresAwaitingReview:
 
 
 class TestSubmitHappyPath:
-    async def test_a_reviewed_application_with_dry_run_off_is_accepted(
+    async def test_a_reviewed_application_with_dry_run_off_records_the_approval(
         self, client: AsyncClient, session: AsyncSession
     ) -> None:
+        """The approval is written against this one id, then handed to the engine.
+
+        The status deliberately stays `AWAITING_REVIEW` until the engine actually
+        starts clicking, so a request that never reaches the browser cannot leave
+        an application looking sent.
+        """
         user, headers = await live_user(session, "approved@example.com")
         job = await create_job(session, user, status=JobStatus.QUEUED)
         application = await create_application(
@@ -240,9 +248,29 @@ class TestSubmitHappyPath:
         )
 
         assert response.status_code in (200, 202), response.text
+        session.expire_all()
         await session.refresh(application)
-        assert application.status != ApplicationStatus.AWAITING_REVIEW
         assert application.approved_at is not None
+
+    async def test_an_approval_outside_working_hours_is_refused(
+        self, client: AsyncClient, session: AsyncSession, fake_linkedin: FakeLinkedInService
+    ) -> None:
+        user, headers = await live_user(
+            session, "night-owl@example.com", working_hour_start=3, working_hour_end=4
+        )
+        job = await create_job(session, user, status=JobStatus.QUEUED)
+        application = await create_application(
+            session, user, job, status=ApplicationStatus.AWAITING_REVIEW
+        )
+
+        response = await client.post(
+            f"/api/applications/{application.id}/submit",
+            headers=headers,
+            json={"confirm": True},
+        )
+
+        assert response.status_code == 429, response.text
+        assert fake_linkedin.submit_called is False
 
 
 class TestEditBeforeApproval:

@@ -13,7 +13,6 @@ from tests.fixtures.factories import (
     create_analysis,
     create_application,
     create_job,
-    create_user,
     days_ago,
 )
 
@@ -31,7 +30,7 @@ async def seed(session: AsyncSession, user: Any) -> dict[str, Any]:
         score=40,
         skip_reason="Score 40 is below the minimum of 70.",
     )
-    applied = await create_job(session, user, status=JobStatus.APPLIED, score=95)
+    applied = await create_job(session, user, status=JobStatus.APPLIED, score=90)
     await create_job(session, user, status=JobStatus.DISCOVERED, score=None)
 
     awaiting = await create_application(
@@ -95,8 +94,8 @@ class TestDashboardStats:
 
         body = (await client.get("/api/stats", headers=auth_headers)).json()
 
-        # (90 + 80 + 40 + 95) / 4 — the unscored job must not drag it toward zero.
-        assert body["average_score"] == 76.25
+        # (90 + 80 + 40 + 90) / 4 — the unscored job must not drag it toward zero.
+        assert body["average_score"] == 75.0
 
     async def test_reports_the_daily_cap_and_what_is_left_of_it(
         self, client: AsyncClient, session: AsyncSession, auth_headers: dict[str, str]

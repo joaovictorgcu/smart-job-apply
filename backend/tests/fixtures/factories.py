@@ -13,8 +13,8 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.automation.contracts import FormQuestion, JobPosting, ProfileContext, QuestionKind
 from app.auth.security import hash_password
+from app.automation.contracts import FormQuestion, JobPosting, ProfileContext, QuestionKind
 from app.database.base import utcnow
 from app.models import (
     AIAnalysis,

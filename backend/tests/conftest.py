@@ -1,28 +1,36 @@
 """Shared fixtures.
 
 Every test gets its own in-memory SQLite database, a deterministic `Settings`, and
-fakes wired in place of the Anthropic client and the LinkedIn browser service, so
-no test can reach the network even by accident.
+fakes in place of the Anthropic client and the LinkedIn browser service, so no test
+can reach the network even by accident.
+
+The test engine is installed into `app.database.session` itself, not only into the
+FastAPI dependency: the automation engine opens its own sessions with
+`session_scope()`, and it has to see the same rows the test does.
 """
 
 from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import AsyncIterator, Callable, Iterator
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from app.auth.security import create_access_token
 from app.config import get_settings
 from app.database.base import Base
 from app.database.session import get_session
 from tests import import_first
-from tests.fixtures.factories import DEFAULT_PASSWORD, create_user
+from tests.fixtures.factories import create_user
 from tests.fixtures.fake_ai import FakeAIClient
 from tests.fixtures.fake_linkedin import FakeLinkedInService
 
@@ -42,28 +50,9 @@ TEST_ENV: dict[str, str] = {
     "CORS_ORIGINS": "http://testserver",
 }
 
-# Module paths that may hold the pieces other agents still own.
-APP_MODULES = ("app.main", "app.api.main", "app.asgi", "app.app")
-AI_CLIENT_MODULES = ("app.ai", "app.ai.client", "app.ai.claude")
-ENGINE_MODULES = (
-    "app.automation.engine",
-    "app.automation.orchestrator",
-    "app.services.automation",
-    "app.automation.runner",
-)
-LINKEDIN_MODULES = (
-    "app.automation.linkedin",
-    "app.automation.linkedin.service",
-    "app.automation.session",
-    "app.automation.factory",
-)
-AI_CLIENT_FACTORIES = ("get_ai_client", "build_ai_client", "ai_client")
-LINKEDIN_FACTORIES = (
-    "get_linkedin_service",
-    "build_linkedin_service",
-    "create_linkedin_service",
-    "linkedin_service_factory",
-)
+# Where `get_ai_client` is looked up. Patching every binding covers callers that
+# imported the name into their own module namespace.
+AI_FACTORY_MODULES = ("app.ai.scoring", "app.ai.client", "app.ai")
 
 
 # --------------------------------------------------------------------------- #
@@ -83,6 +72,7 @@ def test_settings(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Any]:
     from app.auth import crypto
 
     previous = {key: os.environ.get(key) for key in TEST_ENV}
+    previous["DATA_DIR"] = os.environ.get("DATA_DIR")
     os.environ.update(TEST_ENV)
     os.environ["DATA_DIR"] = str(tmp_path_factory.mktemp("data"))
 
@@ -96,7 +86,6 @@ def test_settings(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Any]:
             os.environ.pop(key, None)
         else:
             os.environ[key] = value
-    os.environ.pop("DATA_DIR", None)
     get_settings.cache_clear()
     crypto._fernet.cache_clear()
 
@@ -120,22 +109,28 @@ def block_network(monkeypatch: pytest.MonkeyPatch) -> None:
     if anthropic is not None:
         for name in ("Anthropic", "AsyncAnthropic"):
             monkeypatch.setattr(anthropic, name, _forbidden, raising=False)
+    client_module = import_first("app.ai.client")
+    if client_module is not None:
+        monkeypatch.setattr(client_module, "AsyncAnthropic", _forbidden, raising=False)
 
     playwright = import_first("playwright.async_api")
     if playwright is not None:
         monkeypatch.setattr(playwright, "async_playwright", _forbidden, raising=False)
+    browser_module = import_first("app.automation.browser")
+    if browser_module is not None:
+        monkeypatch.setattr(browser_module, "async_playwright", _forbidden, raising=False)
 
 
 @pytest.fixture(autouse=True)
 def cap_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep production delays from making the suite wait on real time.
 
-    Only shortens: a `sleep` still yields to the loop, so cooperative code (the
-    kill switch, for one) behaves exactly as it does in production.
+    Only ever shortens a sleep. It still yields to the loop, so cooperative code
+    (the kill switch, for one) behaves exactly as it does in production.
     """
     real_sleep = asyncio.sleep
 
-    async def _fast_sleep(delay: float, *args: Any, **kwargs: Any) -> Any:
+    async def _fast_sleep(delay: float = 0, *args: Any, **kwargs: Any) -> Any:
         return await real_sleep(0, *args, **kwargs)
 
     monkeypatch.setattr(asyncio, "sleep", _fast_sleep)
@@ -147,7 +142,7 @@ def sleep_spy(monkeypatch: pytest.MonkeyPatch) -> list[float]:
     real_sleep = asyncio.sleep
     recorded: list[float] = []
 
-    async def _record(delay: float, *args: Any, **kwargs: Any) -> Any:
+    async def _record(delay: float = 0, *args: Any, **kwargs: Any) -> Any:
         recorded.append(delay)
         return await real_sleep(0, *args, **kwargs)
 
@@ -174,20 +169,34 @@ def fake_linkedin() -> FakeLinkedInService:
 def wire_fakes(
     monkeypatch: pytest.MonkeyPatch, fake_ai: FakeAIClient, fake_linkedin: FakeLinkedInService
 ) -> None:
-    """Replace the AI client and LinkedIn service factories everywhere they live."""
-    for path in AI_CLIENT_MODULES:
+    """Replace the AI client factory and the browser service at their real seams."""
+    for path in AI_FACTORY_MODULES:
         module = import_first(path)
-        if module is None:
-            continue
-        for name in AI_CLIENT_FACTORIES:
-            monkeypatch.setattr(module, name, lambda *a, **k: fake_ai, raising=False)
+        if module is not None:
+            monkeypatch.setattr(
+                module, "get_ai_client", lambda *a, **k: fake_ai, raising=False
+            )
 
-    for path in (*LINKEDIN_MODULES, *ENGINE_MODULES):
-        module = import_first(path)
-        if module is None:
-            continue
-        for name in LINKEDIN_FACTORIES:
-            monkeypatch.setattr(module, name, lambda *a, **k: fake_linkedin, raising=False)
+    engine_module = import_first("app.automation.engine")
+    if engine_module is not None:
+        monkeypatch.setattr(
+            engine_module,
+            "LinkedInBrowserService",
+            lambda *a, **k: fake_linkedin,
+            raising=False,
+        )
+
+
+@pytest.fixture(autouse=True)
+def automation_engine(monkeypatch: pytest.MonkeyPatch) -> Any:
+    """A fresh engine per test: the real one is a process-wide singleton."""
+    engine_module = import_first("app.automation.engine")
+    if engine_module is None:
+        return None
+    monkeypatch.setattr(engine_module, "_engine", None, raising=False)
+    instance = engine_module.get_engine()
+    monkeypatch.setattr(engine_module, "_engine", instance, raising=False)
+    return instance
 
 
 # --------------------------------------------------------------------------- #
@@ -196,23 +205,35 @@ def wire_fakes(
 
 
 @pytest.fixture
-async def engine() -> AsyncIterator[AsyncEngine]:
-    """A private in-memory database per test.
+async def engine(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> AsyncIterator[AsyncEngine]:
+    """A private database per test, installed app-wide.
 
-    `StaticPool` keeps every connection pointed at the same in-memory database, so
-    the API session and a directly-held test session see the same rows.
+    A throwaway SQLite *file* rather than `:memory:`. The automation engine opens
+    its own sessions with `session_scope()` while the test holds one of its own,
+    and a single shared in-memory connection cannot serve both — a file gives each
+    session a real connection, exactly as in production.
     """
     import app.models  # noqa: F401  (registers every model on Base.metadata)
+    from app.database import session as session_module
 
     test_engine = create_async_engine(
-        "sqlite+aiosqlite:///:memory:",
-        poolclass=StaticPool,
+        f"sqlite+aiosqlite:///{(tmp_path / 'test.db').as_posix()}",
         connect_args={"check_same_thread": False},
         future=True,
     )
     async with test_engine.begin() as connection:
+        # WAL keeps a reader from blocking the engine's writer mid-test.
+        await connection.exec_driver_sql("PRAGMA journal_mode=WAL")
         await connection.exec_driver_sql("PRAGMA foreign_keys=ON")
         await connection.run_sync(Base.metadata.create_all)
+
+    maker = async_sessionmaker(
+        test_engine, expire_on_commit=False, autoflush=False, class_=AsyncSession
+    )
+    monkeypatch.setattr(session_module, "_engine", test_engine, raising=False)
+    monkeypatch.setattr(session_module, "_sessionmaker", maker, raising=False)
     try:
         yield test_engine
     finally:
@@ -235,11 +256,6 @@ async def session(
 # --------------------------------------------------------------------------- #
 # Users
 # --------------------------------------------------------------------------- #
-
-
-@pytest.fixture
-def password() -> str:
-    return DEFAULT_PASSWORD
 
 
 @pytest.fixture
@@ -267,23 +283,18 @@ def other_auth_headers(other_user: Any) -> dict[str, str]:
 # --------------------------------------------------------------------------- #
 
 
-def build_app() -> Any | None:
-    """The FastAPI application, however the app module chose to expose it."""
-    module = import_first(*APP_MODULES)
-    if module is None:
-        return None
-    factory = getattr(module, "create_app", None)
-    if callable(factory):
-        return factory()
-    return getattr(module, "app", None)
-
-
 @pytest.fixture
 def app(sessionmaker: async_sessionmaker[AsyncSession]) -> Iterator[Any]:
-    """The real app with its database dependency pointed at the test database."""
-    application = build_app()
-    if application is None:
-        pytest.xfail(f"FastAPI app not implemented yet (looked in {', '.join(APP_MODULES)})")
+    """The real app with its database dependency pointed at the test database.
+
+    The rate limiter is disabled: the suite fires far more requests per minute from
+    one address than a human would, and 429s are not what these tests are about.
+    """
+    from app.main import create_app
+
+    application = create_app()
+    if getattr(application.state, "limiter", None) is not None:
+        application.state.limiter.enabled = False
 
     async def override_get_session() -> AsyncIterator[AsyncSession]:
         async with sessionmaker() as db_session:
@@ -306,13 +317,3 @@ async def client(app: Any) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as http_client:
         yield http_client
-
-
-@pytest.fixture
-def api_url(app: Any) -> Callable[[str], str]:
-    """Prefix a path with `/api`, tolerating a path that already carries it."""
-
-    def _url(path: str) -> str:
-        return path if path.startswith("/api") else f"/api{path}"
-
-    return _url

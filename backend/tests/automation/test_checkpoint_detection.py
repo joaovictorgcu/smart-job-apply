@@ -1,54 +1,23 @@
 """Security-checkpoint detection.
 
 Rule 3 of the project: a CAPTCHA or "unusual activity" page is never solved,
-worked around, or retried. It raises `SecurityCheckpointError` and everything
-stops. Detection has to fire on the checkpoint URL and on the page text in every
-language the app is used in.
+worked around, or retried. `BrowserSession.detect_checkpoint` is the sensor and
+`raise_if_blocked` is the stop. Detection has to fire on the checkpoint URL, on a
+challenge element, and on the page text in every language the app is used in — and
+it must not fire on an ordinary job posting.
 
-Expected surface, resolved leniently:
-
-    app/automation/linkedin/checkpoints.py:
-        async def detect_checkpoint(page) -> str | None   # reason, or None
-        # or: async def assert_no_checkpoint(page) -> None  # raises instead
+The real detector runs here against a `FakePage`: no browser is launched, only the
+handful of page methods the detector actually calls are provided.
 """
 
 from __future__ import annotations
 
 import pytest
 
+from app.automation import selectors as sel
+from app.automation.browser import BrowserSession
 from app.automation.errors import AutomationError, SecurityCheckpointError, UnexpectedPageError
-from tests import call_maybe_async, find_attr, missing
 from tests.fixtures.fake_linkedin import CHECKPOINT_MARKERS, CHECKPOINT_URL, FakePage
-
-CHECKPOINT_MODULES = (
-    "app.automation.linkedin.checkpoints",
-    "app.automation.linkedin.checkpoint",
-    "app.automation.linkedin.guards",
-    "app.automation.linkedin.session",
-    "app.automation.linkedin",
-    "app.automation.checkpoint",
-    "app.automation.checkpoints",
-)
-
-DETECTOR_NAMES = (
-    "detect_checkpoint",
-    "detect_security_checkpoint",
-    "find_checkpoint",
-    "checkpoint_reason",
-    "is_security_checkpoint",
-    "assert_no_checkpoint",
-    "raise_if_checkpoint",
-    "ensure_no_checkpoint",
-)
-
-detector = find_attr(DETECTOR_NAMES, *CHECKPOINT_MODULES)
-
-# URL fragments LinkedIn uses for its verification flows.
-CHECKPOINT_URLS = (
-    CHECKPOINT_URL,
-    "https://www.linkedin.com/checkpoint/lg/login-submit",
-    "https://www.linkedin.com/checkpoint/challengesV2/AgFabc123",
-)
 
 SAFE_URLS = (
     "https://www.linkedin.com/feed/",
@@ -57,18 +26,14 @@ SAFE_URLS = (
 )
 
 
-async def is_detected(page: FakePage) -> bool:
-    """True when the detector flags the page, whichever style it uses."""
-    try:
-        result = await call_maybe_async(detector, page)
-    except SecurityCheckpointError:
-        return True
-    return bool(result)
+def session_with(page: FakePage) -> BrowserSession:
+    """A `BrowserSession` whose page is the fake — nothing is launched."""
+    browser = BrowserSession(user_id=1, headless=True)
+    browser._page = page  # type: ignore[assignment]
+    return browser
 
 
 class TestErrorContract:
-    """Holds regardless of who implements the detector."""
-
     def test_carries_a_reason(self) -> None:
         error = SecurityCheckpointError("Security verification detected.")
         assert error.reason == "Security verification detected."
@@ -87,69 +52,126 @@ class TestErrorContract:
         assert UnexpectedPageError("changed markup").recoverable is True
 
 
-class TestFakePage:
-    async def test_exposes_the_url_and_content_the_detector_needs(self) -> None:
-        page = FakePage()
-        assert page.url.startswith("https://www.linkedin.com/")
-        assert "Python jobs" in await page.content()
+class TestUrlDetection:
+    @pytest.mark.parametrize("fragment", sel.Checkpoint.URL_FRAGMENTS)
+    async def test_every_declared_url_fragment_is_detected(self, fragment: str) -> None:
+        browser = session_with(FakePage(url=f"https://www.linkedin.com/x{fragment}y"))
 
-    async def test_the_checkpoint_variant_carries_url_and_marker(self) -> None:
-        page = FakePage.checkpoint()
-        assert "/checkpoint/" in page.url
-        assert CHECKPOINT_MARKERS[0] in await page.content()
+        assert await browser.detect_checkpoint() is not None
+
+    async def test_the_real_challenge_url_is_detected(self) -> None:
+        browser = session_with(FakePage(url=CHECKPOINT_URL))
+
+        reason = await browser.detect_checkpoint()
+
+        assert reason is not None
+        assert "checkpoint" in reason.lower()
+
+    async def test_detection_is_case_insensitive_on_the_url(self) -> None:
+        browser = session_with(
+            FakePage(url="https://www.linkedin.com/CHECKPOINT/Challenge/AgH9x")
+        )
+
+        assert await browser.detect_checkpoint() is not None
 
 
-@pytest.mark.xfail(detector is None, reason=missing("detect_checkpoint", *CHECKPOINT_MODULES))
-class TestDetection:
-    @pytest.mark.parametrize("url", CHECKPOINT_URLS)
-    async def test_detects_the_checkpoint_url(self, url: str) -> None:
-        page = FakePage(url=url, html="<html><body>Please wait</body></html>")
-        assert await is_detected(page) is True
+class TestTextDetection:
+    @pytest.mark.parametrize("marker", sel.Checkpoint.TEXT_MARKERS)
+    async def test_every_declared_text_marker_is_detected(self, marker: str) -> None:
+        browser = session_with(
+            FakePage(url="https://www.linkedin.com/feed/", body_text=f"Hello. {marker}. Bye.")
+        )
+
+        assert await browser.detect_checkpoint() is not None
 
     @pytest.mark.parametrize("marker", CHECKPOINT_MARKERS)
-    async def test_detects_the_text_marker_in_every_supported_language(self, marker: str) -> None:
-        page = FakePage(
-            url="https://www.linkedin.com/jobs/search/",
-            html=f"<html><body><h1>{marker}</h1></body></html>",
+    async def test_the_multilingual_markers_are_detected_as_written_on_screen(
+        self, marker: str
+    ) -> None:
+        """As LinkedIn renders them: title-cased, accented, and mixed case."""
+        browser = session_with(
+            FakePage(url="https://www.linkedin.com/feed/", body_text=marker)
         )
-        assert await is_detected(page) is True
 
-    async def test_detection_is_case_insensitive(self) -> None:
-        page = FakePage(
-            url="https://www.linkedin.com/jobs/search/",
-            html="<html><body><h1>SECURITY VERIFICATION</h1></body></html>",
+        assert await browser.detect_checkpoint() is not None
+
+    async def test_detection_is_case_insensitive_on_the_text(self) -> None:
+        browser = session_with(
+            FakePage(url="https://www.linkedin.com/feed/", body_text="SECURITY VERIFICATION")
         )
-        assert await is_detected(page) is True
 
-    async def test_detects_a_captcha_challenge_frame(self) -> None:
-        page = FakePage(
-            url="https://www.linkedin.com/jobs/search/",
-            html='<html><body><div id="captcha-internal">verify</div></body></html>',
+        assert await browser.detect_checkpoint() is not None
+
+    async def test_the_reason_quotes_the_marker_it_matched(self) -> None:
+        browser = session_with(
+            FakePage(url="https://www.linkedin.com/feed/", body_text="Unusual activity detected")
         )
-        assert await is_detected(page) is True
 
+        reason = await browser.detect_checkpoint()
+
+        assert reason is not None
+        assert "unusual activity" in reason.lower()
+
+
+class TestElementDetection:
+    @pytest.mark.parametrize("selector", sel.Checkpoint.ELEMENTS)
+    async def test_every_declared_challenge_element_is_detected(self, selector: str) -> None:
+        browser = session_with(
+            FakePage(url="https://www.linkedin.com/feed/", elements=(selector,))
+        )
+
+        reason = await browser.detect_checkpoint()
+
+        assert reason is not None
+        assert selector in reason
+
+
+class TestNoFalsePositives:
     @pytest.mark.parametrize("url", SAFE_URLS)
-    async def test_does_not_fire_on_a_normal_page(self, url: str) -> None:
-        page = FakePage(url=url, html="<html><body><h1>Python jobs</h1></body></html>")
-        assert await is_detected(page) is False
+    async def test_an_ordinary_page_is_not_a_checkpoint(self, url: str) -> None:
+        browser = session_with(FakePage(url=url, body_text="Python jobs in Remote"))
 
-    async def test_does_not_fire_on_a_job_that_merely_mentions_security(self) -> None:
-        """A security engineering posting is not a security checkpoint."""
-        page = FakePage(
-            url="https://www.linkedin.com/jobs/view/4012345678/",
-            html=(
-                "<html><body><h1>Security Engineer</h1>"
-                "<p>You will own our application security program.</p></body></html>"
-            ),
+        assert await browser.detect_checkpoint() is None
+
+    async def test_a_security_engineering_posting_is_not_a_checkpoint(self) -> None:
+        """A job about security is not a security challenge."""
+        browser = session_with(
+            FakePage(
+                url="https://www.linkedin.com/jobs/view/4012345678/",
+                body_text=(
+                    "Security Engineer. You will own our application security program "
+                    "and run verification of our controls."
+                ),
+            )
         )
-        assert await is_detected(page) is False
 
-    async def test_reports_a_reason_when_it_returns_one(self) -> None:
-        page = FakePage.checkpoint()
-        try:
-            result = await call_maybe_async(detector, page)
-        except SecurityCheckpointError as error:
-            assert error.reason
-            return
-        # A predicate style detector may answer True; a reason style answers text.
-        assert result is True or (isinstance(result, str) and result)
+        assert await browser.detect_checkpoint() is None
+
+    async def test_a_closed_page_reports_nothing_instead_of_crashing(self) -> None:
+        browser = session_with(FakePage(url=CHECKPOINT_URL, closed=True))
+
+        assert await browser.detect_checkpoint() is None
+
+
+class TestRaiseIfBlocked:
+    async def test_raises_and_records_the_reason(self) -> None:
+        browser = session_with(FakePage.checkpoint())
+
+        with pytest.raises(SecurityCheckpointError) as caught:
+            await browser.raise_if_blocked()
+
+        assert caught.value.reason
+        assert browser.blocked_reason == caught.value.reason
+
+    async def test_stays_silent_on_a_normal_page(self) -> None:
+        browser = session_with(FakePage())
+
+        await browser.raise_if_blocked()
+
+        assert browser.blocked_reason is None
+
+    async def test_never_offers_a_way_past_the_challenge(self) -> None:
+        """Guards the intent: the session exposes no solve/bypass/click-through path."""
+        forbidden = {"solve_captcha", "bypass_checkpoint", "answer_challenge", "skip_checkpoint"}
+
+        assert forbidden.isdisjoint(dir(BrowserSession))

@@ -1,47 +1,37 @@
-"""A deterministic stand-in for the Claude client.
+"""A deterministic stand-in for `app.ai.client.AIClient`.
 
-The AI boundary is `app/ai/schemas.py`: whatever the real client looks like, it has
-to hand back `JobScore`, `CoverLetter`, `ScreeningAnswer` and `JobAnalysis`. This
-fake produces exactly those, with knobs for the three cases that matter for
-safety: a refusal, a low-confidence answer, and a transport error.
+It matches the real client's public surface exactly — three methods, each
+returning `(result, AIUsage)` — so it can be dropped in wherever `get_ai_client`
+is called, and no test ever reaches the Anthropic API.
 
-Method names are duplicated under the plausible aliases (`score_job`/`score`,
-`generate_cover_letter`/`cover_letter`, ...) so a naming choice in the real client
-does not silently turn into a network call.
+Knobs cover the three outcomes that matter for safety:
+
+* `refused`: the model declines. Not an exception — HTTP 200 with
+  `stop_reason == "refusal"` — so the client returns an empty fallback with
+  `AIUsage.refused` set, and the caller must degrade to manual input.
+* `low_confidence`: answers come back `confidence="low"`, which the schema turns
+  into `needs_review=True`.
+* `api_error`: a real `anthropic.APIError`, which is what the service layer
+  catches.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from app.ai.schemas import (
-    AIUsage,
-    CoverLetter,
-    JobAnalysis,
-    JobScore,
-    ScreeningAnswer,
-    ScreeningAnswerSet,
-)
+import anthropic
+import httpx
+
+from app.ai.schemas import AIUsage, CoverLetter, JobScore, ScreeningAnswer
 from app.models.enums import AnswerConfidence
 
 DEFAULT_MODEL = "claude-opus-5"
-REFUSAL_REASON = "The model declined to answer this request."
-
-
-class FakeAIError(RuntimeError):
-    """Transport-level failure, standing in for `anthropic.APIError`."""
+REFUSAL_CATEGORY = "policy"
+_REQUEST = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
 
 
 class FakeAIClient:
-    """Deterministic AI client.
-
-    Knobs:
-        score:          the score every job gets.
-        refused:        the model refuses — nothing is generated, `refused` is set.
-        low_confidence: screening answers come back `confidence="low"`, which the
-                        schema turns into `needs_review=True`.
-        api_error:      every call raises, to exercise error handling.
-    """
+    """Deterministic `AIClient`."""
 
     def __init__(
         self,
@@ -81,89 +71,99 @@ class FakeAIClient:
         self.calls: list[str] = []
         self.last_usage: AIUsage | None = None
 
-    # -- introspection the app layer may use ------------------------------- #
+    # --- introspection ----------------------------------------------------
 
     @property
     def is_configured(self) -> bool:
         return True
 
-    @property
-    def configured(self) -> bool:
-        return True
-
-    def status(self) -> dict[str, Any]:
-        return {"configured": True, "model": self.model}
-
-    # -- helpers ----------------------------------------------------------- #
-
-    def _record(self, name: str) -> None:
-        self.calls.append(name)
-        if self.api_error:
-            raise FakeAIError("Simulated Anthropic API failure.")
-        self.last_usage = AIUsage(
-            model=self.model,
-            input_tokens=self.input_tokens,
-            output_tokens=self.output_tokens,
-            latency_ms=self.latency_ms,
-            refused=self.refused,
-            refusal_category="policy" if self.refused else None,
-        )
-
     def call_count(self, name: str) -> int:
         return self.calls.count(name)
+
+    def usage(self) -> AIUsage:
+        return self.last_usage or AIUsage(model=self.model)
 
     @property
     def confidence(self) -> AnswerConfidence:
         return AnswerConfidence.LOW if self.low_confidence else AnswerConfidence.HIGH
 
-    def usage(self) -> AIUsage:
-        return self.last_usage or AIUsage(model=self.model)
+    def _record(self, name: str) -> AIUsage:
+        self.calls.append(name)
+        if self.api_error:
+            raise anthropic.APIError("Simulated Anthropic failure.", _REQUEST, body=None)
+        usage = AIUsage(
+            model=self.model,
+            input_tokens=self.input_tokens,
+            output_tokens=self.output_tokens,
+            latency_ms=self.latency_ms,
+            refused=self.refused,
+            refusal_category=REFUSAL_CATEGORY if self.refused else None,
+        )
+        self.last_usage = usage
+        return usage
 
-    # -- scoring ----------------------------------------------------------- #
+    # --- AIClient surface -------------------------------------------------
 
-    async def score_job(self, *_args: Any, **_kwargs: Any) -> JobScore:
-        self._record("score_job")
+    async def score_job(
+        self, profile: Any = None, job: Any = None, **_kwargs: Any
+    ) -> tuple[JobScore, AIUsage]:
+        usage = self._record("score_job")
+        if self.refused:
+            return (
+                JobScore(
+                    score=0,
+                    recommend_apply=False,
+                    summary="The model declined to score this posting.",
+                ),
+                usage,
+            )
         recommend = self.recommend_apply
         if recommend is None:
             recommend = self.score >= 70
-        return JobScore(
-            score=self.score,
-            reasons=list(self.reasons),
-            missing_requirements=list(self.missing_requirements),
-            recommend_apply=recommend,
-            summary=f"Deterministic test score of {self.score}.",
+        return (
+            JobScore(
+                score=self.score,
+                reasons=list(self.reasons),
+                missing_requirements=list(self.missing_requirements),
+                recommend_apply=recommend,
+                summary=f"Deterministic test score of {self.score}.",
+            ),
+            usage,
         )
 
-    score = score_job
-    evaluate_job = score_job
+    async def write_cover_letter(
+        self,
+        profile: Any = None,
+        job: Any = None,
+        *,
+        tone: str = "professional",
+        language: str = "job",
+        **_kwargs: Any,
+    ) -> tuple[CoverLetter, AIUsage]:
+        usage = self._record("write_cover_letter")
+        if self.refused:
+            return CoverLetter(content="", language=self.language), usage
+        resolved = self.language if language in ("job", "", None) else language
+        return CoverLetter(content=self.cover_letter_text, language=resolved), usage
 
-    async def score_jobs(self, jobs: Any, *_args: Any, **_kwargs: Any) -> list[JobScore]:
-        return [await self.score_job(job) for job in jobs]
+    async def answer_questions(
+        self,
+        profile: Any = None,
+        job: Any = None,
+        questions: Any = (),
+        **_kwargs: Any,
+    ) -> tuple[list[ScreeningAnswer], AIUsage]:
+        usage = self._record("answer_questions")
+        if self.refused:
+            return [], usage
+        return self.build_answers(questions), usage
 
-    # -- cover letter ------------------------------------------------------ #
-
-    async def generate_cover_letter(self, *_args: Any, **_kwargs: Any) -> CoverLetter:
-        self._record("generate_cover_letter")
-        return CoverLetter(content=self.cover_letter_text, language=self.language)
-
-    cover_letter = generate_cover_letter
-    write_cover_letter = generate_cover_letter
-
-    # -- screening answers ------------------------------------------------- #
-
-    async def answer_screening_questions(
-        self, questions: Any = (), *_args: Any, **_kwargs: Any
-    ) -> ScreeningAnswerSet:
-        self._record("answer_screening_questions")
-        return ScreeningAnswerSet(answers=self.build_answers(questions))
-
-    answer_questions = answer_screening_questions
-    screening_answers = answer_screening_questions
+    # --- helpers ----------------------------------------------------------
 
     def build_answers(self, questions: Any = ()) -> list[ScreeningAnswer]:
         answers: list[ScreeningAnswer] = []
         for question in questions or ():
-            label, kind, field_id = _describe(question)
+            label, kind, field_id = describe_question(question)
             answers.append(
                 ScreeningAnswer(
                     question=label,
@@ -176,46 +176,20 @@ class FakeAIClient:
             )
         return answers
 
-    # -- consolidated analysis --------------------------------------------- #
 
-    async def analyze_job(
-        self, *_args: Any, questions: Any = (), **_kwargs: Any
-    ) -> JobAnalysis:
-        self._record("analyze_job")
-        if self.refused:
-            return JobAnalysis(refused=True, refusal_reason=REFUSAL_REASON)
-        recommend = self.recommend_apply
-        if recommend is None:
-            recommend = self.score >= 70
-        return JobAnalysis(
-            score=self.score,
-            reasons=list(self.reasons),
-            missing_requirements=list(self.missing_requirements),
-            recommend_apply=recommend,
-            summary=f"Deterministic test score of {self.score}.",
-            cover_letter=self.cover_letter_text,
-            cover_letter_language=self.language,
-            screening_answers=self.build_answers(questions),
-        )
-
-    analyze = analyze_job
-
-    async def close(self) -> None:
-        self.calls.append("close")
-
-
-def _describe(question: Any) -> tuple[str, str, str | None]:
+def describe_question(question: Any) -> tuple[str, str, str | None]:
     """Read a label, a kind and a field id out of whatever shape is passed in."""
+    valid_kinds = {"text", "textarea", "number", "select", "radio", "checkbox", "unknown"}
     if isinstance(question, str):
         return question, "text", None
-    label = getattr(question, "label", None) or getattr(question, "question", None)
-    kind = getattr(question, "kind", None) or getattr(question, "question_type", None)
-    field_id = getattr(question, "field_id", None)
-    if label is None and isinstance(question, dict):
+    if isinstance(question, dict):
         label = question.get("label") or question.get("question")
         kind = question.get("kind") or question.get("question_type")
         field_id = question.get("field_id")
-    valid_kinds = {"text", "textarea", "number", "select", "radio", "checkbox", "unknown"}
+    else:
+        label = getattr(question, "label", None) or getattr(question, "question", None)
+        kind = getattr(question, "kind", None) or getattr(question, "question_type", None)
+        field_id = getattr(question, "field_id", None)
     return (
         str(label or "Unlabelled question"),
         kind if kind in valid_kinds else "unknown",

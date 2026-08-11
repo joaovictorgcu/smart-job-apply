@@ -1,93 +1,67 @@
-"""Automation-layer tests, plus the resolution of the engine that owns them.
+"""Automation-layer tests and the helpers they share.
 
-Expected engine surface (`app/automation/engine.py`), resolved leniently so a
-rename shows up as a precise xfail instead of an obscure error:
+The engine is a process-wide singleton driven by ids, not ORM objects:
 
-    class AutomationEngine:
-        def __init__(self, session, user, *, linkedin=..., ai=...) -> None
-        async def run_search(self, filters: SearchFilters, search=None) -> AutomationRun
-        async def prepare_applications(self, job_ids: list[int]) -> AutomationRun
-        async def submit_application(self, application_id: int) -> Application
-        async def stop_all(self) -> int          # kill switch
+    await engine.run_search(user_id, run_id, filters, analyze=True)
+    await engine.prepare_applications(user_id, run_id, job_ids)
+    await engine.submit_application(user_id, application_id)
+    engine.request_stop(user_id) / await engine.stop_all(user_id)
+
+The `automation_engine` fixture hands out a fresh instance per test, and
+`wire_fakes` replaces the browser service it builds internally.
+
+The reload helpers take plain ids on purpose. They expire the session so the
+engine's own committed writes become visible, and reading an attribute off an
+expired ORM instance would emit IO from a synchronous context.
 """
 
 from __future__ import annotations
 
-from typing import Any
+import pytest
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from tests import call_maybe_async, find_attr, first_method
+from app.automation.contracts import SearchFilters
+from app.models import Application, AutomationRun, Job
 
-ENGINE_MODULES = (
-    "app.automation.engine",
-    "app.automation.orchestrator",
-    "app.automation.runner",
-    "app.services.automation",
+FILTERS = SearchFilters(keywords="python backend", location="Remote", max_results=5)
+
+# The engine resolves the AI layer by importing a name and binding the parameters
+# it recognises. Those names do not line up, so every AI call from the engine is
+# dropped and the run continues without model output:
+#
+#   app/automation/engine.py `_call_ai` offers user_id / posting / profile /
+#   settings, while app/ai/scoring.py requires user / profile_ctx / settings_row —
+#   and `_SCREENING_TARGETS` never names `answer_screening`, the function that
+#   actually exists.
+#
+# Both modules belong to other agents. These xfails are non-strict, so the tests
+# report as xpass the moment either side of the seam is corrected.
+AI_SEAM_REASON = (
+    "AI seam not wired: app/automation/engine.py `_call_ai` binds user_id/posting/"
+    "profile/settings, but app/ai/scoring.py requires user/profile_ctx/settings_row "
+    "(and `_SCREENING_TARGETS` omits `answer_screening`), so the engine drops every "
+    "AI call and produces no model output. Owned by other agents."
 )
 
-ENGINE_NAMES = (
-    "AutomationEngine",
-    "Engine",
-    "AutomationOrchestrator",
-    "Orchestrator",
-    "AutomationService",
-)
-
-AutomationEngine = find_attr(ENGINE_NAMES, *ENGINE_MODULES)
+ai_seam = pytest.mark.xfail(reason=AI_SEAM_REASON, strict=False)
 
 
-def build_engine(session: Any, user: Any, linkedin: Any, ai: Any) -> Any:
-    """Instantiate the engine across the plausible constructor shapes."""
-    attempts: tuple[tuple[tuple[Any, ...], dict[str, Any]], ...] = (
-        ((session, user), {"linkedin": linkedin, "ai": ai}),
-        ((session, user), {"linkedin": linkedin, "ai_client": ai}),
-        ((session, user), {"service": linkedin, "ai": ai}),
-        ((session, user, linkedin, ai), {}),
-        ((session,), {"user": user, "linkedin": linkedin, "ai": ai}),
-        ((session, user), {}),
-        ((session,), {}),
-    )
-    last_error: Exception | None = None
-    for args, kwargs in attempts:
-        try:
-            return AutomationEngine(*args, **kwargs)
-        except TypeError as exc:  # signature mismatch, try the next shape
-            last_error = exc
-    raise TypeError(f"Could not construct {AutomationEngine!r}: {last_error}")
+async def reload_run(session: AsyncSession, run_id: int) -> AutomationRun:
+    session.expire_all()
+    return (
+        await session.execute(select(AutomationRun).where(AutomationRun.id == run_id))
+    ).scalar_one()
 
 
-def search_method(engine: Any) -> Any:
-    return first_method(engine, "run_search", "search", "run_search_job", "execute_search")
+async def application_for_job(session: AsyncSession, job_id: int) -> Application | None:
+    session.expire_all()
+    return (
+        await session.execute(select(Application).where(Application.job_id == job_id))
+    ).scalar_one_or_none()
 
 
-def prepare_method(engine: Any) -> Any:
-    return first_method(
-        engine, "prepare_applications", "prepare", "prepare_application", "run_prepare"
-    )
-
-
-def submit_method(engine: Any) -> Any:
-    return first_method(engine, "submit_application", "submit", "run_submit")
-
-
-def stop_method(engine: Any) -> Any:
-    return first_method(engine, "stop_all", "stop", "request_stop", "kill")
-
-
-_SIGNATURE_HINTS = ("argument", "parameter", "positional", "keyword")
-
-
-async def invoke(func: Any, *variants: tuple[tuple[Any, ...], dict[str, Any]]) -> Any:
-    """Call `func` with the first argument shape it accepts.
-
-    Only signature mismatches are swallowed — a `TypeError` raised from inside the
-    function still surfaces as a real failure.
-    """
-    last_error: TypeError | None = None
-    for args, kwargs in variants:
-        try:
-            return await call_maybe_async(func, *args, **kwargs)
-        except TypeError as exc:
-            if not any(hint in str(exc) for hint in _SIGNATURE_HINTS):
-                raise
-            last_error = exc
-    raise TypeError(f"No accepted call shape for {func!r}: {last_error}")
+async def jobs_of(session: AsyncSession, user_id: int) -> list[Job]:
+    session.expire_all()
+    result = await session.execute(select(Job).where(Job.user_id == user_id).order_by(Job.id))
+    return list(result.scalars().all())

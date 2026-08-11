@@ -1,14 +1,23 @@
-"""A pure-Python `LinkedInService` — no browser, no network.
+"""A pure-Python stand-in for `LinkedInBrowserService` — no browser, no network.
 
-Scriptable to return a chosen set of postings, to raise `SecurityCheckpointError`
-at a chosen call, and to leave questions unanswered. Most importantly it records
-whether `submit()` was ever reached, which is the assertion that guards assisted
-mode.
+It satisfies the `LinkedInService` protocol plus the extra surface the engine uses
+(`configure`, `browser.is_open`, `has_open_draft`, storage-state import/export), so
+it can replace the real service wholesale.
+
+It is scriptable to return a chosen set of postings, to raise
+`SecurityCheckpointError` at a chosen call, and to leave questions unanswered.
+Most importantly it records whether `submit()` was ever reached — the assertion
+that guards assisted mode.
+
+`FakePage` is separate and much smaller: just the slice of the Playwright page API
+that `BrowserSession.detect_checkpoint` touches, so checkpoint detection can be
+tested against the real detector.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from app.automation.contracts import (
@@ -28,13 +37,15 @@ from app.automation.errors import (
 
 CHECKPOINT_URL = "https://www.linkedin.com/checkpoint/challenge/AgH9x"
 
-# Text the real detector has to recognize, in the languages the app supports.
+# Every language the detector has to recognize, taken from the marker list it
+# actually uses. A test that drifts from `selectors.Checkpoint` should fail.
 CHECKPOINT_MARKERS = (
     "Security verification",
-    "Verificação de segurança",
     "Unusual activity",
+    "Suspicious activity",
+    "Verificação de segurança",
     "Atividade incomum",
-    "Let's do a quick security check",
+    "Atividade suspeita",
 )
 
 # Browser-driving calls. Dry-run and kill-switch tests assert these never happen.
@@ -44,15 +55,40 @@ BROWSER_CALLS = frozenset(
 
 
 @dataclass
+class FakeLocator:
+    """Playwright locator, reduced to what checkpoint detection calls."""
+
+    matches: int = 0
+    text: str = ""
+
+    async def count(self) -> int:
+        return self.matches
+
+    # `timeout` mirrors Playwright's own signature; the detector passes it.
+    async def inner_text(self, timeout: float | None = None) -> str:  # noqa: ASYNC109
+        return self.text
+
+
+@dataclass
 class FakePage:
-    """The two things a checkpoint detector needs from a Playwright page."""
+    """The slice of a Playwright page that `detect_checkpoint` reads."""
 
     url: str = "https://www.linkedin.com/jobs/search/?keywords=python"
-    html: str = "<html><body><h1>Python jobs</h1></body></html>"
+    body_text: str = "Python jobs"
+    elements: tuple[str, ...] = ()
+    closed: bool = False
     title_text: str = "Jobs | LinkedIn"
 
+    def is_closed(self) -> bool:
+        return self.closed
+
+    def locator(self, selector: str) -> FakeLocator:
+        if selector == "body":
+            return FakeLocator(matches=1, text=self.body_text)
+        return FakeLocator(matches=1 if selector in self.elements else 0)
+
     async def content(self) -> str:
-        return self.html
+        return f"<html><body>{self.body_text}</body></html>"
 
     async def title(self) -> str:
         return self.title_text
@@ -63,7 +99,7 @@ class FakePage:
     ) -> FakePage:
         return cls(
             url=url,
-            html=f"<html><body><h1>{marker}</h1><p>Please confirm it is you.</p></body></html>",
+            body_text=f"{marker}\nPlease confirm it is you.",
             title_text="Security Verification | LinkedIn",
         )
 
@@ -84,9 +120,25 @@ def make_postings(count: int, *, prefix: str = "job", easy_apply: bool = True) -
     ]
 
 
+class FakeBrowser:
+    """Stands in for `service.browser`, which the engine inspects directly."""
+
+    def __init__(self, service: FakeLinkedInService) -> None:
+        self._service = service
+        self.profile_dir = Path("/tmp/fake-browser-profile")
+
+    @property
+    def is_open(self) -> bool:
+        return self._service.browser_open
+
+    @property
+    def blocked_reason(self) -> str | None:
+        return self._service.blocked_reason
+
+
 @dataclass
 class FakeLinkedInService:
-    """In-memory `LinkedInService`.
+    """In-memory `LinkedInBrowserService`.
 
     Knobs:
         postings / job_count: what `search_jobs` returns.
@@ -94,11 +146,12 @@ class FakeLinkedInService:
         checkpoint_after:     how many successful calls to that method first.
         error_on / error:     raise an arbitrary error at a chosen method.
         unanswered:           questions `fill_and_advance` reports as unanswered,
-                              which must keep `ready_to_submit` False.
+                              which keeps `ready_to_submit` False.
         logged_in:            when False, browser-driving calls raise
                               `NotLoggedInError`.
     """
 
+    user_id: int = 1
     postings: list[JobPosting] | None = None
     job_count: int = 3
     questions: list[FormQuestion] | None = None
@@ -110,7 +163,7 @@ class FakeLinkedInService:
     error_on: str | None = None
     error: Exception | None = None
     logged_in: bool = True
-    browser_open: bool = False
+    browser_open: bool = True
     submit_result: bool = True
     already_applied_ids: set[str] = field(default_factory=set)
     no_easy_apply_ids: set[str] = field(default_factory=set)
@@ -121,22 +174,27 @@ class FakeLinkedInService:
     filled: list[list[FormAnswer]] = field(default_factory=list)
     cover_letters: list[str | None] = field(default_factory=list)
     screenshots: list[str] = field(default_factory=list)
+    storage_state: dict[str, Any] = field(default_factory=dict)
     submit_called: bool = False
     blocked: bool = False
     blocked_reason: str | None = None
     current_external_id: str | None = None
+    throttle: Any = None
+    resume_path: str | None = None
 
-    # -- bookkeeping -------------------------------------------------------- #
+    def __post_init__(self) -> None:
+        self.browser = FakeBrowser(self)
+
+    # --- bookkeeping ------------------------------------------------------
 
     def _record(self, name: str, *, needs_login: bool = False) -> None:
         self.calls.append(name)
         if self.error_on == name and self.error is not None:
             raise self.error
-        if self.checkpoint_on == name:
-            if self.calls.count(name) > self.checkpoint_after:
-                self.blocked = True
-                self.blocked_reason = self.checkpoint_reason
-                raise SecurityCheckpointError(self.checkpoint_reason)
+        if self.checkpoint_on == name and self.calls.count(name) > self.checkpoint_after:
+            self.blocked = True
+            self.blocked_reason = self.checkpoint_reason
+            raise SecurityCheckpointError(self.checkpoint_reason)
         if needs_login and not self.logged_in:
             raise NotLoggedInError("The stored LinkedIn session is no longer valid.")
 
@@ -173,7 +231,30 @@ class FakeLinkedInService:
             ),
         ]
 
-    # -- LinkedInService ---------------------------------------------------- #
+    # --- engine-facing extras ---------------------------------------------
+
+    def configure(self, *, throttle: Any = None, resume_path: str | None = None) -> None:
+        self.throttle = throttle
+        self.resume_path = resume_path
+
+    def has_open_draft(self, external_id: str | None = None) -> bool:
+        if self.current_external_id is None:
+            return False
+        return external_id is None or external_id == self.current_external_id
+
+    async def export_storage_state(self) -> dict[str, Any]:
+        self.calls.append("export_storage_state")
+        return {"cookies": [{"name": "li_at", "value": "fake-session"}], "origins": []}
+
+    async def import_storage_state(self, state: dict[str, Any]) -> None:
+        self.calls.append("import_storage_state")
+        self.storage_state = dict(state)
+        self.logged_in = True
+
+    def page(self, *, blocked: bool = False) -> FakePage:
+        return FakePage.checkpoint() if blocked else FakePage()
+
+    # --- LinkedInService ---------------------------------------------------
 
     async def start(self) -> SessionState:
         self._record("start")
@@ -183,6 +264,7 @@ class FakeLinkedInService:
     async def stop(self) -> None:
         self._record("stop")
         self.browser_open = False
+        self.current_external_id = None
 
     async def get_state(self) -> SessionState:
         self.calls.append("get_state")
@@ -257,6 +339,7 @@ class FakeLinkedInService:
         self._record("submit", needs_login=True)
         self.submit_called = True
         self.submitted.append(self.current_external_id or "unknown")
+        self.current_external_id = None
         return self.submit_result
 
     async def discard(self) -> None:
@@ -268,21 +351,3 @@ class FakeLinkedInService:
         path = f"/tmp/fake-screenshots/{name}.png"
         self.screenshots.append(path)
         return path
-
-    # -- convenience for the tests ----------------------------------------- #
-
-    def page(self, *, blocked: bool = False) -> FakePage:
-        return FakePage.checkpoint() if blocked else FakePage()
-
-    def reset(self) -> None:
-        self.calls.clear()
-        self.opened.clear()
-        self.submitted.clear()
-        self.filled.clear()
-        self.cover_letters.clear()
-        self.screenshots.clear()
-        self.submit_called = False
-
-
-def fake_service(**kwargs: Any) -> FakeLinkedInService:
-    return FakeLinkedInService(**kwargs)

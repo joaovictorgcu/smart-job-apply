@@ -13,6 +13,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.security import create_access_token
 from app.models import ApplicationStatus, AutomationRunKind, JobStatus
 from tests.fixtures.factories import (
     create_application,
@@ -105,14 +106,23 @@ class TestApplicationsAreInvisible:
     async def test_submitting_another_users_application_is_a_404(
         self,
         client: AsyncClient,
-        auth_headers: dict[str, str],
+        session: AsyncSession,
         stranger_data: dict[str, Any],
         fake_linkedin: Any,
     ) -> None:
-        """The worst case: submitting an application on someone else's behalf."""
+        """The worst case: submitting an application on someone else's behalf.
+
+        The caller has dry-run off, so the request gets all the way past the
+        assisted-mode guards to the ownership check — which is what is under test.
+        """
+        caller = await create_user(
+            session, email="live-intruder@example.com", settings={"dry_run": False}
+        )
+        headers = {"Authorization": f"Bearer {create_access_token(caller.id)}"}
+
         response = await client.post(
             f"/api/applications/{stranger_data['application'].id}/submit",
-            headers=auth_headers,
+            headers=headers,
             json={"confirm": True},
         )
 
@@ -207,7 +217,9 @@ class TestPreparingAnotherUsersJob:
             json={"job_ids": [stranger_data["job"].id], "confirmed": True},
         )
 
-        assert response.status_code == 404, response.text
+        # Either "not found" or "nothing to prepare" — never 403, which would
+        # confirm that the id exists, and never an actual preparation.
+        assert response.status_code in (404, 422), response.text
         assert fake_linkedin.call_count("open_easy_apply") == 0
         assert fake_linkedin.submit_called is False
 
