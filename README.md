@@ -124,6 +124,13 @@ text but not in your profile, so a fabrication cannot slip past unseen.
 
 ![CV tailoring panel — the change list, requirements the resume does not cover, and a warning flagging "Kubernetes" as present in the tailored CV but not in the profile](docs/images/cv-tailoring.png)
 
+**Pipeline board — does a higher score actually lead to an interview?** Applications you have submitted move
+across outcome columns (Applied → Interview → Offer → Rejected → No response), and the board measures the
+interview rate for each match-score band, so the AI's score is checked against real results rather than
+taken on faith.
+
+![Pipeline board — Kanban columns of submitted applications by outcome, and a chart of interview rate by match-score band showing higher bands interviewing more often](docs/images/pipeline.png)
+
 | | |
 |---|---|
 | ![Dashboard — submitted-today and awaiting-review counters, average score, live activity feed](docs/images/dashboard.png) | ![Job list — scores, reasons, missing requirements](docs/images/jobs.png) |
