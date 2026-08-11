@@ -146,9 +146,11 @@ def _mount_frontend(app: FastAPI) -> None:
                 },
             )
         # A real file (favicon, manifest, robots.txt) wins; anything else is a
-        # client-side route and must receive index.html.
+        # client-side route and must receive index.html. Containment is checked
+        # before the file test so no crafted path can read outside the build.
         candidate = (FRONTEND_DIST / full_path).resolve()
-        if full_path and candidate.is_file() and candidate.is_relative_to(FRONTEND_DIST.resolve()):
+        inside = candidate.is_relative_to(FRONTEND_DIST.resolve())
+        if full_path and inside and candidate.is_file():
             return FileResponse(candidate)
         return FileResponse(index)
 
