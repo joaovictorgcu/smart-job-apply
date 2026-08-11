@@ -31,8 +31,9 @@ Dependencies point one way only: outer layers know about inner layers, never the
 | Layer | Package | Knows about | Must never know about |
 |---|---|---|---|
 | HTTP / WS | `app.api`, `app.websocket` | schemas, services, models | Playwright, the Anthropic SDK |
-| Orchestration | `app.automation.engine` | contracts, AI contracts, models | Playwright objects, HTTP objects |
-| Browser adapter | `app.automation.linkedin` | Playwright, `app.automation.contracts` | the ORM, FastAPI, the AI layer |
+| Services | `app.services` | models, contracts, AI contracts | Playwright objects, FastAPI objects |
+| Orchestration | `app.automation.engine`, `app.automation.throttle` | contracts, AI contracts, models | Playwright objects, HTTP objects |
+| Browser adapter | `app.automation.browser`, `app.automation.linkedin`, `app.automation.selectors` | Playwright, `app.automation.contracts` | the ORM, FastAPI, the AI layer |
 | AI adapter | `app.ai` | the Anthropic SDK, `app.ai.schemas` | Playwright, the ORM |
 | Persistence | `app.models`, `app.database` | SQLAlchemy | everything above it |
 | Cross-cutting | `app.config`, `app.auth`, `app.observability` | — | — |
@@ -47,9 +48,11 @@ The engine never imports Playwright and never sees a `Page`, `Locator`, or `Elem
 speaks in the plain dataclasses defined in
 [`automation/contracts.py`](../backend/app/automation/contracts.py): `SearchFilters`,
 `JobPosting`, `FormQuestion`, `FormAnswer`, `ApplicationDraft`, `SessionState`, `ProfileContext`.
-Every CSS selector and every piece of LinkedIn-specific DOM knowledge lives in
-`app/automation/linkedin/selectors.py`. When LinkedIn ships a redesign, that file — and only that
-file — should need editing.
+Playwright itself is confined to `automation/browser.py` (launch and lifecycle) and
+`automation/linkedin/` (`service.py`, `search.py`, `job.py`, `apply.py`), and every CSS selector and
+piece of LinkedIn-specific DOM knowledge lives in
+[`automation/selectors.py`](../backend/app/automation/selectors.py). When LinkedIn ships a redesign,
+that one file should be the whole diff.
 
 The AI layer follows the same pattern. `JobScore`, `ScreeningAnswer`, `CoverLetter`, and
 `JobAnalysis` in [`ai/schemas.py`](../backend/app/ai/schemas.py) are the contract; swapping the

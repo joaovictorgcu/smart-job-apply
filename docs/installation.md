@@ -39,24 +39,36 @@ git clone https://github.com/joaovictorgcu/smart-job-apply.git
 cd smart-job-apply
 ```
 
-Create `.env` in the repository root:
+Copy the example environment file and set your API key:
+
+```bash
+cp .env.example .env
+```
 
 ```dotenv
 ANTHROPIC_API_KEY=sk-ant-...
-SECRET_KEY=<generated below>
-ENCRYPTION_KEY=<generated below, different value>
+SECRET_KEY=
+ENCRYPTION_KEY=
 ```
 
-Generate the two keys — run this twice and use a different value for each:
+**In Docker you can leave both secrets empty.** The container's entrypoint generates them on first boot and
+stores them on the data volume, so logins and the saved LinkedIn session survive restarts. Set them
+explicitly if you would rather manage them yourself — for instance to keep a backup restorable on a
+different host, since a restored volume needs the same `ENCRYPTION_KEY` to decrypt its stored session.
+
+To generate values yourself, run either of these twice and keep them distinct:
 
 ```bash
 python -c "import secrets; print(secrets.token_urlsafe(48))"
+openssl rand -base64 48
 ```
 
-No Python on the host? `openssl rand -base64 48` works, as does
+No Python or OpenSSL on the host?
 `docker run --rm python:3.12-alpine python -c "import secrets; print(secrets.token_urlsafe(48))"`.
 
-Every other variable in [configuration.md](configuration.md) can go in the same file.
+Every other variable in [configuration.md](configuration.md) can go in the same file. Two are set for you in
+`docker-compose.yml` and should not be overridden: `DATA_DIR` (the container path backed by the volume) and
+`CORS_ORIGINS` (the app's own origin, because the backend serves the frontend).
 
 ### 2. Build and start
 
@@ -75,16 +87,27 @@ docker compose logs -f     # follow startup, Ctrl-C to detach
 
 | URL | What it is |
 |---|---|
-| <http://localhost:8000> | The app. API docs at <http://localhost:8000/docs>, health at <http://localhost:8000/api/health> |
+| <http://localhost:8000> | The whole app — UI and API. Docs at <http://localhost:8000/docs>, health at <http://localhost:8000/api/health> |
 | <http://localhost:6080> | **noVNC — the browser's screen.** This is where you log into LinkedIn. |
 
 The noVNC window is not optional. Chromium runs inside the container on a virtual display, and the only way
 to see it — to log in, to solve a security challenge, to watch a form being filled — is through that URL.
-Open it before you start a browser session.
+Open it before you start a browser session. Raw VNC on 5900 is deliberately not published; x11vnc is bound
+to localhost inside the container and reachable only through the noVNC bridge.
+
+There is no port 5173 in Docker. The container serves the built frontend from the same origin as the API,
+which is why `CORS_ORIGINS` points at `http://localhost:8000`.
 
 ### 4. Create your account
 
-Register through the UI, or from the command line:
+Register through the UI at <http://localhost:8000>, or from the command line:
+
+```bash
+docker compose exec app python scripts/create_user.py --email you@example.com --name "Your Name"
+```
+
+Omit `--password` and you are prompted for it, so it stays out of your shell history and the process list.
+The API route works too:
 
 ```bash
 curl -X POST http://localhost:8000/api/auth/register \
@@ -92,29 +115,36 @@ curl -X POST http://localhost:8000/api/auth/register \
   -d '{"email":"you@example.com","password":"a-long-password","full_name":"Your Name"}'
 ```
 
-The password must be at least 10 characters and at most 72 bytes (a bcrypt limit).
+The password must be at least 10 characters and at most 72 bytes (a bcrypt limit). New accounts start in
+dry-run mode with manual approval required.
 
 ### Everyday Docker commands
 
+The single service is named `app`. Each command has a `make` shortcut.
+
 ```bash
-docker compose logs -f              # follow all logs
-docker compose restart              # restart after an .env change
-docker compose down                 # stop, keep data
-docker compose down -v              # stop and delete volumes — destroys your database
-docker compose exec backend bash    # a shell inside the backend container
+docker compose logs -f            # follow logs                (make docker-logs)
+docker compose restart            # restart after an .env change
+docker compose down               # stop, keep data            (make docker-down)
+docker compose down -v            # stop AND DELETE the volume — destroys your database and session
+docker compose exec app bash      # a shell inside the container
+docker compose ps                 # status, including the healthcheck
 ```
 
 Environment changes require a restart, because `get_settings()` is cached per process.
 
+The healthcheck polls `/api/health` with a 60-second start period, since the first boot runs migrations and
+launches Chromium. A container sitting in `starting` for a minute is normal.
+
 ### Chromium crashing in Docker
 
-If the browser dies on startup or partway through a run, it is almost always shared memory. Chromium's
-default `/dev/shm` inside a container is 64 MB, which is not enough. The compose file sets a larger
-`shm_size`; if you hit it anyway, raise it:
+If the browser dies on startup or partway through a run, it is almost always shared memory. Chromium
+allocates its renderer heap in `/dev/shm`, and Docker's 64 MB default makes tabs crash with no useful error.
+`docker-compose.yml` already sets `shm_size: 1gb`; if you still hit it, raise it:
 
 ```yaml
 services:
-  backend:
+  app:
     shm_size: "2gb"
 ```
 
@@ -136,7 +166,16 @@ cd smart-job-apply
 The scripts create a virtual environment, install the Python and Node dependencies, download Chromium, and
 write a starter `.env`.
 
-**Linux / macOS**
+**Linux / macOS** — with `make`, the four commands that take you from clone to running are:
+
+```bash
+make install       # this section
+make migrate       # step 3, the schema
+make user          # step 5, your account
+make dev           # step 4, both processes
+```
+
+`make help` lists every target. Without `make`:
 
 ```bash
 bash scripts/setup.sh
@@ -208,8 +247,15 @@ cd ..
 `npm ci` installs exactly what `package-lock.json` specifies. Use `npm install` only when you are
 intentionally changing dependencies.
 
-**Write `.env`** in the repository root — same contents as the Docker path above. See
-[configuration.md](configuration.md) for every field.
+**Write `.env`** in the repository root:
+
+```bash
+cp .env.example .env
+```
+
+Unlike the Docker path, **set `SECRET_KEY` and `ENCRYPTION_KEY` explicitly here** — there is no entrypoint
+to generate and persist them for you. An empty `SECRET_KEY` means a new random one per process, which logs
+you out on every restart. See [configuration.md](configuration.md) for every field.
 
 **Create the database schema**
 
@@ -219,18 +265,21 @@ alembic upgrade head
 cd ..
 ```
 
+`alembic.ini` lives in `backend/`, which is why this runs from there. `make migrate` does the same thing
+from the repository root.
+
 This is the canonical path and the one to use for anything you care about. The application also creates
 missing tables on startup via `init_models()` as a convenience, but migrations are what let the schema
 evolve without losing data.
 
 ### 4. Run both processes
 
-Two terminals, or `make dev` if `make` is available on your machine.
+`make dev` runs both and stops both on Ctrl-C. Otherwise, two terminals:
 
 **Terminal 1 — backend**
 
 ```bash
-uvicorn app.main:app --reload --port 8000
+.venv/bin/python -m uvicorn app.main:app --reload --app-dir backend --port 8000
 ```
 
 **Terminal 2 — frontend**
@@ -240,12 +289,14 @@ cd frontend
 npm run dev
 ```
 
-PowerShell equivalents, with the venv activated in each window:
+`--app-dir backend` puts the `app` package on the import path, so this works whether or not the editable
+install took. Override the ports with `BACKEND_PORT` and `FRONTEND_PORT` when using `make dev`.
+
+PowerShell equivalents — the Makefile header lists one for every target:
 
 ```powershell
 # Terminal 1
-.\.venv\Scripts\Activate.ps1
-uvicorn app.main:app --reload --port 8000
+.venv\Scripts\python -m uvicorn app.main:app --reload --app-dir backend --port 8000
 ```
 
 ```powershell
@@ -254,7 +305,16 @@ cd frontend
 npm run dev
 ```
 
-### 5. Open the app
+### 5. Create your account
+
+```bash
+python scripts/create_user.py --email you@example.com --name "Your Name"
+```
+
+Or `make user`. Omit `--password` and you are prompted for it, so it never reaches your shell history or the
+process list. Registering through the UI works too.
+
+### 6. Open the app
 
 | URL | What it is |
 |---|---|
@@ -264,10 +324,6 @@ npm run dev
 
 In local mode the browser opens as a real window on your desktop — there is no noVNC and no port 6080. You
 log into LinkedIn in that window directly.
-
-### 6. Create your account
-
-Register in the UI at <http://localhost:5173>, or with the `curl` call shown in the Docker section.
 
 ---
 

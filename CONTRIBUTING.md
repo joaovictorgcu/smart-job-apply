@@ -45,11 +45,14 @@ Follow [docs/installation.md](docs/installation.md) — the local path. In short
 ```bash
 git clone https://github.com/joaovictorgcu/smart-job-apply.git
 cd smart-job-apply
-python -m venv .venv && source .venv/bin/activate   # PowerShell: .\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
-playwright install chromium
-cd frontend && npm ci && cd ..
+make install                    # or: bash scripts/setup.sh — Windows: .\scripts\setup.ps1
+make migrate                    # create the database schema
+make user                       # create your account
+make dev                        # backend on :8000, frontend on :5173
 ```
+
+`make help` lists every target, and the Makefile header gives the PowerShell equivalent of each one for
+Windows without WSL.
 
 Then read [docs/development.md](docs/development.md) for the layout, how to add a route or a service, how the
 LinkedIn and AI fakes work, and how to debug the automation with a headed browser.
@@ -59,26 +62,25 @@ LinkedIn and AI fakes work, and how to debug the automation with a headed browse
 Everything below must pass. CI runs the same checks, so running them locally saves a round trip.
 
 ```bash
-pytest                          # all tests pass
-ruff check .                    # no lint errors
-ruff format --check .           # formatting is clean
-mypy backend/app                # advisory — read the output, don't add new errors
+make test          # pytest — all tests pass
+make lint          # ruff check . — no lint errors
+make format        # ruff format + safe autofixes, before you commit
+make typecheck     # mypy backend/app — advisory, but do not add new errors
 cd frontend && npm run typecheck && npm run build
 ```
+
+CI runs `ruff check`, `mypy` (non-blocking), and `pytest` on Python 3.11 and 3.12, plus the frontend
+typecheck and build.
 
 The test suite is entirely offline: no LinkedIn account, no Anthropic key, no network. Keep it that way. A
 test that needs either belongs behind a marker and outside CI.
 
 **New behavior needs a test.** New guard-rail behavior, or anything near the submission path, needs a test
-that would fail if the guarantee broke. The most important test in the repo is the one asserting that
-preparing an application submits nothing:
-
-```python
-async def test_prepare_never_submits(...):
-    await prepare_applications(job_ids=[job.id], confirmed=True, linkedin=fake_linkedin, ai=fake_ai)
-    assert fake_linkedin.submitted == []
-    assert application.status is ApplicationStatus.AWAITING_REVIEW
-```
+that would fail if the guarantee broke. `FakeLinkedInService`
+([`backend/tests/fixtures/fake_linkedin.py`](backend/tests/fixtures/fake_linkedin.py)) records whether
+`submit()` was ever reached, which is the assertion that guards assisted mode — see
+`backend/tests/automation/test_engine_dry_run.py` and `backend/tests/integration/test_application_flow.py`
+for the existing shape. If one of those ever fails, stop and fix it before anything else.
 
 ## Code style
 
@@ -92,8 +94,9 @@ The full version is in [docs/development.md](docs/development.md#code-style). Th
   place.
 - Ruff is configured in [`pyproject.toml`](pyproject.toml) at 100 columns with `E, F, I, UP, B, SIM, ASYNC`.
   Do not add per-file ignores to get a change through; fix the code.
-- Keep Playwright inside `app/automation/linkedin/`, and every selector inside `selectors.py`. If a change
-  makes the engine import Playwright, the layering is wrong.
+- Keep Playwright inside `app/automation/browser.py` and `app/automation/linkedin/`, and every selector
+  inside `app/automation/selectors.py`. If a change makes the engine or a service import Playwright, the
+  layering is wrong.
 - Keep `app/observability/events.py` and `frontend/src/types/events.ts` in step. A mismatch breaks the
   activity feed silently.
 
@@ -124,8 +127,8 @@ chore(deps): bump playwright to 1.50
 
 Types in use: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `perf`, `ci`.
 
-Scopes match the code: `api`, `ai`, `automation`, `auth`, `models`, `schemas`, `database`, `observability`,
-`websocket`, `frontend`, `docker`, `deps`.
+Scopes match the code: `api`, `ai`, `automation`, `auth`, `models`, `schemas`, `services`, `database`,
+`observability`, `websocket`, `frontend`, `docker`, `deps`.
 
 Explain *why* in the body when the reason is not obvious from the diff. A selector fix should say what
 LinkedIn changed.
