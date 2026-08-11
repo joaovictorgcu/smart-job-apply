@@ -14,6 +14,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { ConfirmPreviewDialog } from '@/components/ConfirmPreviewDialog';
+import { CVTailorPanel } from '@/components/CVTailorPanel';
 import { EmptyState } from '@/components/EmptyState';
 import {
   Button,
@@ -299,6 +300,8 @@ export function JobDetail() {
           </Card>
         </div>
       </div>
+
+      <CVTailorPanel jobId={job.id} aiConfigured={Boolean(session?.ai_configured)} />
 
       <ConfirmPreviewDialog
         open={dialogOpen}

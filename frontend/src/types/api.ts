@@ -304,6 +304,30 @@ export interface AIStatus {
   model: string;
 }
 
+export interface CVChange {
+  section: string;
+  action: string;
+  detail: string;
+}
+
+/** A resume adapted to one job — reorganized and re-emphasized, never invented. */
+export interface TailoredResume {
+  job_id: number;
+  content: string;
+  changes: CVChange[];
+  /** Requirements the resume genuinely cannot back — surfaced, not invented. */
+  unsupported_requirements: string[];
+  /** Technologies in the tailored text but not the profile, for you to verify. */
+  invention_flags: string[];
+  summary: string | null;
+  model: string | null;
+  was_edited: boolean;
+  /** True when your profile changed after this draft was generated. */
+  is_stale: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Applications (schemas/application.py)                                      */
 /* -------------------------------------------------------------------------- */

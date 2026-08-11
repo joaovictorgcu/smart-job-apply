@@ -21,6 +21,7 @@ import * as jobsService from "@/services/jobs";
 import * as profileService from "@/services/profile";
 import * as searchesService from "@/services/searches";
 import * as statsService from "@/services/stats";
+import * as tailoringService from "@/services/tailoring";
 import type { ApiError } from "@/services/client";
 import type {
   AIStatus,
@@ -45,6 +46,7 @@ import type {
   SearchRunRequest,
   SearchUpdate,
   SessionStatus,
+  TailoredResume,
   UserSettings,
   UserSettingsUpdate,
 } from "@/types/api";
@@ -55,6 +57,7 @@ export const queryKeys = {
   profile: () => ["profile"] as const,
   settings: () => ["settings"] as const,
   aiStatus: () => ["ai", "status"] as const,
+  tailoredResume: (jobId: number) => ["ai", "tailored-cv", jobId] as const,
   health: () => ["health"] as const,
 
   searches: () => ["searches"] as const,
@@ -162,6 +165,52 @@ export function useGenerateCoverLetter(
 ): UseMutationResult<{ content: string; language: string }, ApiError, number> {
   return useMutation<{ content: string; language: string }, ApiError, number>({
     mutationFn: (jobId) => profileService.generateCoverLetter(jobId),
+    ...options,
+  });
+}
+
+/**
+ * The tailored resume for one job. A missing draft is a normal state (the user
+ * has not generated one yet), so a 404 resolves to `null` rather than an error.
+ */
+export function useTailoredResume(
+  jobId: number,
+  options?: QueryOpts<TailoredResume | null>,
+): UseQueryResult<TailoredResume | null, ApiError> {
+  return useQuery<TailoredResume | null, ApiError>({
+    queryKey: queryKeys.tailoredResume(jobId),
+    queryFn: async ({ signal }) => {
+      try {
+        return await tailoringService.fetchTailoredResume(jobId, signal);
+      } catch (error) {
+        if ((error as { status?: number })?.status === 404) return null;
+        throw error;
+      }
+    },
+    ...options,
+  });
+}
+
+export function useTailorResume(
+  jobId: number,
+  options?: MutationOpts<TailoredResume, void>,
+): UseMutationResult<TailoredResume, ApiError, void> {
+  const client = useQueryClient();
+  return useMutation<TailoredResume, ApiError, void>({
+    mutationFn: () => tailoringService.createTailoredResume(jobId),
+    onSuccess: (data) => client.setQueryData(queryKeys.tailoredResume(jobId), data),
+    ...options,
+  });
+}
+
+export function useUpdateTailoredResume(
+  jobId: number,
+  options?: MutationOpts<TailoredResume, string>,
+): UseMutationResult<TailoredResume, ApiError, string> {
+  const client = useQueryClient();
+  return useMutation<TailoredResume, ApiError, string>({
+    mutationFn: (content) => tailoringService.updateTailoredResume(jobId, content),
+    onSuccess: (data) => client.setQueryData(queryKeys.tailoredResume(jobId), data),
     ...options,
   });
 }
