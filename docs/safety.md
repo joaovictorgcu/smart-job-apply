@@ -123,6 +123,7 @@ in again.
 |---|---|---|
 | Your app account password | `users.hashed_password` | bcrypt hash, not reversible |
 | LinkedIn session cookies | `linkedin_accounts.encrypted_storage_state` | **Live credentials.** Encrypted at rest; anyone who has both this row and your `ENCRYPTION_KEY` can act as you on LinkedIn |
+| The encryption key itself (Docker) | `backend/data/.secrets.env`, mode `600` | **The key to the row above.** Generated on first boot and kept on the data volume so restarts do not invalidate your session — which also means a copy of that volume contains both the lock and the key |
 | Browser profile directory | `backend/data/browser_profiles/` | May contain further session artifacts written by Chromium |
 | Your CV, as uploaded | `backend/data/resumes/` | Personal data — name, address, phone, work history |
 | Your CV, as text | `profiles.resume_text` | Same, in the database |

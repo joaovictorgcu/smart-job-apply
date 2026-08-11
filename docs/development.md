@@ -8,18 +8,30 @@ reasoning behind the structure, [architecture.md](architecture.md).
 ```text
 .
 ├── backend/
+│   ├── alembic.ini             # Alembic config — migration commands run from backend/
 │   ├── app/
-│   │   ├── ai/                 # provider-agnostic AI contracts + the Claude client
-│   │   │   └── schemas.py      #   JobScore, ScreeningAnswer, CoverLetter, JobAnalysis, AIUsage
+│   │   ├── ai/
+│   │   │   ├── client.py       # the Anthropic client wrapper
+│   │   │   ├── scoring.py      # scoring orchestration
+│   │   │   ├── prompts/        # scoring.py, cover_letter.py, screening.py
+│   │   │   └── schemas.py      # JobScore, ScreeningAnswer, CoverLetter, JobAnalysis, AIUsage
 │   │   ├── api/
+│   │   │   ├── deps.py         # SessionDep, CurrentUser, LimitDep, OffsetDep, limiter
+│   │   │   ├── errors.py       # exception handlers
 │   │   │   └── routes/         # one module per resource, mounted under /api
 │   │   ├── auth/
 │   │   │   ├── crypto.py       # Fernet encrypt/decrypt for data at rest
+│   │   │   ├── dependencies.py # get_current_user, get_current_user_ws
 │   │   │   └── security.py     # bcrypt hashing, JWT issue/decode
 │   │   ├── automation/
 │   │   │   ├── contracts.py    # SearchFilters, JobPosting, ..., LinkedInService protocol
 │   │   │   ├── errors.py       # the error hierarchy
-│   │   │   └── linkedin/       # the Playwright implementation + selectors.py
+│   │   │   ├── engine.py       # orchestration — imports no Playwright
+│   │   │   ├── throttle.py     # delays, daily cap, working hours
+│   │   │   ├── browser.py      # Playwright launch and lifecycle
+│   │   │   ├── selectors.py    # EVERY CSS selector, in one file
+│   │   │   └── linkedin/       # service.py, search.py, job.py, apply.py
+│   │   ├── services/           # application, automation, job, search, stats, user
 │   │   ├── database/
 │   │   │   ├── base.py         # Base, TimestampMixin, UtcDateTime, utcnow()
 │   │   │   └── session.py      # engine, get_session, session_scope, init_models
@@ -32,44 +44,59 @@ reasoning behind the structure, [architecture.md](architecture.md).
 │   │   ├── websocket/manager.py# the per-user broadcast singleton
 │   │   ├── config.py           # Settings, get_settings()
 │   │   └── main.py             # the FastAPI app
-│   ├── migrations/             # Alembic
-│   ├── tests/
+│   ├── migrations/             # env.py + versions/
+│   ├── tests/                  # unit/ api/ automation/ integration/ fixtures/
 │   └── data/                   # runtime state — gitignored
 ├── frontend/
 │   └── src/
-│       ├── api/                # typed HTTP client
-│       ├── components/
-│       ├── hooks/
+│       ├── components/         # AppShell, CheckpointBanner, KillSwitchButton, ...
+│       ├── hooks/              # useApi, useAuth, useEvents
+│       ├── lib/                # format, theme, utils
 │       ├── pages/
-│       └── types/              # mirrors backend schemas, incl. events.ts
-├── docker/
+│       ├── services/           # typed HTTP client — client.ts + one module per resource
+│       └── types/              # api.ts, events.ts (mirrors the backend)
+├── docker/                     # Dockerfile, entrypoint.sh, supervisord.conf
 ├── docs/
-├── scripts/
+├── scripts/                    # setup.sh, setup.ps1, dev.sh, create_user.py
+├── Makefile
+├── docker-compose.yml
 └── pyproject.toml
 ```
 
 ## Commands
 
-Every `make` target below is a thin wrapper over the raw command beside it. If a target is missing from your
-checkout, the raw command always works.
+`make help` lists every target, and the Makefile header gives the PowerShell equivalent of each one for
+Windows without WSL. The raw command is in the third column when you need it.
 
-| Task | Command |
-|---|---|
-| Run both processes | `make dev` |
-| Backend only | `uvicorn app.main:app --reload --port 8000` |
-| Frontend only | `cd frontend && npm run dev` |
-| Tests | `pytest` |
-| One test file | `pytest backend/tests/test_engine.py -v` |
-| One test | `pytest backend/tests/test_engine.py::test_stops_at_review -v` |
-| Lint | `ruff check .` |
-| Lint with fixes | `ruff check --fix .` |
-| Format | `ruff format .` |
-| Types (backend) | `mypy backend/app` |
-| Types (frontend) | `cd frontend && npm run typecheck` |
-| Production frontend build | `cd frontend && npm run build` |
-| Apply migrations | `cd backend && alembic upgrade head` |
+| Task | Target | Raw command |
+|---|---|---|
+| First-time setup | `make install` | `bash scripts/setup.sh` |
+| Run both processes | `make dev` | `bash scripts/dev.sh` |
+| Backend only | `make dev-backend` | `.venv/bin/python -m uvicorn app.main:app --reload --app-dir backend --port 8000` |
+| Frontend only | `make dev-frontend` | `cd frontend && npm run dev` |
+| Tests | `make test` | `pytest` |
+| Lint | `make lint` | `ruff check .` |
+| Format + safe fixes | `make format` | `ruff format . && ruff check . --fix` |
+| Types (backend) | `make typecheck` | `mypy backend/app` |
+| Types (frontend) | — | `cd frontend && npm run typecheck` |
+| Frontend lint | — | `cd frontend && npm run lint` |
+| Production build | `make build` | `cd frontend && npm run build` |
+| Apply migrations | `make migrate` | `cd backend && alembic upgrade head` |
+| New migration | `make migration m="add x"` | `cd backend && alembic revision --autogenerate -m "add x"` |
+| Create an account | `make user` | `python scripts/create_user.py` |
+| Docker up / down / logs | `make docker-up` / `-down` / `-logs` | the same `docker compose` commands |
+| Clean caches and venv | `make clean` | — |
 
-On Windows, activate the venv first (`.\.venv\Scripts\Activate.ps1`); the commands themselves are identical.
+Narrower test selections:
+
+```bash
+pytest backend/tests/automation/test_kill_switch.py -v
+pytest backend/tests/automation/test_engine_dry_run.py::test_dry_run_never_submits -v
+pytest -k "checkpoint or kill_switch"
+```
+
+`make dev` honors `BACKEND_PORT` and `FRONTEND_PORT`, and stops both processes if either one dies — so a
+crashed backend is not hidden behind a still-running Vite server.
 
 ## Code style
 
@@ -105,30 +132,36 @@ Configured in [`pyproject.toml`](../pyproject.toml) — read it rather than gues
 1. **Schema first**, in `app/schemas/`. Request and response models are the contract; write them before the
    handler. Reuse `ORMModel` for anything read from the ORM and `Page[T]` for lists.
 
-2. **The handler**, in `app/api/routes/<resource>.py`:
+2. **The handler**, in `app/api/routes/<resource>.py`. Use the annotated aliases from `app.api.deps` rather
+   than spelling out `Depends(...)`; every existing route does:
 
    ```python
-   from fastapi import APIRouter, Depends
-   from sqlalchemy.ext.asyncio import AsyncSession
-
-   from app.api.deps import get_current_user
-   from app.database.session import get_session
-   from app.models import User
-   from app.observability import get_logger
-   from app.schemas import WidgetRead
+   from app.api.deps import CurrentUser, LimitDep, OffsetDep, SessionDep
+   from app.schemas.common import Page
+   from app.schemas.widget import WidgetRead
+   from app.services import widget_service
 
    router = APIRouter(prefix="/widgets", tags=["widgets"])
-   logger = get_logger(__name__)
 
 
-   @router.get("/{widget_id}", response_model=WidgetRead)
-   async def get_widget(
-       widget_id: int,
-       user: User = Depends(get_current_user),
-       session: AsyncSession = Depends(get_session),
-   ) -> WidgetRead:
-       ...
+   @router.get("", response_model=Page[WidgetRead])
+   async def list_widgets(
+       user: CurrentUser,
+       session: SessionDep,
+       limit: LimitDep = 50,
+       offset: OffsetDep = 0,
+   ) -> Page[WidgetRead]:
+       """One-line docstring — it becomes the OpenAPI summary."""
+       widgets, total = await widget_service.list_widgets(
+           session, user_id=user.id, limit=limit, offset=offset
+       )
+       return Page(items=[WidgetRead.model_validate(w) for w in widgets], total=total,
+                   limit=limit, offset=offset)
    ```
+
+   `LimitDep` and `OffsetDep` carry the pagination bounds (1–200 and ≥ 0), so every list endpoint validates
+   them the same way. Rate-limited routes take `request: Request` and the `@limiter.limit(...)` decorator —
+   see `routes/auth.py`.
 
 3. **Scope every query to the user.** Filter on `user_id` in the query itself, and return `404` — not `403` —
    when a row exists but belongs to someone else, so ids stay unenumerable.
@@ -186,13 +219,14 @@ The durable trail and the live feed come from one place, so they cannot drift.
 
 ## Adding a frontend page
 
-1. Types in `src/types/`, mirroring the backend schema. `events.ts` must stay identical to
+1. Types in `src/types/api.ts`, mirroring the backend schema. `src/types/events.ts` must stay identical to
    `app/observability/events.py` — a mismatch there breaks the activity feed silently.
-2. An API function in `src/api/`, returning the typed response.
-3. A hook in `src/hooks/` for the data fetching and mutations.
-4. The page component in `src/pages/`, and a route entry.
-5. Handle the states that actually happen: loading, empty, error, and — for anything touching automation —
-   `blocked`.
+2. A service function in `src/services/<resource>.ts`, built on the shared `client.ts`, returning the typed
+   response.
+3. A hook in `src/hooks/` for the fetching and mutations (React Query is already wired up).
+4. The page component in `src/pages/`, plus a route entry in `App.tsx` behind `ProtectedRoute`.
+5. Handle the states that actually happen: loading (`Spinner`), empty (`EmptyState`), error (`Toast`), and —
+   for anything touching automation — `blocked` (`CheckpointBanner`).
 
 **Any UI that can submit an application must require a distinct, deliberate click**, with the letter and the
 answers visible on screen at that moment. Do not add a "submit all" button, and do not make submit the
@@ -200,13 +234,14 @@ default action of a form.
 
 ## Touching the LinkedIn layer
 
-Everything Playwright-specific lives in `app/automation/linkedin/`, and every selector lives in
-`selectors.py`. Nothing outside that package imports Playwright.
+Playwright lives in exactly two places: `app/automation/browser.py` (launch and lifecycle) and
+`app/automation/linkedin/` (`service.py` implements the protocol; `search.py`, `job.py`, and `apply.py` do
+the work). Every selector lives in `app/automation/selectors.py`. Nothing else imports Playwright.
 
 When LinkedIn changes its markup:
 
 1. Reproduce with a headed browser (below) and find what moved.
-2. Fix the selector in `selectors.py`. Prefer stable attributes — `aria-label`, `data-*`,
+2. Fix the selector in `app/automation/selectors.py`. Prefer stable attributes — `aria-label`, `data-*`,
    `role` — over generated class names, which change constantly.
 3. If a *step* changed rather than a selector, the fix belongs in the `LinkedInService` implementation.
    `contracts.py` should not need to change; if it does, that is an interface change and needs a look at
@@ -222,142 +257,95 @@ Two rules that are not negotiable:
 
 ## Testing
 
-The whole suite runs offline. No LinkedIn account, no Anthropic key, no network.
+The whole suite runs offline and enforces it: an autouse fixture blocks socket access, so a test that
+reaches for the network fails rather than quietly depending on it. No LinkedIn account, no Anthropic key, no
+browser.
 
 ```bash
 pytest                     # everything
-pytest -v                  # names
 pytest -x                  # stop at the first failure
 pytest --lf                # rerun last failures
-pytest -k "review"         # by name
+pytest -k "checkpoint"     # by name
 ```
+
+Tests are grouped by what they exercise: `tests/unit/` (schemas, crypto, security, throttle, scoring),
+`tests/api/` (routes, auth, cross-user isolation), `tests/automation/` (dry run, kill switch, checkpoint
+detection), and `tests/integration/` (the whole application flow, dedup, stats).
+
+### Fixtures
+
+`backend/tests/conftest.py` does the heavy lifting, and several fixtures are `autouse` — you get them
+whether you ask or not:
+
+| Fixture | Scope | What it does |
+|---|---|---|
+| `test_settings` | session, autouse | Points `Settings` at a temp `DATA_DIR` and deterministic keys, and clears the `get_settings` cache. `get_settings` is `lru_cache`d, so anything that changes the environment must invalidate it |
+| `block_network` | autouse | Fails the test if it tries to open a socket. This is what keeps the suite honest about being offline |
+| `cap_sleep` | autouse | Caps `asyncio.sleep`, so the randomized 45–120 s apply delays do not make the suite take an hour |
+| `sleep_spy` | — | Records the durations that *would* have been slept, so guard-rail timing is assertable |
+| `wire_fakes` | autouse | Injects `FakeLinkedInService` and `FakeAIClient` in place of the real adapters |
+| `fake_linkedin` / `fake_ai` | — | The fake instances, for configuring and asserting against |
+| `engine` / `sessionmaker` / `session` | — | In-memory SQLite with the schema created, disposed at teardown so the module-level engine does not leak |
+| `user` / `other_user` | — | Two accounts — `other_user` is how cross-user isolation gets tested |
+| `auth_headers` / `other_auth_headers` | — | Ready-made `Authorization` headers for each |
+| `app` / `client` | — | The FastAPI app with the test sessionmaker wired in, and an `httpx.AsyncClient` against it |
 
 `pyproject.toml` sets `asyncio_mode = "auto"`, so `async def test_...` needs no decorator, and
-`pythonpath = ["backend"]`, so `from app...` resolves in tests.
+`pythonpath = ["backend"]`, so `from app...` resolves.
 
-### The database fixture
-
-Tests run against in-memory SQLite. Point `DATABASE_URL` at `sqlite+aiosqlite:///:memory:`, call
-`init_models()`, and clear the settings cache — `get_settings` is `lru_cache`d, so a test that changes
-environment variables must invalidate it:
-
-```python
-import pytest
-from app.config import get_settings
-from app.database.session import dispose_engine, init_models
-
-
-@pytest.fixture
-async def db(monkeypatch):
-    monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
-    monkeypatch.setenv("SECRET_KEY", "test-secret-key-for-tests-only")
-    get_settings.cache_clear()
-    await init_models()
-    yield
-    await dispose_engine()
-    get_settings.cache_clear()
-```
-
-`dispose_engine()` at teardown matters: the module-level engine is a singleton and would otherwise leak
-between tests.
+Build rows with the factories in `backend/tests/fixtures/factories.py` — `create_user`, `create_search`,
+`create_job`, `create_application`, `create_run`, `create_analysis`, plus `make_job_posting`,
+`make_form_question`, `make_profile_context`, and `days_ago` for time-relative data.
 
 ### The LinkedIn fake
 
-`LinkedInService` is a `runtime_checkable` `Protocol`, so a plain class satisfying the signatures works —
-no inheritance, no mocking library. The fake returns canned dataclasses and records what it was asked to do:
+`LinkedInService` is a `runtime_checkable` `Protocol`, so
+[`FakeLinkedInService`](../backend/tests/fixtures/fake_linkedin.py) just satisfies the signatures — no
+inheritance, no mocking library, no browser. It is a dataclass you configure by field and then assert
+against.
+
+Configure the scenario:
+
+| Field | Effect |
+|---|---|
+| `postings` / `job_count` | The postings `search_jobs()` returns |
+| `questions` / `unanswered` / `total_steps` | The shape of the Easy Apply form |
+| `checkpoint_on` / `checkpoint_after` / `checkpoint_reason` | Raise `SecurityCheckpointError` from a chosen call, optionally after N successes |
+| `error_on` / `error` | Raise any other error from a chosen call |
+| `logged_in` / `browser_open` | Session state |
+| `already_applied_ids` / `no_easy_apply_ids` | Trigger `AlreadyAppliedError` / `EasyApplyUnavailableError` |
+
+Then assert on what happened:
+
+| Field | Records |
+|---|---|
+| **`submitted`** | **Job ids that reached `submit()`. This is the assertion that guards assisted mode** |
+| `calls` | Every method called, in order |
+| `opened` | Jobs whose Easy Apply modal was opened |
+| `filled` / `cover_letters` | The answers and letters passed to `fill_and_advance()` |
+| `screenshots` | Capture requests |
+
+The module also ships `FakePage`, `FakeLocator`, and `FakeBrowser` — including a `checkpoint()` helper that
+serves the real challenge text in both English and Portuguese — so the *detector* itself can be tested
+without a browser. `make_postings(count)` generates postings in bulk.
+
+A useful guard, in case the fake drifts from the protocol:
 
 ```python
-class FakeLinkedIn:
-    """In-memory LinkedInService. Records calls; never opens a browser."""
-
-    def __init__(self, *, jobs: list[JobPosting], questions: list[FormQuestion] | None = None):
-        self._jobs = jobs
-        self._questions = questions or []
-        self.submitted: list[str] = []
-        self.state = SessionState(browser_open=False, logged_in=False)
-
-    async def start(self) -> SessionState:
-        self.state = SessionState(browser_open=True, logged_in=True)
-        return self.state
-
-    async def stop(self) -> None:
-        self.state = SessionState()
-
-    async def get_state(self) -> SessionState:
-        return self.state
-
-    async def wait_for_login(self, timeout_seconds: int = 300) -> SessionState:
-        return self.state
-
-    async def search_jobs(self, filters: SearchFilters) -> list[JobPosting]:
-        return self._jobs[: filters.max_results]
-
-    async def fetch_job_details(self, external_id: str) -> JobPosting:
-        return next(j for j in self._jobs if j.external_id == external_id)
-
-    async def open_easy_apply(self, external_id: str) -> list[FormQuestion]:
-        return self._questions
-
-    async def fill_and_advance(
-        self, answers: list[FormAnswer], *, cover_letter: str | None = None
-    ) -> ApplicationDraft:
-        # Mirrors the real contract: stops at review, never submits.
-        return ApplicationDraft(
-            job_external_id=self._jobs[0].external_id,
-            answers=answers,
-            total_steps=2,
-            current_step=2,
-            ready_to_submit=True,
-        )
-
-    async def submit(self) -> bool:
-        self.submitted.append(self._jobs[0].external_id)
-        return True
-
-    async def discard(self) -> None: ...
-
-    async def capture_screenshot(self, name: str) -> str | None:
-        return None
+assert isinstance(FakeLinkedInService(), LinkedInService)
 ```
-
-Variants worth keeping around: one that raises `SecurityCheckpointError` from `search_jobs`, one that raises
-`ElementNotFoundError`, and one whose `open_easy_apply` returns a question the answer bank cannot cover so
-`ManualInputRequiredError` is exercised.
-
-`assert isinstance(FakeLinkedIn(jobs=[]), LinkedInService)` gives you a cheap guard that the fake has not
-drifted from the protocol.
 
 ### The AI fake
 
-Same idea: return the Pydantic models from `app/ai/schemas.py` directly.
+[`FakeAIClient`](../backend/tests/fixtures/fake_ai.py) returns the real Pydantic models from
+`app/ai/schemas.py` — `JobScore`, `CoverLetter`, `ScreeningAnswer`, `AIUsage` — deterministically. It
+exposes `score_job()`, `write_cover_letter()`, and `answer_questions()`, plus `is_configured()`,
+`call_count(name)` and `usage()` for asserting how often the model was called and what it reported. It can
+be configured to return a chosen score, a chosen `AnswerConfidence`, or to raise `FakeAIError` so the
+refusal-to-manual-entry path gets exercised.
 
-```python
-class FakeAI:
-    def __init__(self, *, score: int = 85, refuse: bool = False):
-        self._score = score
-        self._refuse = refuse
-
-    async def score_job(self, *, job, profile) -> JobScore:
-        return JobScore(
-            score=self._score,
-            reasons=["deterministic test score"],
-            missing_requirements=[],
-            recommend_apply=self._score >= 70,
-        )
-
-    async def write_cover_letter(self, *, job, profile) -> CoverLetter:
-        return CoverLetter(content="Test letter.", language="en")
-
-    async def answer_screening(self, *, questions, profile) -> ScreeningAnswerSet:
-        return ScreeningAnswerSet(answers=[
-            ScreeningAnswer(question=q.label, answer="42",
-                            confidence=AnswerConfidence.LOW)  # -> needs_review becomes True
-            for q in questions
-        ])
-```
-
-Note the last one: constructing a `LOW`-confidence answer without setting `needs_review` is the fixture for
-the model validator that flags it, so a test can assert the UI would surface it.
+Setting the confidence to `LOW` is how you test the flagging invariant: `ScreeningAnswer`'s model validator
+sets `needs_review = True` for a low-confidence answer even when the field was left at its default.
 
 ### What to test
 
@@ -367,21 +355,16 @@ the model validator that flags it, so a test can assert the UI would surface it.
 | Models | Enum round-trips, timezone-aware datetimes on both backends |
 | Auth | Hash/verify, token issue/decode, expiry, the 72-byte bcrypt limit |
 | Crypto | Round-trip, and that a changed key raises `DecryptionError` |
-| Engine | Guard rails (cap, working hours, min score), checkpoint halt, kill switch, resume from `checkpoint` |
+| Throttle | Daily cap, working hours, delay ranges (assert via `sleep_spy`) |
+| Engine | Checkpoint halt, kill switch, resume from `checkpoint`, dedup |
 | **Approval invariant** | **That preparing never submits, and that submit requires `confirm: true`** |
-| Routes | Happy path, `401`, and cross-user `404` |
+| Routes | Happy path, `401`, and cross-user `404` (that is what `other_auth_headers` is for) |
 | WebSocket | Per-user isolation, history replay, that a dead socket does not raise |
 
-The approval-invariant tests are the ones that matter most. Assert on the fake:
-
-```python
-async def test_prepare_never_submits(db, fake_linkedin, fake_ai):
-    await prepare_applications(job_ids=[job.id], confirmed=True, linkedin=fake_linkedin, ai=fake_ai)
-    assert fake_linkedin.submitted == []          # nothing was sent
-    assert application.status is ApplicationStatus.AWAITING_REVIEW
-```
-
-If that test ever fails, stop and fix it before anything else.
+The approval-invariant tests matter most, and they are the reason `FakeLinkedInService.submitted` exists.
+`backend/tests/automation/test_engine_dry_run.py` and
+`backend/tests/integration/test_application_flow.py` are the ones to read first — and if either ever fails,
+stop and fix it before anything else.
 
 ## Debugging the automation with a headed browser
 
@@ -433,7 +416,8 @@ configure_logging(level="DEBUG", as_json=False)
 
 ## Migrations
 
-Alembic lives in `backend/`, so run these from that directory.
+`alembic.ini` lives in `backend/`, so run these from that directory — or use `make migrate` and
+`make migration m="..."` from the repository root, which `cd` for you.
 
 ```bash
 cd backend
@@ -445,6 +429,8 @@ alembic current                                          # where am I
 alembic history --verbose                                # what exists
 ```
 
+In Docker there is nothing to run: the entrypoint applies `alembic upgrade head` on every boot.
+
 **Always read the generated migration before committing it.** Autogenerate is good at added tables and
 columns and bad at renames — it will happily emit a drop-and-create that destroys data. Rewrite those as
 `op.alter_column(..., new_column_name=...)` by hand.
@@ -455,7 +441,7 @@ inconsistency.
 The workflow for a schema change:
 
 1. Edit the model in `app/models/`.
-2. `alembic revision --autogenerate -m "..."`.
+2. `make migration m="..."`.
 3. Read the file. Fix the renames. Check that the downgrade actually reverses the upgrade.
 4. `alembic upgrade head`, then `alembic downgrade -1`, then `alembic upgrade head` again — a migration that
    cannot round-trip is a migration you cannot back out of.
@@ -469,17 +455,19 @@ does not alter existing tables, so it is not a substitute for a migration.
 
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on push and pull request:
 
-- **backend**, matrixed over Python 3.11 and 3.12 — `ruff check`, `ruff format --check`, `mypy`
-  (`continue-on-error`), `pytest`.
+- **backend**, matrixed over Python 3.11 and 3.12 — `ruff check`, `mypy` (`continue-on-error`), `pytest`.
 - **frontend** — `npm ci`, `npm run typecheck`, `npm run build`.
 
-pip and npm caches are keyed on the lockfiles. No secrets are configured and none are needed, because the
-tests are offline. If a test of yours needs a network call or an API key, it belongs behind a marker and
-outside CI.
+pip and npm caches are keyed on the lockfiles, and `concurrency` cancels superseded runs on a branch.
+Chromium is deliberately **not** installed in CI: the suite runs against the fakes, so downloading a browser
+would add minutes for nothing.
+
+No secrets are configured and none are needed, because the tests are offline. If a test of yours needs a
+network call or an API key, it belongs behind a marker and outside CI.
 
 Run the same checks locally before pushing:
 
 ```bash
-ruff check . && ruff format --check . && mypy backend/app && pytest
+make lint && make typecheck && make test
 cd frontend && npm run typecheck && npm run build
 ```

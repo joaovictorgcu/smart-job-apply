@@ -408,11 +408,15 @@ verify that `linkedin_accounts.encrypted_storage_state` survived intact.
 git pull
 docker compose down
 docker compose up -d --build
-docker compose exec backend alembic upgrade head
+docker compose logs -f            # watch the migration run
 ```
 
-Named volumes survive `docker compose down`, so your data persists. Never use `-v` unless you mean to
-delete it.
+The entrypoint applies `alembic upgrade head` on every boot, so there is no separate migration step. If a
+migration fails it falls back to creating missing tables, leaves existing data untouched, and says so in the
+log — which is your cue to investigate rather than keep using the container.
+
+The named volume survives `docker compose down`, so your data persists. Never use `-v` unless you mean to
+destroy it.
 
 ### Local
 
@@ -438,11 +442,14 @@ This directory is the entire state of your installation:
 backend/data/
 ├── app.db               # SQLite database (jobs, applications, encrypted session)
 ├── browser_profiles/    # Chromium profile directories
-└── resumes/             # your uploaded CV files
+├── resumes/             # your uploaded CV files
+├── screenshots/         # captures from the automation
+└── .secrets.env         # Docker only: the generated SECRET_KEY and ENCRYPTION_KEY (chmod 600)
 ```
 
-It is gitignored, and it contains live LinkedIn session cookies and your CV. Back it up somewhere you would
-be comfortable storing both. See [safety.md](safety.md#what-is-stored-and-where).
+It is gitignored, and it contains live LinkedIn session cookies, your CV, and — under Docker — the keys that
+decrypt the session. Back it up somewhere you would be comfortable storing all three. See
+[safety.md](safety.md#what-is-stored-and-where).
 
 ### Local backup
 
@@ -466,14 +473,17 @@ sqlite3 backend/data/app.db ".backup 'backup.db'"
 ### Docker backup
 
 ```bash
-docker compose exec backend tar czf - /app/backend/data > backup-$(date +%F).tar.gz
+docker compose exec app tar czf - /app/backend/data > backup-$(date +%F).tar.gz
 ```
 
 ### Restoring
 
-Stop the app, replace the directory, start it again. **Restore `.env` alongside it** — specifically the same
-`ENCRYPTION_KEY`. With a different key the stored LinkedIn session cannot be decrypted, and you will have
-to reconnect and log in again. Everything else in the backup still works.
+Stop the app, replace the directory, start it again.
+
+**The stored LinkedIn session is only readable with the same `ENCRYPTION_KEY`.** Under Docker the key is
+inside the backup, at `.secrets.env`, so a volume restore is self-sufficient. On a local install the key
+lives in `.env` outside the data directory — **restore `.env` alongside it**, or you will have to reconnect
+LinkedIn and log in again. Everything else in the backup still works either way.
 
 ---
 
@@ -485,8 +495,8 @@ curl http://localhost:8000/api/health
 ```
 
 ```bash
-pytest                 # backend tests, all offline
-ruff check .           # lint
+make test              # backend tests, all offline (or: pytest)
+make lint              # ruff check .
 cd frontend && npm run typecheck
 ```
 
@@ -499,15 +509,15 @@ If the tests pass, the install is sound. Continue with the first-run walkthrough
 
 | Symptom | Cause and fix |
 |---|---|
-| `ModuleNotFoundError: No module named 'app'` | The editable install did not happen, or the venv is not active. Re-run `pip install -e ".[dev]"` with the venv activated. |
+| `ModuleNotFoundError: No module named 'app'` | Run uvicorn with `--app-dir backend`, or re-run `pip install -e ".[dev]"` with the venv activated. |
 | `SettingsError: error parsing value for field "cors_origins"` | A list or tuple setting in `.env` is not JSON. Write `CORS_ORIGINS=["http://localhost:5173"]` and `DEFAULT_ACTION_DELAY_RANGE=[2.5, 7.0]`. See [configuration.md](configuration.md#automation). |
 | `Executable doesn't exist at ...ms-playwright...` | `playwright install chromium` was never run, or ran in a different environment. |
 | `error while loading shared libraries: libnss3.so` (Linux) | Missing system libraries: `playwright install --with-deps chromium`. |
-| Chromium starts and immediately dies (Docker) | `/dev/shm` too small. Raise `shm_size` to `2gb`. |
+| Chromium starts and immediately dies (Docker) | `/dev/shm` too small. Compose sets `shm_size: 1gb`; raise it to `2gb`. |
 | Browser opens but LinkedIn shows a login page every time | The session is not being persisted, or `ENCRYPTION_KEY` changed. Reconnect LinkedIn and log in once more. |
 | "Could not decrypt stored data" | `ENCRYPTION_KEY` (or `SECRET_KEY`, when the former is unset) changed. Restore the old value, or reconnect LinkedIn. |
-| Logged out of the dashboard after every restart | `SECRET_KEY` is unset, so a new random one is generated each start. Set it in `.env`. |
+| Logged out of the dashboard after every restart | `SECRET_KEY` is unset, so a new random one is generated each start. Set it in `.env` (local installs only — Docker persists a generated one). |
 | Frontend loads but every request fails with a CORS error | The dashboard's origin is not in `CORS_ORIGINS`. Add it as a JSON array entry and restart. |
 | `sqlite3.OperationalError: database is locked` | Two processes writing at once. WAL mode is enabled for exactly this, so check for a stray `uvicorn` still running. |
-| Port 8000 or 5173 already in use | Something else is on it. `uvicorn app.main:app --port 8100`, or change the compose port mapping. |
+| Port 8000 or 5173 already in use | Something else is on it. `BACKEND_PORT=8100 make dev`, or change the compose port mapping. |
 | noVNC page is blank at :6080 | The container is still starting. Give it a moment, then check `docker compose logs`. |

@@ -48,6 +48,7 @@ not `403`, so ids are not enumerable.
 | Code | Meaning |
 |---|---|
 | `200` | Success |
+| `201` | Created (only `POST /api/auth/register`) |
 | `204` | Success, no body (only `DELETE /api/searches/{id}`) |
 | `401` | Missing, malformed, or expired token |
 | `404` | Not found, or not yours |
@@ -70,7 +71,10 @@ Creates a local account. This is the application's own login, unrelated to Linke
 `password` is 10–72 characters; 72 bytes is bcrypt's limit and longer inputs are rejected rather than
 silently truncated. `full_name` is optional.
 
-→ `TokenResponse`:
+The new account is created with an empty profile and conservative default guard rails — dry-run on, manual
+approval required — so it cannot submit anything before you configure it.
+
+→ `201` with `TokenResponse`:
 
 ```json
 {
