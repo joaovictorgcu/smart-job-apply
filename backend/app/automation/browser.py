@@ -147,7 +147,9 @@ class BrowserSession:
             ) from exc
 
         self._context.set_default_timeout(DEFAULT_TIMEOUT_MS)
-        self._page = self._context.pages[0] if self._context.pages else await self._context.new_page()
+        self._page = (
+            self._context.pages[0] if self._context.pages else await self._context.new_page()
+        )
         self._blocked_reason = None
         logger.info(
             "Browser session started.",
@@ -233,9 +235,7 @@ class BrowserSession:
                 continue
 
         try:
-            body = await self._page.locator("body").inner_text(
-                timeout=_CHECKPOINT_PROBE_TIMEOUT_MS
-            )
+            body = await self._page.locator("body").inner_text(timeout=_CHECKPOINT_PROBE_TIMEOUT_MS)
         except (PlaywrightError, PlaywrightTimeoutError):
             return None
 
@@ -385,12 +385,15 @@ class BrowserSession:
             return None
         return str(path)
 
+    # ASYNC109: `timeout` is forwarded verbatim to Playwright's own millisecond
+    # timeout argument; wrapping these probes in `asyncio.timeout` would abort the
+    # whole fallback walk instead of moving on to the next candidate selector.
     async def find_first(
         self,
         selectors: tuple[str, ...],
         *,
         name: str = "element",
-        timeout: int = 5_000,
+        timeout: int = 5_000,  # noqa: ASYNC109 - Playwright's own ms timeout
         state: str = "visible",
         root: Locator | None = None,
     ) -> Locator:
@@ -414,7 +417,7 @@ class BrowserSession:
         self,
         selectors: tuple[str, ...],
         *,
-        timeout: int = 2_000,
+        timeout: int = 2_000,  # noqa: ASYNC109 - Playwright's own ms timeout
         state: str = "visible",
         root: Locator | None = None,
     ) -> Locator | None:
@@ -427,6 +430,11 @@ class BrowserSession:
             return None
 
     async def any_visible(
-        self, selectors: tuple[str, ...], *, root: Locator | None = None, timeout: int = 1_500
+        self,
+        selectors: tuple[str, ...],
+        *,
+        root: Locator | None = None,
+        timeout: int = 1_500,  # noqa: ASYNC109 - Playwright's own ms timeout
     ) -> bool:
-        return await self.find_first_or_none(selectors, root=root, timeout=timeout) is not None
+        found = await self.find_first_or_none(selectors, root=root, timeout=timeout)
+        return found is not None

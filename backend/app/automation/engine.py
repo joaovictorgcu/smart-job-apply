@@ -24,7 +24,7 @@ import importlib
 import inspect
 import re
 from collections.abc import AsyncIterator, Awaitable, Coroutine, Iterable, Sequence
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Any
 
@@ -49,6 +49,7 @@ from app.automation.errors import (
     SecurityCheckpointError,
     StopRequestedError,
 )
+from app.automation.linkedin.search import PAGE_SIZE
 from app.automation.linkedin.service import LinkedInBrowserService
 from app.automation.throttle import Throttle
 from app.config import get_settings
@@ -154,9 +155,7 @@ class AutomationEngine:
         self._tasks[user_id] = task
         return task
 
-    async def _supervise(
-        self, user_id: int, coro: Coroutine[Any, Any, Any], name: str
-    ) -> None:
+    async def _supervise(self, user_id: int, coro: Coroutine[Any, Any, Any], name: str) -> None:
         """Never let a background task die silently."""
         try:
             await coro
@@ -270,9 +269,8 @@ class AutomationEngine:
             await self._configure_service(user_id, service)
             try:
                 state = await service.start()
-                if not state.logged_in:
-                    if await self._restore_cookies(user_id, service):
-                        state = await service.start()
+                if not state.logged_in and await self._restore_cookies(user_id, service):
+                    state = await service.start()
                 await self._persist_account(user_id, service, state)
             except SecurityCheckpointError as exc:
                 await self._handle_checkpoint(user_id, None, exc)
@@ -282,9 +280,7 @@ class AutomationEngine:
             await self._publish_session(user_id, state)
             return state
 
-    async def wait_for_manual_login(
-        self, user_id: int, timeout_seconds: int = 300
-    ) -> SessionState:
+    async def wait_for_manual_login(self, user_id: int, timeout_seconds: int = 300) -> SessionState:
         """Block until the user finishes signing in inside the visible window."""
         async with self._exclusive(user_id):
             service = self._service(user_id)
@@ -348,9 +344,7 @@ class AutomationEngine:
                 await service.start()
         return service
 
-    async def _configure_service(
-        self, user_id: int, service: LinkedInBrowserService
-    ) -> None:
+    async def _configure_service(self, user_id: int, service: LinkedInBrowserService) -> None:
         throttle = await self._throttle(user_id)
         service.configure(throttle=throttle, resume_path=await self._resume_path(user_id))
 
@@ -384,12 +378,12 @@ class AutomationEngine:
                 account.display_name = state.display_name
             if state.logged_in:
                 account.last_verified_at = utcnow()
-                try:
+                # If the export fails the persistent profile on disk still holds
+                # the session, so this is not worth failing the connection over.
+                with suppress(AutomationError):
                     account.encrypted_storage_state = encrypt_json(
                         await service.export_storage_state()
                     )
-                except AutomationError:
-                    pass  # the persistent profile still holds the session on disk
 
     @staticmethod
     async def _account(
@@ -468,7 +462,7 @@ class AutomationEngine:
                     run_id,
                     checkpoint={
                         "processed_ids": sorted(processed),
-                        "page": (index - 1) // 25,
+                        "page": (index - 1) // PAGE_SIZE,
                     },
                     **counters,
                 )
@@ -512,15 +506,11 @@ class AutomationEngine:
                 select(AutomationRun.search_id).where(AutomationRun.id == run_id)
             )
 
-    async def _upsert_job(
-        self, user_id: int, search_id: int | None, posting: JobPosting
-    ) -> int:
+    async def _upsert_job(self, user_id: int, search_id: int | None, posting: JobPosting) -> int:
         """Insert or refresh a job, deduplicating on (user_id, external_id)."""
         async with session_scope() as session:
             job = await session.scalar(
-                select(Job).where(
-                    Job.user_id == user_id, Job.external_id == posting.external_id
-                )
+                select(Job).where(Job.user_id == user_id, Job.external_id == posting.external_id)
             )
             if job is None:
                 job = Job(
@@ -551,9 +541,7 @@ class AutomationEngine:
             await session.flush()
             return job.id
 
-    async def _analyze_job(
-        self, user_id: int, run_id: int | None, job_id: int
-    ) -> JobStatus | None:
+    async def _analyze_job(self, user_id: int, run_id: int | None, job_id: int) -> JobStatus | None:
         """Score one job with the AI layer. Returns the resulting job status."""
         async with session_scope() as session:
             job = await session.get(Job, job_id)
@@ -584,8 +572,8 @@ class AutomationEngine:
                 job.skip_reason = analysis.refusal_reason
             elif analysis.score < min_score or not analysis.recommend_apply:
                 job.status = JobStatus.SKIPPED
-                job.skip_reason = (
-                    analysis.summary or f"Score {analysis.score} is below the {min_score} threshold."
+                job.skip_reason = analysis.summary or (
+                    f"Score {analysis.score} is below the {min_score} threshold."
                 )
             else:
                 job.status = JobStatus.ANALYZED
@@ -626,9 +614,15 @@ class AutomationEngine:
                 data={"kind": "prepare", "job_ids": list(job_ids)},
             )
             throttle = await self._throttle(user_id)
+            checkpoint = await self._checkpoint(run_id)
+            # Resuming this run must not touch a job it already handled.
+            processed: set[int] = {int(value) for value in checkpoint.get("processed_ids") or []}
+
             async with self._exclusive(user_id):
-                for job_id in job_ids:
+                for index, job_id in enumerate(job_ids, start=1):
                     await self._check_stop(user_id, run_id)
+                    if job_id in processed:
+                        continue
                     try:
                         application_id = await self._prepare_application(user_id, run_id, job_id)
                     except (StopRequestedError, SecurityCheckpointError):
@@ -647,7 +641,21 @@ class AutomationEngine:
                         continue
                     if application_id is not None:
                         prepared.append(application_id)
-                        await self._update_run(run_id, applications_prepared=len(prepared))
+                    processed.add(job_id)
+                    await self._update_run(
+                        run_id,
+                        applications_prepared=len(prepared),
+                        checkpoint={"processed_ids": sorted(processed)},
+                    )
+                    await self._publish(
+                        user_id,
+                        EventName.AUTOMATION_PROGRESS,
+                        run_id=run_id,
+                        job_id=job_id,
+                        application_id=application_id,
+                        message=f"Prepared {index} of {len(job_ids)} application(s).",
+                        data={"processed": index, "total": len(job_ids)},
+                    )
                     await throttle.wait_action()
 
             await self._finish_run(
@@ -676,9 +684,7 @@ class AutomationEngine:
                 message="Preparation stopped by the user.",
             )
         except SecurityCheckpointError as exc:
-            await self._handle_checkpoint(
-                user_id, run_id, exc, applications_prepared=len(prepared)
-            )
+            await self._handle_checkpoint(user_id, run_id, exc, applications_prepared=len(prepared))
         except Exception as exc:
             await self._fail_run(user_id, run_id, exc, applications_prepared=len(prepared))
             raise
@@ -933,7 +939,8 @@ class AutomationEngine:
                 )
             if application.approved_at is None:
                 raise AutomationError(
-                    "This application has not been approved. Approve it explicitly before submitting."
+                    "This application has not been approved. "
+                    "Approve it explicitly before submitting."
                 )
             settings = await self._settings(session, user_id)
             if application.was_dry_run or (settings is not None and settings.dry_run):
@@ -1111,9 +1118,7 @@ class AutomationEngine:
             },
         )
         if run_id is not None:
-            await self._finish_run(
-                run_id, AutomationRunStatus.FAILED, error=str(exc), **counters
-            )
+            await self._finish_run(run_id, AutomationRunStatus.FAILED, error=str(exc), **counters)
         await self._publish(
             user_id,
             EventName.AUTOMATION_ERROR,
@@ -1245,9 +1250,7 @@ class AutomationEngine:
 
     @staticmethod
     async def _settings(session: AsyncSession, user_id: int) -> UserSettings | None:
-        return await session.scalar(
-            select(UserSettings).where(UserSettings.user_id == user_id)
-        )
+        return await session.scalar(select(UserSettings).where(UserSettings.user_id == user_id))
 
     async def _throttle(self, user_id: int) -> Throttle:
         async with session_scope() as session:
@@ -1608,10 +1611,7 @@ def _answer_from_profile(question: FormQuestion, profile: ProfileContext) -> str
         return parts[-1] if len(parts) > 1 else None
     if any(hint in label for hint in _LOCATION_HINTS) and profile.location:
         return profile.location
-    if (
-        any(hint in label for hint in _EXPERIENCE_HINTS)
-        and profile.years_of_experience is not None
-    ):
+    if any(hint in label for hint in _EXPERIENCE_HINTS) and profile.years_of_experience is not None:
         return str(profile.years_of_experience)
 
     # Saved answers for recurring screening questions.

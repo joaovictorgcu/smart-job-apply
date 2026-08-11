@@ -123,7 +123,11 @@ class JobSearchPage:
             if await self._browser.any_visible(sel.Search.NO_RESULTS, timeout=2_000):
                 logger.info(
                     "Search returned no results.",
-                    extra={"action": "search.collect", "status": "empty", "page": start // PAGE_SIZE},
+                    extra={
+                        "action": "search.collect",
+                        "status": "empty",
+                        "page": start // PAGE_SIZE,
+                    },
                 )
                 break
 
@@ -168,9 +172,16 @@ class JobSearchPage:
         return postings
 
     async def _cards(self) -> list[Locator]:
+        page = self._browser.page
+        try:
+            union = page.locator(sel.Search.JOB_CARD_UNION)
+            if await union.count():
+                return await union.all()
+        except PlaywrightError:
+            pass
         for selector in sel.Search.JOB_CARD:
             try:
-                locator = self._browser.page.locator(selector)
+                locator = page.locator(selector)
                 if await locator.count():
                     return await locator.all()
             except PlaywrightError:

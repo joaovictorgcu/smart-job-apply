@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import random
 import re
+from contextlib import suppress
 from dataclasses import dataclass
 
 from playwright.async_api import (
@@ -127,9 +128,7 @@ class EasyApplyModal:
             sel.JobDetail.EASY_APPLY_BUTTON, timeout=4_000
         )
         if button is None:
-            raise EasyApplyUnavailableError(
-                f"Job {external_id} does not offer Easy Apply."
-            )
+            raise EasyApplyUnavailableError(f"Job {external_id} does not offer Easy Apply.")
         try:
             label = (await button.get_attribute("aria-label")) or await button.inner_text()
         except (PlaywrightError, PlaywrightTimeoutError):
@@ -364,9 +363,7 @@ class EasyApplyModal:
         # LinkedIn's first option is a "Select an option" placeholder.
         return [option for option in options if option and not _is_placeholder(option)]
 
-    async def _is_required(
-        self, group: Locator | None, control: Locator, label: str
-    ) -> bool:
+    async def _is_required(self, group: Locator | None, control: Locator, label: str) -> bool:
         for attribute in ("required", "aria-required"):
             try:
                 value = await control.get_attribute(attribute)
@@ -378,10 +375,8 @@ class EasyApplyModal:
         # Only a per-question wrapper may be scanned for the "*" marker; scanning
         # the whole modal would mark every field as required.
         if group is not None:
-            try:
+            with suppress(PlaywrightError, PlaywrightTimeoutError):
                 haystack = f"{haystack} {(await group.inner_text(timeout=1_500)).lower()}"
-            except (PlaywrightError, PlaywrightTimeoutError):
-                pass
         return "*" in haystack or any(hint in haystack for hint in _REQUIRED_HINTS)
 
     async def _current_value(self, control: Locator, kind: QuestionKind) -> str | None:
@@ -416,9 +411,7 @@ class EasyApplyModal:
 
         draft = ApplicationDraft(job_external_id=self._external_id)
         pending = {answer.field_id: answer for answer in answers}
-        by_label = {
-            _normalize(answer.field_id): answer for answer in answers if answer.field_id
-        }
+        by_label = {_normalize(answer.field_id): answer for answer in answers if answer.field_id}
         seen_ids: set[str] = set()
         cover_letter_pending = cover_letter
 
@@ -545,9 +538,7 @@ class EasyApplyModal:
 
             if await self._apply_value(field, answer.value):
                 draft.answers.append(
-                    FormAnswer(
-                        field_id=question.field_id, value=answer.value, kind=question.kind
-                    )
+                    FormAnswer(field_id=question.field_id, value=answer.value, kind=question.kind)
                 )
             else:
                 unanswered.append(question)
@@ -677,9 +668,7 @@ class EasyApplyModal:
         )
         return True
 
-    async def _fill_cover_letter(
-        self, content: str, questions: list[FormQuestion]
-    ) -> str | None:
+    async def _fill_cover_letter(self, content: str, questions: list[FormQuestion]) -> str | None:
         """Paste the cover letter into the free-text box; return the field used.
 
         Pasted rather than typed: a letter is hundreds of characters and
@@ -690,8 +679,7 @@ class EasyApplyModal:
             for question in questions
             if question.kind == "textarea"
             and any(
-                marker in _normalize(question.label)
-                for marker in sel.EasyApply.COVER_LETTER_LABELS
+                marker in _normalize(question.label) for marker in sel.EasyApply.COVER_LETTER_LABELS
             )
         ]
         if not candidates:
@@ -886,10 +874,8 @@ class EasyApplyModal:
         close = await self._browser.find_first_or_none(sel.EasyApply.CLOSE_BUTTON, timeout=2_500)
         if close is None:
             return
-        try:
+        with suppress(PlaywrightError, PlaywrightTimeoutError):
             await close.click(timeout=5_000)
-        except (PlaywrightError, PlaywrightTimeoutError):
-            pass
 
 
 def _normalize(value: str | None) -> str:

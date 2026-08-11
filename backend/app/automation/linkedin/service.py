@@ -60,7 +60,9 @@ class LinkedInBrowserService:
 
     # --- Configuration ----------------------------------------------------
 
-    def configure(self, *, throttle: Throttle | None = None, resume_path: str | None = None) -> None:
+    def configure(
+        self, *, throttle: Throttle | None = None, resume_path: str | None = None
+    ) -> None:
         """Refresh the per-user knobs without recreating the browser session."""
         if throttle is not None:
             self.throttle = throttle

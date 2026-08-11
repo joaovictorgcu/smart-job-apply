@@ -77,7 +77,7 @@ class Search:
     RESULTS_CONTAINER: Final[tuple[str, ...]] = (
         "css=div.jobs-search-results-list",
         "css=.scaffold-layout__list > div",
-        'div[data-results-list-top-scroll-sentinel] ~ ul',
+        "div[data-results-list-top-scroll-sentinel] ~ ul",
         "css=ul.jobs-search__results-list",
     )
 
@@ -86,6 +86,14 @@ class Search:
         "css=div.job-card-container[data-job-id]",
         "css=li.jobs-search-results__list-item",
         "css=ul.jobs-search__results-list > li",
+    )
+
+    # Plain-CSS union of JOB_CARD: a results list can mix variants, so the cards
+    # are collected in one query instead of stopping at the first matching
+    # selector. Overlapping matches are deduplicated by job id downstream.
+    JOB_CARD_UNION: Final[str] = (
+        "li[data-occludable-job-id], div.job-card-container[data-job-id], "
+        "li.jobs-search-results__list-item, ul.jobs-search__results-list > li"
     )
 
     # Attributes carrying the numeric job id, checked in order on each card.
@@ -132,11 +140,11 @@ class Search:
     CARD_APPLIED_MARKER: Final[tuple[str, ...]] = (
         "css=.job-card-container__footer-job-state",
         "css=li.job-card-container__footer-item--highlighted",
-        'text=/^(Applied|Candidatura enviada|Já se candidatou)/i',
+        "text=/^(Applied|Candidatura enviada|Já se candidatou)/i",
     )
 
     CARD_EASY_APPLY_MARKER: Final[tuple[str, ...]] = (
-        'text=/Easy Apply|Candidatura simplificada/i',
+        "text=/Easy Apply|Candidatura simplificada/i",
         "css=.job-card-container__apply-method",
     )
 
@@ -148,7 +156,7 @@ class Search:
 
     NO_RESULTS: Final[tuple[str, ...]] = (
         "css=.jobs-search-no-results-banner",
-        'text=/No matching jobs found|Nenhuma vaga encontrada/i',
+        "text=/No matching jobs found|Nenhuma vaga encontrada/i",
     )
 
     # Text values LinkedIn uses to qualify the workplace arrangement on a card.
@@ -213,7 +221,7 @@ class JobDetail:
     APPLIED_BANNER: Final[tuple[str, ...]] = (
         "css=.jobs-s-apply__application-submitted",
         "css=.artdeco-inline-feedback--success",
-        'text=/Applied|Application submitted|Candidatura enviada/i',
+        "text=/Applied|Application submitted|Candidatura enviada/i",
     )
 
     POSTED_TIME: Final[tuple[str, ...]] = (
@@ -261,7 +269,7 @@ class EasyApply:
 
     # One wrapper per question. Radio/checkbox groups arrive as fieldsets.
     FORM_GROUPS: Final[tuple[str, ...]] = (
-        'div[data-test-form-element]',
+        "div[data-test-form-element]",
         "css=.jobs-easy-apply-form-section__grouping",
         "css=.fb-dash-form-element",
         "css=.jobs-easy-apply-form-element",
@@ -292,11 +300,11 @@ class EasyApply:
 
     SELECT: Final[tuple[str, ...]] = (
         "css=select",
-        'div[data-test-text-entity-list-form-component] select',
+        "div[data-test-text-entity-list-form-component] select",
     )
 
     RADIO_FIELDSET: Final[tuple[str, ...]] = (
-        'fieldset[data-test-form-builder-radio-button-form-component]',
+        "fieldset[data-test-form-builder-radio-button-form-component]",
         "css=fieldset.jobs-easy-apply-form-element__fieldset",
         "css=fieldset",
     )
@@ -315,7 +323,7 @@ class EasyApply:
     RESUME_CARD: Final[tuple[str, ...]] = (
         "css=.jobs-document-upload-redesign-card__container",
         "css=.jobs-resume-picker__resume",
-        'div[data-test-jobs-document-upload-redesign-card]',
+        "div[data-test-jobs-document-upload-redesign-card]",
     )
 
     UPLOAD_RESUME_BUTTON: Final[tuple[str, ...]] = (
@@ -353,7 +361,7 @@ class EasyApply:
         'button[aria-label="Continue to next step"]',
         'role=button[name="Next"i]',
         'role=button[name="Avançar"i]',
-        'button[data-easy-apply-next-button]',
+        "button[data-easy-apply-next-button]",
     )
 
     REVIEW_BUTTON: Final[tuple[str, ...]] = (
@@ -386,13 +394,13 @@ class EasyApply:
     # Post-submit confirmation ("Your application was sent to ...").
     SUBMIT_CONFIRMATION: Final[tuple[str, ...]] = (
         "css=.jobs-easy-apply-confirmation",
-        'text=/Your application was sent|Sua candidatura foi enviada/i',
+        "text=/Your application was sent|Sua candidatura foi enviada/i",
         "css=.artdeco-modal__content .jobs-post-apply-confirmation",
     )
 
     VALIDATION_ERROR: Final[tuple[str, ...]] = (
         "css=.artdeco-inline-feedback--error",
-        'div[data-test-form-element-error-messages]',
+        "div[data-test-form-element-error-messages]",
         "css=.fb-dash-form-element__error-text",
     )
 
