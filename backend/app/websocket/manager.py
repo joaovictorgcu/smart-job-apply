@@ -1,8 +1,8 @@
-"""Broadcast de eventos por usuário via WebSocket.
+"""Per-user event broadcasting over WebSocket.
 
-Isolamento por usuário é obrigatório: um usuário nunca deve ver a atividade de
-outro. Publicar nunca levanta exceção — a automação não pode quebrar porque uma
-aba do painel fechou.
+Per-user isolation is mandatory: one user must never see another user's activity.
+Publishing never raises — the automation must not break just because a dashboard
+tab was closed.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from app.observability.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Últimos eventos por usuário, para o painel reconstruir o feed ao (re)conectar.
+# Latest events per user, so the dashboard can rebuild the feed on (re)connect.
 _HISTORY_LIMIT = 200
 
 
@@ -43,7 +43,7 @@ class ConnectionManager:
         return list(self._history.get(user_id, []))
 
     async def publish(self, user_id: int, event: Event) -> None:
-        """Envia para todas as abas abertas do usuário; ignora falhas de envio."""
+        """Send to every open tab of the user; send failures are ignored."""
         self._remember(user_id, event)
         payload = event.model_dump(mode="json")
 
@@ -54,7 +54,7 @@ class ConnectionManager:
         for connection in targets:
             try:
                 await connection.send_json(payload)
-            except Exception:  # conexão caiu no meio do envio
+            except Exception:  # the connection dropped mid-send
                 dead.append(connection)
 
         for connection in dead:

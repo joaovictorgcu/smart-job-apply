@@ -1,4 +1,4 @@
-"""Candidaturas e sua trilha de eventos."""
+"""Applications and their event trail."""
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ class ApplicationDetail(ApplicationRead):
 
 
 class ApplicationUpdate(BaseModel):
-    """Edições do usuário na revisão, antes de aprovar o envio."""
+    """The user's edits during review, before approving the submission."""
 
     cover_letter: str | None = None
     screening_answers: list[ScreeningAnswer] | None = None

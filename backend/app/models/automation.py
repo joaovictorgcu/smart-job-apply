@@ -1,4 +1,4 @@
-"""Execuções de automação — permitem retomar, auditar e parar (kill switch)."""
+"""Automation runs — they make resuming, auditing and stopping (kill switch) possible."""
 
 from __future__ import annotations
 
@@ -17,10 +17,10 @@ if TYPE_CHECKING:
 
 
 class AutomationRun(Base, TimestampMixin):
-    """Uma execução do engine (busca, preparação ou envio).
+    """A single engine run (search, prepare or submit).
 
-    `checkpoint` guarda o progresso para retomar depois de uma falha, e
-    `stop_requested` é o kill switch cooperativo lido pelo engine entre passos.
+    `checkpoint` stores the progress so a run can resume after a failure, and
+    `stop_requested` is the cooperative kill switch the engine reads between steps.
     """
 
     __tablename__ = "automation_runs"
@@ -47,7 +47,7 @@ class AutomationRun(Base, TimestampMixin):
     stop_requested: Mapped[bool] = mapped_column(Boolean, default=False)
     blocked_reason: Mapped[str | None] = mapped_column(String(300), default=None)
     error_message: Mapped[str | None] = mapped_column(Text, default=None)
-    # Estado para retomada, ex.: {"page": 2, "processed_ids": [...]}.
+    # Resume state, e.g. {"page": 2, "processed_ids": [...]}.
     checkpoint: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     started_at: Mapped[datetime | None] = mapped_column(default=None)
     finished_at: Mapped[datetime | None] = mapped_column(default=None)

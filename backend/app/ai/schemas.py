@@ -1,9 +1,9 @@
-"""Contrato de saída da IA — provider-agnóstico.
+"""AI output contract — provider-agnostic.
 
-Todo provedor (hoje Claude) deve devolver estas estruturas. Manter o formato aqui
-significa que trocar de modelo/provedor não vaza para os serviços nem para a API.
+Every provider (today, Claude) must return these structures. Keeping the format here
+means swapping model or provider never leaks into the services or the API.
 
-Formato consolidado (`JobAnalysis`):
+Consolidated format (`JobAnalysis`):
     {"score": 87, "reasons": [...], "missing_requirements": [...],
      "cover_letter": "...", "screening_answers": [...]}
 """
@@ -20,19 +20,19 @@ QuestionType = Literal["text", "textarea", "number", "select", "radio", "checkbo
 
 
 class JobScore(BaseModel):
-    """Aderência entre uma vaga e o perfil do usuário."""
+    """How well a job matches the user's profile."""
 
     model_config = ConfigDict(extra="ignore")
 
-    score: int = Field(ge=0, le=100, description="0-100; quanto o perfil atende a vaga.")
+    score: int = Field(ge=0, le=100, description="0-100; how well the profile fits the job.")
     reasons: list[str] = Field(
-        default_factory=list, description="Motivos objetivos da nota (pontos fortes)."
+        default_factory=list, description="Objective reasons for the score (strengths)."
     )
     missing_requirements: list[str] = Field(
-        default_factory=list, description="Requisitos da vaga que o perfil não cobre."
+        default_factory=list, description="Job requirements the profile does not cover."
     )
-    recommend_apply: bool = Field(description="Vale a pena candidatar-se?")
-    summary: str | None = Field(default=None, description="Uma frase de justificativa.")
+    recommend_apply: bool = Field(description="Is it worth applying?")
+    summary: str | None = Field(default=None, description="A one-sentence rationale.")
 
     @field_validator("score")
     @classmethod
@@ -41,10 +41,10 @@ class JobScore(BaseModel):
 
 
 class ScreeningAnswer(BaseModel):
-    """Resposta sugerida para uma pergunta de triagem.
+    """Suggested answer to a screening question.
 
-    `needs_review` (ou confiança baixa) faz o painel destacar o campo para o
-    usuário revisar antes de enviar — nunca chutamos silenciosamente.
+    `needs_review` (or a low confidence) makes the dashboard highlight the field so
+    the user reviews it before submitting — we never guess silently.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -55,7 +55,7 @@ class ScreeningAnswer(BaseModel):
     confidence: AnswerConfidence = AnswerConfidence.MEDIUM
     needs_review: bool = False
     reasoning: str | None = None
-    # Identificador do campo no formulário, quando conhecido (preenchido pela automação).
+    # Identifier of the form field, when known (filled in by the automation).
     field_id: str | None = None
 
     # A model validator, not a field validator: field validators are skipped when
@@ -70,7 +70,7 @@ class ScreeningAnswer(BaseModel):
 
 
 class ScreeningAnswerSet(BaseModel):
-    """Wrapper para saída estruturada (a raiz precisa ser um objeto)."""
+    """Wrapper for structured output (the root has to be an object)."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -81,11 +81,11 @@ class CoverLetter(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     content: str
-    language: str = Field(default="pt-BR", description="Idioma detectado/usado (ex.: pt-BR, en).")
+    language: str = Field(default="pt-BR", description="Detected/used language (e.g. pt-BR, en).")
 
 
 class JobAnalysis(BaseModel):
-    """Resultado consolidado da análise de uma vaga."""
+    """Consolidated result of a job analysis."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -97,13 +97,13 @@ class JobAnalysis(BaseModel):
     cover_letter: str | None = None
     cover_letter_language: str | None = None
     screening_answers: list[ScreeningAnswer] = Field(default_factory=list)
-    # A IA pode recusar (stop_reason="refusal"): sinaliza fallback manual.
+    # The AI may refuse (stop_reason="refusal"): this flags the manual fallback.
     refused: bool = False
     refusal_reason: str | None = None
 
 
 class AIUsage(BaseModel):
-    """Tokens/latência de uma chamada, para auditoria e custo."""
+    """Tokens/latency of a single call, for auditing and cost tracking."""
 
     model_config = ConfigDict(extra="ignore")
 

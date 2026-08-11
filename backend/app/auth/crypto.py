@@ -1,8 +1,8 @@
-"""Criptografia dos dados sensíveis em repouso (sessão do LinkedIn).
+"""Encryption of sensitive data at rest (the LinkedIn session).
 
-Usa Fernet (AES-128-CBC + HMAC) com a chave derivada de `ENCRYPTION_KEY` — ou de
-`SECRET_KEY` quando aquela não é definida. Trocar a chave torna os dados já
-gravados ilegíveis; nesse caso o usuário só precisa reconectar o LinkedIn.
+Uses Fernet (AES-128-CBC + HMAC) with a key derived from `ENCRYPTION_KEY` — or from
+`SECRET_KEY` when that one is not set. Changing the key makes already stored data
+unreadable; in that case the user only needs to reconnect LinkedIn.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from app.config import get_settings
 
 
 class DecryptionError(RuntimeError):
-    """A chave mudou ou o texto cifrado está corrompido."""
+    """The key changed or the ciphertext is corrupted."""
 
 
 @lru_cache
@@ -45,8 +45,8 @@ def decrypt_text(token: str) -> str:
         return _fernet().decrypt(token.encode("ascii")).decode("utf-8")
     except (InvalidToken, ValueError) as exc:
         raise DecryptionError(
-            "Não foi possível descriptografar os dados salvos. "
-            "Se ENCRYPTION_KEY/SECRET_KEY mudou, reconecte sua conta do LinkedIn."
+            "Could not decrypt the stored data. "
+            "If ENCRYPTION_KEY/SECRET_KEY changed, reconnect your LinkedIn account."
         ) from exc
 
 

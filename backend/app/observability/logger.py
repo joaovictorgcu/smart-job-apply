@@ -1,7 +1,7 @@
-"""Logging estruturado em JSON, com contexto por request/execução.
+"""Structured JSON logging, with per-request/per-run context.
 
-Nada de `print()`: cada linha sai como JSON com `user_id`, `job_id`,
-`application_id`, `run_id`, `action`, `status` e `error` quando existirem.
+No `print()`: every line comes out as JSON carrying `user_id`, `job_id`,
+`application_id`, `run_id`, `action`, `status` and `error` whenever they exist.
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ def configure_logging(level: str = "INFO", *, as_json: bool = True) -> None:
     root.handlers.clear()
     root.addHandler(handler)
     root.setLevel(level.upper())
-    # O access log do uvicorn duplica o que já registramos por request.
+    # The uvicorn access log duplicates what we already record per request.
     logging.getLogger("uvicorn.access").propagate = False
 
 
@@ -61,7 +61,7 @@ def get_logger(name: str) -> logging.LoggerAdapter:
 
 
 def bind_context(**values: Any) -> None:
-    """Acrescenta campos a todas as linhas de log da task atual."""
+    """Add fields to every log line emitted by the current task."""
     merged = {**_context.get({}), **{k: v for k, v in values.items() if v is not None}}
     _context.set(merged)
 

@@ -1,42 +1,42 @@
-"""Erros da automação.
+"""Automation errors.
 
-A hierarquia distingue o que é recuperável (tenta de novo) do que exige parar
-imediatamente — `SecurityCheckpointError` é a mais importante: nunca tentamos
-contornar uma verificação de segurança.
+The hierarchy separates what is recoverable (retry it) from what demands an
+immediate stop — `SecurityCheckpointError` is the most important one: we never try
+to work around a security verification.
 """
 
 from __future__ import annotations
 
 
 class AutomationError(RuntimeError):
-    """Base de todas as falhas de automação."""
+    """Base class for every automation failure."""
 
     recoverable = False
 
 
 class BrowserNotReadyError(AutomationError):
-    """O navegador não está aberto (ou morreu)."""
+    """The browser is not open (or it died)."""
 
     recoverable = True
 
 
 class NotLoggedInError(AutomationError):
-    """Sessão do LinkedIn ausente ou expirada; exige login manual do usuário."""
+    """LinkedIn session missing or expired; the user must log in manually."""
 
 
 class SecurityCheckpointError(AutomationError):
-    """CAPTCHA / verificação de segurança detectada.
+    """CAPTCHA / security verification detected.
 
-    Sinaliza parada total. Nunca tentar resolver ou burlar.
+    Signals a full stop. Never attempt to solve or bypass it.
     """
 
-    def __init__(self, reason: str = "Verificação de segurança detectada.") -> None:
+    def __init__(self, reason: str = "Security verification detected.") -> None:
         super().__init__(reason)
         self.reason = reason
 
 
 class UnexpectedPageError(AutomationError):
-    """A página não é a esperada (mudança de UI, redirecionamento, erro)."""
+    """The page is not the expected one (UI change, redirect, error)."""
 
     recoverable = True
 
@@ -46,30 +46,30 @@ class UnexpectedPageError(AutomationError):
 
 
 class ElementNotFoundError(UnexpectedPageError):
-    """Seletor não encontrado — provável mudança de interface do LinkedIn."""
+    """Selector not found — most likely a LinkedIn interface change."""
 
 
 class EasyApplyUnavailableError(AutomationError):
-    """A vaga não oferece Candidatura Simplificada (ou já foi respondida)."""
+    """The job does not offer Easy Apply (or it has already been answered)."""
 
 
 class AlreadyAppliedError(AutomationError):
-    """O LinkedIn indica que já existe candidatura para esta vaga."""
+    """LinkedIn reports that an application already exists for this job."""
 
 
 class ThrottleLimitError(AutomationError):
-    """Um guarda-corpo bloqueou a ação (limite diário ou fora do horário)."""
+    """A guardrail blocked the action (daily cap or outside working hours)."""
 
     def __init__(self, message: str) -> None:
         super().__init__(message)
 
 
 class StopRequestedError(AutomationError):
-    """Kill switch acionado pelo usuário."""
+    """Kill switch triggered by the user."""
 
 
 class ManualInputRequiredError(AutomationError):
-    """O formulário tem um campo que não podemos preencher com confiança."""
+    """The form has a field we cannot fill in confidently."""
 
     def __init__(self, message: str, *, questions: list[str] | None = None) -> None:
         super().__init__(message)

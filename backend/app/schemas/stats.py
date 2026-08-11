@@ -1,4 +1,4 @@
-"""Métricas do dashboard."""
+"""Dashboard metrics."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class ScoreBucket(BaseModel):
-    label: str  # ex.: "80-100"
+    label: str  # e.g. "80-100"
     count: int
 
 

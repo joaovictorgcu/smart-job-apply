@@ -1,4 +1,4 @@
-"""Usuário, perfil, configurações e status da conexão com o LinkedIn."""
+"""User, profile, settings and LinkedIn connection status."""
 
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ class UserSettingsRead(ORMModel):
 
 
 class UserSettingsUpdate(BaseModel):
-    # Teto de 50/dia: acima disso o padrão de uso deixa de parecer humano.
+    # Cap of 50/day: above that the usage pattern stops looking human.
     daily_cap: int | None = Field(default=None, ge=1, le=50)
     min_score: int | None = Field(default=None, ge=0, le=100)
     action_delay_min: float | None = Field(default=None, ge=0.5, le=60)
@@ -87,24 +87,24 @@ class UserSettingsUpdate(BaseModel):
             and self.action_delay_max is not None
             and self.action_delay_min > self.action_delay_max
         ):
-            raise ValueError("action_delay_min não pode ser maior que action_delay_max.")
+            raise ValueError("action_delay_min cannot be greater than action_delay_max.")
         if (
             self.apply_delay_min is not None
             and self.apply_delay_max is not None
             and self.apply_delay_min > self.apply_delay_max
         ):
-            raise ValueError("apply_delay_min não pode ser maior que apply_delay_max.")
+            raise ValueError("apply_delay_min cannot be greater than apply_delay_max.")
         if (
             self.working_hour_start is not None
             and self.working_hour_end is not None
             and self.working_hour_start >= self.working_hour_end
         ):
-            raise ValueError("working_hour_start deve ser menor que working_hour_end.")
+            raise ValueError("working_hour_start must be less than working_hour_end.")
         return self
 
 
 class LinkedInAccountRead(ORMModel):
-    """Só metadados. Nenhum cookie ou credencial sai pela API."""
+    """Metadata only. No cookie or credential ever leaves through the API."""
 
     display_name: str | None = None
     is_connected: bool = False
@@ -112,7 +112,7 @@ class LinkedInAccountRead(ORMModel):
 
 
 class SessionStatus(BaseModel):
-    """Estado atual do navegador/automação para o painel."""
+    """Current browser/automation state, for the dashboard."""
 
     browser_open: bool = False
     logged_in: bool = False

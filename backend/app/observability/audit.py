@@ -1,7 +1,7 @@
-"""Auditoria: grava `ApplicationEvent` e emite o evento correspondente no WS.
+"""Auditing: writes an `ApplicationEvent` and emits the matching WS event.
 
-Um único ponto de entrada para "registre isso e mostre ao usuário", garantindo
-que o histórico no banco e o feed ao vivo nunca fiquem fora de sincronia.
+A single entry point for "record this and show it to the user", which keeps the
+history in the database and the live feed from ever drifting apart.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from app.observability.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Mapeia o evento persistido para o evento ao vivo (quando o painel se importa).
+# Maps the persisted event to the live event (when the dashboard cares about it).
 _LIVE_EVENT: dict[ApplicationEventType, EventName] = {
     ApplicationEventType.JOB_FOUND: EventName.JOB_FOUND,
     ApplicationEventType.JOB_ANALYZED: EventName.JOB_ANALYZED,
@@ -39,7 +39,7 @@ async def record_event(
     job_id: int | None = None,
     user_id: int | None = None,
 ) -> ApplicationEvent:
-    """Persiste um passo da candidatura e devolve o registro criado."""
+    """Persist one application step and return the created record."""
     event = ApplicationEvent(
         application_id=application_id,
         run_id=run_id,
@@ -68,7 +68,7 @@ async def record_event(
 def to_live_event(
     event: ApplicationEvent, *, job_id: int | None = None, **extra: Any
 ) -> Event | None:
-    """Converte um evento persistido no evento de WS equivalente, se houver."""
+    """Convert a persisted event into the equivalent WS event, if there is one."""
     name = _LIVE_EVENT.get(event.event_type)
     if name is None:
         return None

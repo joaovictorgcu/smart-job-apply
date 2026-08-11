@@ -1,4 +1,4 @@
-"""Autenticação da aplicação (não do LinkedIn)."""
+"""Authentication for the application (not for LinkedIn)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from app.schemas.user import UserRead
 
 class RegisterRequest(BaseModel):
     email: EmailStr
-    # Mínimo 10 caracteres; 72 bytes é o limite do bcrypt.
+    # Minimum of 10 characters; 72 bytes is the bcrypt limit.
     password: str = Field(min_length=10, max_length=72)
     full_name: str | None = Field(default=None, max_length=200)
 

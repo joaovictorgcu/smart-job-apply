@@ -1,8 +1,8 @@
-"""Fronteira entre lógica de negócio e Playwright.
+"""Boundary between the business logic and Playwright.
 
-`Engine` → `LinkedInService` → Playwright. O engine e os serviços só conhecem
-estas estruturas; se o LinkedIn mudar a interface, o conserto fica confinado à
-implementação de `LinkedInService` (`automation/linkedin/*`) e `selectors.py`.
+`Engine` -> `LinkedInService` -> Playwright. The engine and the services know only
+these structures; if LinkedIn changes its interface, the fix stays confined to the
+`LinkedInService` implementation (`automation/linkedin/*`) and `selectors.py`.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ QuestionKind = Literal["text", "textarea", "number", "select", "radio", "checkbo
 
 @dataclass(slots=True)
 class SearchFilters:
-    """Filtros normalizados de busca (sem detalhes de URL do LinkedIn)."""
+    """Normalized search filters (no LinkedIn URL details)."""
 
     keywords: str
     location: str | None = None
@@ -29,7 +29,7 @@ class SearchFilters:
 
 @dataclass(slots=True)
 class JobPosting:
-    """Uma vaga como vista no LinkedIn (sem nada específico de Playwright)."""
+    """A job as seen on LinkedIn (nothing Playwright-specific)."""
 
     external_id: str
     title: str
@@ -45,7 +45,7 @@ class JobPosting:
 
 @dataclass(slots=True)
 class FormQuestion:
-    """Um campo do formulário de Candidatura Simplificada."""
+    """A single field of the Easy Apply form."""
 
     field_id: str
     label: str
@@ -57,7 +57,7 @@ class FormQuestion:
 
 @dataclass(slots=True)
 class FormAnswer:
-    """Valor a preencher em um campo."""
+    """A value to fill into a field."""
 
     field_id: str
     value: str
@@ -66,7 +66,7 @@ class FormAnswer:
 
 @dataclass(slots=True)
 class ApplicationDraft:
-    """Formulário preenchido, parado na etapa de revisão, aguardando aprovação."""
+    """A filled-in form, halted at the review step, awaiting approval."""
 
     job_external_id: str
     questions: list[FormQuestion] = field(default_factory=list)
@@ -93,61 +93,61 @@ class SessionState:
 
 @runtime_checkable
 class LinkedInService(Protocol):
-    """O que o engine pode pedir ao LinkedIn.
+    """What the engine is allowed to ask of LinkedIn.
 
-    Toda implementação deve levantar os erros de `automation.errors` — em
-    especial `SecurityCheckpointError`, que interrompe tudo.
+    Every implementation must raise the errors from `automation.errors` — above all
+    `SecurityCheckpointError`, which halts everything.
     """
 
     async def start(self) -> SessionState:
-        """Abre o navegador (restaurando a sessão salva, se houver)."""
+        """Open the browser (restoring the saved session, if there is one)."""
         ...
 
     async def stop(self) -> None:
-        """Fecha o navegador e persiste o estado da sessão."""
+        """Close the browser and persist the session state."""
         ...
 
     async def get_state(self) -> SessionState:
         ...
 
     async def wait_for_login(self, timeout_seconds: int = 300) -> SessionState:
-        """Espera o usuário logar manualmente na janela aberta."""
+        """Wait for the user to log in manually in the open window."""
         ...
 
     async def search_jobs(self, filters: SearchFilters) -> list[JobPosting]:
-        """Retorna vagas correspondentes (só Easy Apply se solicitado)."""
+        """Return matching jobs (Easy Apply only, if requested)."""
         ...
 
     async def fetch_job_details(self, external_id: str) -> JobPosting:
-        """Abre a vaga e retorna a descrição completa."""
+        """Open the job and return its full description."""
         ...
 
     async def open_easy_apply(self, external_id: str) -> list[FormQuestion]:
-        """Abre o modal de Candidatura Simplificada e devolve os campos do passo atual."""
+        """Open the Easy Apply modal and return the fields of the current step."""
         ...
 
     async def fill_and_advance(
         self, answers: list[FormAnswer], *, cover_letter: str | None = None
     ) -> ApplicationDraft:
-        """Preenche, avança os passos e **para** na revisão. Nunca envia."""
+        """Fill in, advance through the steps and **stop** at the review. Never submits."""
         ...
 
     async def submit(self) -> bool:
-        """Clica em enviar. Só é chamado após aprovação explícita do usuário."""
+        """Click submit. Only ever called after explicit user approval."""
         ...
 
     async def discard(self) -> None:
-        """Fecha o modal descartando o rascunho."""
+        """Close the modal, discarding the draft."""
         ...
 
     async def capture_screenshot(self, name: str) -> str | None:
-        """Captura a tela atual (para o painel e para debug)."""
+        """Capture the current screen (for the dashboard and for debugging)."""
         ...
 
 
 @dataclass(slots=True)
 class ProfileContext:
-    """Dados do usuário passados à IA e ao preenchimento (sem tocar no ORM)."""
+    """User data handed to the AI and to the form filling (without touching the ORM)."""
 
     full_name: str | None = None
     email: str | None = None

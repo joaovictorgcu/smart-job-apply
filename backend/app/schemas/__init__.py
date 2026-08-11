@@ -1,4 +1,4 @@
-"""Schemas de request/response da API."""
+"""API request/response schemas."""
 
 from app.schemas.application import (
     ApplicationDetail,

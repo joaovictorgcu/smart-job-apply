@@ -1,4 +1,4 @@
-"""Buscas e vagas."""
+"""Searches and jobs."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ class SearchBase(BaseModel):
     experience_levels: list[str] = Field(default_factory=list)
     date_posted: str | None = Field(default=None, max_length=30)
     easy_apply_only: bool = True
-    # Teto por execução — evita varreduras longas que chamam atenção.
+    # Per-run cap — avoids long sweeps that draw attention.
     max_results: int = Field(default=25, ge=1, le=100)
 
 

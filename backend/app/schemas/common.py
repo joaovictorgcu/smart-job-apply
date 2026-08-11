@@ -1,4 +1,4 @@
-"""Schemas utilitários."""
+"""Utility schemas."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ T = TypeVar("T")
 
 
 class ORMModel(BaseModel):
-    """Base para schemas lidos diretamente de modelos ORM."""
+    """Base for schemas read directly from ORM models."""
 
     model_config = ConfigDict(from_attributes=True)
 

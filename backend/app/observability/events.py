@@ -1,7 +1,7 @@
-"""Nomes canônicos dos eventos e o envelope enviado pelo WebSocket.
+"""Canonical event names and the envelope sent over the WebSocket.
 
-Esta é a fonte da verdade compartilhada entre backend e frontend: os tipos aqui
-espelham `frontend/src/types/events.ts`.
+This is the source of truth shared by backend and frontend: the types here mirror
+`frontend/src/types/events.ts`.
 """
 
 from __future__ import annotations
@@ -14,13 +14,13 @@ from pydantic import BaseModel, Field
 
 
 class EventName(StrEnum):
-    """Somente eventos que o painel realmente precisa acompanhar ao vivo."""
+    """Only the events the dashboard genuinely needs to follow live."""
 
     AUTOMATION_STARTED = "automation.started"
     AUTOMATION_PROGRESS = "automation.progress"
     AUTOMATION_STOPPED = "automation.stopped"
     AUTOMATION_ERROR = "automation.error"
-    AUTOMATION_BLOCKED = "automation.blocked"  # CAPTCHA / verificação de segurança
+    AUTOMATION_BLOCKED = "automation.blocked"  # CAPTCHA / security verification
 
     JOB_FOUND = "job.found"
     JOB_ANALYZED = "job.analyzed"
@@ -29,12 +29,12 @@ class EventName(StrEnum):
     APPLICATION_AWAITING_REVIEW = "application.awaiting_review"
     APPLICATION_COMPLETED = "application.completed"
 
-    SESSION_STATUS = "session.status"  # navegador aberto / login do LinkedIn
-    LOG = "log"  # linha de log para o feed de atividade
+    SESSION_STATUS = "session.status"  # browser open / LinkedIn login
+    LOG = "log"  # log line for the activity feed
 
 
 class Event(BaseModel):
-    """Envelope de um evento em tempo real."""
+    """Envelope of a real-time event."""
 
     name: EventName
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
