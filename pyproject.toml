@@ -25,6 +25,10 @@ dependencies = [
     "slowapi>=0.1.9",
     "python-multipart>=0.0.20",
     "PyYAML>=6.0",
+    # Extracts the resume text from an uploaded PDF so the AI has something to read
+    # without the user retyping it. Optional at runtime: a missing parser only means
+    # the text field is left for the user to fill in.
+    "pypdf>=5.1",
 ]
 
 [project.optional-dependencies]

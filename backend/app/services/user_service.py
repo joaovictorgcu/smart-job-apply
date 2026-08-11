@@ -7,6 +7,7 @@ session commits once, at the end of the request.
 from __future__ import annotations
 
 import asyncio
+import io
 from pathlib import Path
 
 from sqlalchemy import select
@@ -196,6 +197,47 @@ def resume_path(filename: str) -> Path:
     return get_settings().resumes_dir / filename
 
 
+# The extracted text is fed to the AI on every scoring call, so it is capped: past
+# this point a resume is padding, and the tokens are paid for on each request.
+MAX_EXTRACTED_RESUME_CHARS = 20_000
+
+
+def _extract_resume_text(content: bytes, suffix: str) -> str | None:
+    """Best-effort plain text from an uploaded resume.
+
+    The stored file is what LinkedIn receives; this text is what the AI actually
+    reads to score jobs and write cover letters. Extraction is therefore a
+    convenience, never a requirement: a scanned (image-only) PDF legitimately
+    yields nothing, and no failure here may block the upload.
+    """
+    try:
+        if suffix == ".pdf":
+            import pypdf
+
+            reader = pypdf.PdfReader(io.BytesIO(content))
+            if reader.is_encrypted:
+                # A password-protected resume cannot be read; the user pastes it.
+                return None
+            pages = (page.extract_text() or "" for page in reader.pages)
+        elif suffix == ".docx":
+            import docx  # python-docx, optional
+
+            document = docx.Document(io.BytesIO(content))
+            pages = (paragraph.text for paragraph in document.paragraphs)
+        else:
+            return None
+    except ImportError:
+        return None
+    except Exception:
+        # Corrupt file, unsupported encoding, parser bug — the upload still succeeded.
+        return None
+
+    text = "\n".join(part.strip() for part in pages if part and part.strip()).strip()
+    if not text:
+        return None
+    return text[:MAX_EXTRACTED_RESUME_CHARS]
+
+
 async def save_resume_file(
     session: AsyncSession, user: User, *, filename: str, content: bytes
 ) -> Profile:
@@ -219,6 +261,17 @@ async def save_resume_file(
         await asyncio.to_thread(resume_path(previous).unlink, missing_ok=True)
 
     profile.resume_filename = stored_name
+
+    # Pre-fill resume_text so the AI has something to reason about without the user
+    # retyping the resume. Only when empty: text the user wrote or corrected is
+    # theirs, and a re-upload must never silently discard it.
+    extracted_chars = 0
+    if not (profile.resume_text or "").strip():
+        extracted = await asyncio.to_thread(_extract_resume_text, content, suffix)
+        if extracted:
+            profile.resume_text = extracted
+            extracted_chars = len(extracted)
+
     await session.flush()
     logger.info(
         "Resume stored.",
@@ -227,6 +280,7 @@ async def save_resume_file(
             "status": "ok",
             "user_id": user.id,
             "bytes": len(content),
+            "extracted_chars": extracted_chars,
         },
     )
     return profile
