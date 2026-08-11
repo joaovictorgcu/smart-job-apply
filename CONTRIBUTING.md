@@ -171,7 +171,7 @@ than the solution, and say how you hit it. Features that reduce human oversight 
 
 ## Reporting a security issue
 
-Do not open a public issue. Email **joao.uchoa@globalthings.net** with what you found and how to reproduce
+Do not open a public issue. Email **jvgcu@cesar.school** with what you found and how to reproduce
 it. Credential handling, at-rest encryption, and cross-user data isolation are the areas most worth looking
 at.
 

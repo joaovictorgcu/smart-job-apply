@@ -536,7 +536,7 @@ guarantee**, and **nothing may bypass a security challenge**. Details, plus setu
 conventions, and the pre-PR checklist, in [CONTRIBUTING.md](CONTRIBUTING.md). By participating you agree to
 the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-Security issues: email **joao.uchoa@globalthings.net** rather than opening a public issue.
+Security issues: email **jvgcu@cesar.school** rather than opening a public issue.
 
 ## License
 
