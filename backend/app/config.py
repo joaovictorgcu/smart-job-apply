@@ -5,9 +5,10 @@ from __future__ import annotations
 import secrets
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = BACKEND_DIR.parent
@@ -51,14 +52,20 @@ class Settings(BaseSettings):
     # Conservative default guardrails — the user can adjust them in settings.
     default_daily_cap: int = 15
     default_min_score: int = 70
-    default_action_delay_range: tuple[float, float] = (2.5, 7.0)
-    default_apply_delay_range: tuple[float, float] = (45.0, 120.0)
-    default_working_hours: tuple[int, int] = (8, 20)
+    # NoDecode on every non-scalar field below: pydantic-settings JSON-decodes
+    # complex types straight from the environment source, before any validator
+    # runs, so "2.5,7.0" raised a JSONDecodeError instead of reaching _parse_range.
+    default_action_delay_range: Annotated[tuple[float, float], NoDecode] = (2.5, 7.0)
+    default_apply_delay_range: Annotated[tuple[float, float], NoDecode] = (45.0, 120.0)
+    default_working_hours: Annotated[tuple[int, int], NoDecode] = (8, 20)
     # Never submits an application without explicit confirmation from the user.
     assisted_mode_only: bool = True
 
     # --- Network ---
-    cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    cors_origins: Annotated[list[str], NoDecode] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
     rate_limit_default: str = "120/minute"
     rate_limit_auth: str = "10/minute"
 
@@ -72,13 +79,20 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
 
-    @field_validator("default_action_delay_range", "default_apply_delay_range", mode="before")
+    @field_validator(
+        "default_action_delay_range",
+        "default_apply_delay_range",
+        "default_working_hours",
+        mode="before",
+    )
     @classmethod
     def _parse_range(cls, value: object) -> object:
         if isinstance(value, str):
             parts = [p.strip() for p in value.split(",")]
             if len(parts) == 2:
-                return (float(parts[0]), float(parts[1]))
+                # Returned as strings so each field coerces to its own annotation:
+                # floats for the delay ranges, ints for the working-hours window.
+                return tuple(parts)
         return value
 
     @property
