@@ -1,6 +1,8 @@
 """Application authentication. Nothing here touches LinkedIn credentials."""
 
-from __future__ import annotations
+# No `from __future__ import annotations` here: slowapi wraps these endpoints, and
+# FastAPI would then resolve the string annotations against slowapi's module globals
+# instead of this one.
 
 from fastapi import APIRouter, Request, status
 

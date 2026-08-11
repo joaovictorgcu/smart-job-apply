@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
-
 from fastapi import APIRouter
+from pydantic import BaseModel
 
 from app.api.deps import CurrentUser, SessionDep
 from app.config import get_settings
