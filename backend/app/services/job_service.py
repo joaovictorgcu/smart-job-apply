@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.ai.schemas import CoverLetter, JobAnalysis
-from app.api.errors import NotFoundError, PreconditionFailedError
+from app.ai.schemas import CoverLetter
+from app.api.errors import NotFoundError, PreconditionFailedError, UpstreamError
 from app.automation.contracts import JobPosting
-from app.config import get_settings
-from app.models import AIAnalysis, AnalysisKind, Job, JobStatus, User, UserSettings
+from app.models import Job, JobStatus, User
 from app.observability import EventName, get_logger, make_event
 from app.schemas.job import JobDetail, JobRead
 from app.services import user_service
@@ -46,9 +43,7 @@ async def list_jobs(
     if search_id is not None:
         conditions.append(Job.search_id == search_id)
 
-    total_result = await session.execute(
-        select(func.count()).select_from(Job).where(*conditions)
-    )
+    total_result = await session.execute(select(func.count()).select_from(Job).where(*conditions))
     total = int(total_result.scalar_one())
 
     result = await session.execute(
@@ -62,9 +57,7 @@ async def list_jobs(
 
 
 async def get_job(session: AsyncSession, user: User, job_id: int) -> Job:
-    result = await session.execute(
-        _job_query().where(Job.id == job_id, Job.user_id == user.id)
-    )
+    result = await session.execute(_job_query().where(Job.id == job_id, Job.user_id == user.id))
     job = result.scalar_one_or_none()
     if job is None:
         raise NotFoundError("Job not found.")
@@ -75,9 +68,7 @@ async def get_jobs_by_ids(session: AsyncSession, user: User, job_ids: list[int])
     """Load the subset of `job_ids` that actually belongs to this user."""
     if not job_ids:
         return []
-    result = await session.execute(
-        _job_query().where(Job.user_id == user.id, Job.id.in_(job_ids))
-    )
+    result = await session.execute(_job_query().where(Job.user_id == user.id, Job.id.in_(job_ids)))
     return list(result.scalars().all())
 
 
@@ -169,17 +160,6 @@ async def count_by_status(session: AsyncSession, user: User) -> dict[str, int]:
     return counts
 
 
-def _split_ai_result(outcome: Any) -> tuple[Any, Any]:
-    """Accept either `result` or `(result, usage)` from the AI layer."""
-    if isinstance(outcome, tuple) and len(outcome) == 2:
-        return outcome[0], outcome[1]
-    return outcome, None
-
-
-def _model_name(usage: Any, user_settings: UserSettings) -> str:
-    return getattr(usage, "model", None) or user_settings.ai_model or get_settings().anthropic_model
-
-
 async def _require_described_job(session: AsyncSession, user: User, job_id: int) -> Job:
     job = await get_job(session, user, job_id)
     if not job.description:
@@ -190,44 +170,45 @@ async def _require_described_job(session: AsyncSession, user: User, job_id: int)
 
 
 async def analyze_job(session: AsyncSession, user: User, job_id: int) -> Job:
-    """Score a single job with the AI and persist both the score and the raw call.
+    """Score one job against the profile with the AI.
 
-    This module is the only place in the service layer that calls the AI, so a
-    change on that boundary stays a one-line fix.
+    The AI layer owns the scoring transaction: it appends the `AIAnalysis` audit
+    row and updates the job's score and status (including dropping it to `SKIPPED`
+    when the score is below the user's minimum). This function only supplies the
+    context and reports the outcome.
     """
     from app.ai import analyze_job as ai_analyze_job
 
     job = await _require_described_job(session, user, job_id)
     profile = await user_service.build_profile_context(session, user)
     user_settings = await user_service.get_or_create_settings(session, user)
-    posting = to_posting(job)
 
-    analysis, usage = _split_ai_result(await ai_analyze_job(profile=profile, job=posting))
-    if not isinstance(analysis, JobAnalysis):
-        analysis = JobAnalysis.model_validate(analysis)
-
-    model = _model_name(usage, user_settings)
-    session.add(
-        AIAnalysis(
-            user_id=user.id,
-            job_id=job.id,
-            kind=AnalysisKind.SCORING,
-            model=model,
-            result=analysis.model_dump(mode="json"),
-            input_tokens=getattr(usage, "input_tokens", None),
-            output_tokens=getattr(usage, "output_tokens", None),
-            latency_ms=getattr(usage, "latency_ms", None),
-            was_refusal=analysis.refused,
-        )
+    analysis = await ai_analyze_job(
+        session, user=user, job=job, profile_ctx=profile, settings_row=user_settings
     )
-
-    job.score = analysis.score
-    job.score_reasons = list(analysis.reasons)
-    job.missing_requirements = list(analysis.missing_requirements)
-    if job.status in {JobStatus.DISCOVERED, JobStatus.ANALYZED, JobStatus.SKIPPED}:
-        job.status = JobStatus.ANALYZED
-        job.skip_reason = None
     await session.flush()
+
+    if analysis.refused:
+        await manager.publish(
+            user.id,
+            make_event(
+                EventName.JOB_ANALYZED,
+                job_id=job.id,
+                message=f"Could not score {job.title}: {analysis.refusal_reason}",
+                level="warning",
+                data={"refused": True},
+            ),
+        )
+        logger.warning(
+            "Job scoring produced no score.",
+            extra={
+                "action": "job.analyze",
+                "status": "refused",
+                "user_id": user.id,
+                "job_id": job.id,
+            },
+        )
+        return job
 
     await manager.publish(
         user.id,
@@ -253,41 +234,28 @@ async def analyze_job(session: AsyncSession, user: User, job_id: int) -> Job:
 
 
 async def generate_cover_letter(session: AsyncSession, user: User, job_id: int) -> CoverLetter:
-    """Draft a cover letter for one job and record the call for cost auditing.
+    """Draft a cover letter for one job.
 
-    The result is returned to the user for review; it is not attached to any
-    application here, because that would change a draft without an explicit edit.
+    The AI layer records the call for cost auditing. The text is returned for the
+    user to review: attaching it to a draft is a separate, explicit edit.
     """
     from app.ai import generate_cover_letter as ai_generate_cover_letter
 
     job = await _require_described_job(session, user, job_id)
-    profile = await user_service.build_profile_context(session, user)
     user_settings = await user_service.get_or_create_settings(session, user)
-
-    letter, usage = _split_ai_result(
-        await ai_generate_cover_letter(
-            profile=profile,
-            job=to_posting(job),
-            tone=user_settings.cover_letter_tone,
-            language=user_settings.content_language,
+    if not user_settings.generate_cover_letter:
+        raise PreconditionFailedError(
+            "Cover letter generation is disabled in settings. Enable it and try again."
         )
-    )
-    if not isinstance(letter, CoverLetter):
-        letter = CoverLetter.model_validate(letter)
+    profile = await user_service.build_profile_context(session, user)
 
-    session.add(
-        AIAnalysis(
-            user_id=user.id,
-            job_id=job.id,
-            kind=AnalysisKind.COVER_LETTER,
-            model=_model_name(usage, user_settings),
-            result=letter.model_dump(mode="json"),
-            input_tokens=getattr(usage, "input_tokens", None),
-            output_tokens=getattr(usage, "output_tokens", None),
-            latency_ms=getattr(usage, "latency_ms", None),
-        )
+    letter = await ai_generate_cover_letter(
+        session, user=user, job=job, profile_ctx=profile, settings_row=user_settings
     )
     await session.flush()
+    if letter is None:
+        raise UpstreamError("The AI did not return a cover letter. Try again, or write it by hand.")
+
     logger.info(
         "Cover letter generated.",
         extra={

@@ -42,7 +42,12 @@ async def create_search(session: AsyncSession, user: User, payload: SearchCreate
     await session.flush()
     logger.info(
         "Search created.",
-        extra={"action": "search.create", "status": "ok", "user_id": user.id, "search_id": search.id},
+        extra={
+            "action": "search.create",
+            "status": "ok",
+            "user_id": user.id,
+            "search_id": search.id,
+        },
     )
     return search
 
@@ -62,7 +67,12 @@ async def delete_search(session: AsyncSession, user: User, search_id: int) -> No
     await session.execute(delete(Search).where(Search.id == search.id))
     logger.info(
         "Search deleted.",
-        extra={"action": "search.delete", "status": "ok", "user_id": user.id, "search_id": search_id},
+        extra={
+            "action": "search.delete",
+            "status": "ok",
+            "user_id": user.id,
+            "search_id": search_id,
+        },
     )
 
 

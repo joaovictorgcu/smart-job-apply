@@ -20,6 +20,7 @@ request's session — only identifiers and plain contract objects.
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 from collections.abc import Callable, Coroutine
 from typing import Any
@@ -102,6 +103,28 @@ async def _call_engine(method_name: str, *args: Any, **kwargs: Any) -> Any:
 async def _engine_coroutine(method_name: str, *args: Any, **kwargs: Any) -> Any:
     """Single awaitable the engine's task runner can supervise."""
     return await _call_engine(method_name, *args, **kwargs)
+
+
+# asyncio keeps only a weak reference to a task, so fire-and-forget work needs one.
+_detached: set[asyncio.Task[Any]] = set()
+
+
+def _spawn_detached(coroutine: Coroutine[Any, Any, Any], *, label: str, user_id: int) -> None:
+    """Run short engine work that must not go through the run launcher."""
+
+    async def guarded() -> None:
+        try:
+            await coroutine
+        except Exception as exc:
+            logger.error(
+                f"Detached automation call '{label}' failed.",
+                exc_info=exc,
+                extra={"action": f"automation.{label}", "status": "error", "user_id": user_id},
+            )
+
+    task = asyncio.create_task(guarded())
+    _detached.add(task)
+    task.add_done_callback(_detached.discard)
 
 
 def _ensure_engine_free(user_id: int) -> None:
@@ -390,8 +413,6 @@ async def start_search_run(
     background: BackgroundTasks | None = None,
 ) -> AutomationRun:
     """Search (and optionally score) jobs. This path never submits anything."""
-    _ensure_engine_free(user.id)
-
     filters: SearchFilters
     if payload.search_id is not None:
         search = await search_service.get_search(session, user, payload.search_id)
@@ -420,6 +441,8 @@ async def start_search_run(
             max_results=payload.max_results,
         )
 
+    # Checked after validation so a malformed request is reported as such.
+    _ensure_engine_free(user.id)
     run = await create_run(session, user, AutomationRunKind.SEARCH, search_id=payload.search_id)
     run_id = run.id
     user_id = user.id
@@ -447,12 +470,12 @@ async def start_prepare_run(
         raise PreconditionFailedError(
             "Preparation requires confirmation: review the preview and send 'confirmed': true."
         )
-    _ensure_engine_free(user.id)
 
     jobs = await job_service.get_jobs_by_ids(session, user, payload.job_ids)
     eligible = [job for job in jobs if job.status != JobStatus.APPLIED]
     if not eligible:
         raise ValidationError("None of the selected jobs can be prepared.")
+    _ensure_engine_free(user.id)
 
     run = await create_run(session, user, AutomationRunKind.PREPARE)
     run_id = run.id
@@ -550,20 +573,27 @@ async def submit_application(
 
 
 async def stop_all(session: AsyncSession, user: User) -> int:
-    """Kill switch: stop cooperatively now, then cancel the task after the response.
+    """Kill switch: flag the runs, stop the engine cooperatively, then cancel it.
 
-    Returns how many runs were live. The engine owns the `stop_requested` writes so
-    this request's transaction never holds the rows its background job needs; when
-    the engine is unreachable, the flags are written here instead.
+    Returns how many runs were live. The flags are written in this transaction so a
+    client that reads `/automation/runs` right after this call sees the truth; the
+    engine writes the same flags again from its own session, which is idempotent.
     """
     active = await _active_runs(session, user)
+    for run in active:
+        run.stop_requested = True
+        if run.status == AutomationRunStatus.PENDING:
+            # Never picked up, so nothing will ever finish it.
+            run.status = AutomationRunStatus.STOPPED
+            run.finished_at = utcnow()
+    await session.flush()
 
     try:
-        # Synchronous and immediate: the running loop notices at its next step.
+        # Immediate and in-memory: the running loop notices at its next step.
         await _call_engine("request_stop", user.id)
     except (AutomationError, AttributeError) as exc:
         logger.warning(
-            "The engine could not be notified; flagging the runs directly.",
+            "The engine could not be notified; the run flags alone will stop it.",
             extra={
                 "action": "automation.stop",
                 "status": "degraded",
@@ -571,12 +601,6 @@ async def stop_all(session: AsyncSession, user: User) -> int:
                 "error_type": type(exc).__name__,
             },
         )
-        for run in active:
-            run.stop_requested = True
-            if run.status == AutomationRunStatus.PENDING:
-                run.status = AutomationRunStatus.STOPPED
-                run.finished_at = utcnow()
-        await session.flush()
         await manager.publish(
             user.id,
             make_event(
@@ -587,13 +611,9 @@ async def stop_all(session: AsyncSession, user: User) -> int:
             ),
         )
     else:
-        user_id = user.id
-        _schedule(
-            background=None,
-            factory=lambda: _engine_coroutine("stop_all", user_id),
-            label="stop",
-            user_id=user_id,
-        )
+        # Deliberately not through `_launch`: the engine's run launcher refuses to
+        # start while a run is in flight, and it clears the stop flag we just set.
+        _spawn_detached(_engine_coroutine("stop_all", user.id), label="stop", user_id=user.id)
 
     logger.warning(
         "Kill switch activated.",

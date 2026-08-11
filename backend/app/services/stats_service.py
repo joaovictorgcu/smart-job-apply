@@ -32,9 +32,7 @@ async def build_dashboard_stats(session: AsyncSession, user: User) -> DashboardS
             func.count(Job.id),
             func.avg(Job.score),
             *[
-                func.sum(
-                    case((Job.score.between(low, high), 1), else_=0)
-                ).label(f"bucket_{low}")
+                func.sum(case((Job.score.between(low, high), 1), else_=0)).label(f"bucket_{low}")
                 for _, low, high in _SCORE_BUCKETS
             ],
         ).where(Job.user_id == user.id)

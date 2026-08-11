@@ -52,9 +52,7 @@ def start_of_day(reference: datetime | None = None) -> datetime:
 
 async def get_application(session: AsyncSession, user: User, application_id: int) -> Application:
     result = await session.execute(
-        _application_query().where(
-            Application.id == application_id, Application.user_id == user.id
-        )
+        _application_query().where(Application.id == application_id, Application.user_id == user.id)
     )
     application = result.scalar_one_or_none()
     if application is None:
@@ -255,9 +253,7 @@ async def count_submitted_today(session: AsyncSession, user: User) -> int:
     return int(result.scalar_one())
 
 
-async def count_by_status(
-    session: AsyncSession, user: User, status: ApplicationStatus
-) -> int:
+async def count_by_status(session: AsyncSession, user: User, status: ApplicationStatus) -> int:
     result = await session.execute(
         select(func.count())
         .select_from(Application)
