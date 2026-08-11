@@ -14,6 +14,8 @@ import { errorMessage } from '@/services/client';
 import type { Job } from '@/types/api';
 
 const PAGE_SIZE = 20;
+/** Mirrors the max_length on PrepareRequest.job_ids; more is rejected as a 422. */
+const MAX_PREPARE_BATCH = 50;
 
 function sortJobs(jobs: Job[], sort: JobFiltersValue['sort']): Job[] {
   const copy = [...jobs];
@@ -62,6 +64,7 @@ export function Jobs() {
   const items = useMemo(() => sortJobs(data?.items ?? [], filters.sort), [data, filters.sort]);
   const pageIds = items.map((job) => job.id);
   const allOnPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.includes(id));
+  const overBatchLimit = selectedIds.length > MAX_PREPARE_BATCH;
 
   const changeFilters = (next: JobFiltersValue) => {
     setFilters(next);
@@ -161,11 +164,24 @@ export function Jobs() {
             <Button
               variant="primary"
               className="ml-auto"
+              disabled={overBatchLimit}
+              title={
+                overBatchLimit
+                  ? `Select at most ${MAX_PREPARE_BATCH} jobs per batch`
+                  : 'Preview what filling these forms would do'
+              }
               onClick={openPreview}
               icon={<Wand2 aria-hidden className="h-4 w-4" />}
             >
               Prepare applications…
             </Button>
+
+            {overBatchLimit ? (
+              <p className="w-full text-xs leading-relaxed text-warning">
+                A batch is capped at {MAX_PREPARE_BATCH} jobs. Deselect{' '}
+                {formatNumber(selectedIds.length - MAX_PREPARE_BATCH)} and run the rest afterwards.
+              </p>
+            ) : null}
           </Card>
         </div>
       ) : null}
