@@ -6,8 +6,10 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.api.deps import CurrentUser, SessionDep
+from app.api.errors import NotFoundError
 from app.config import get_settings
-from app.services import job_service, user_service
+from app.schemas.tailoring import TailoredResumeRead, TailoredResumeUpdate
+from app.services import job_service, tailoring_service, user_service
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -44,3 +46,39 @@ async def create_cover_letter(
     """
     letter = await job_service.generate_cover_letter(session, user, job_id)
     return CoverLetterResponse(content=letter.content, language=letter.language)
+
+
+@router.post("/tailor-cv/{job_id}", response_model=TailoredResumeRead)
+async def create_tailored_cv(
+    job_id: int, user: CurrentUser, session: SessionDep
+) -> TailoredResumeRead:
+    """Adapt the user's resume to one job — reorganized and re-emphasized, never invented.
+
+    Overwrites any previous draft for this job. The response carries the change
+    list, requirements the resume cannot back, and the invention guard's flags.
+    """
+    row = await tailoring_service.create_tailored_resume(session, user, job_id)
+    current = await tailoring_service.current_fingerprint(session, user)
+    return tailoring_service.to_read(row, current=current)
+
+
+@router.get("/tailor-cv/{job_id}", response_model=TailoredResumeRead)
+async def read_tailored_cv(
+    job_id: int, user: CurrentUser, session: SessionDep
+) -> TailoredResumeRead:
+    """The stored tailored resume for one job, or 404 if none has been generated."""
+    row = await tailoring_service.get_tailored_resume(session, user, job_id)
+    if row is None:
+        raise NotFoundError("No tailored resume for this job yet.")
+    current = await tailoring_service.current_fingerprint(session, user)
+    return tailoring_service.to_read(row, current=current)
+
+
+@router.patch("/tailor-cv/{job_id}", response_model=TailoredResumeRead)
+async def update_tailored_cv(
+    job_id: int, payload: TailoredResumeUpdate, user: CurrentUser, session: SessionDep
+) -> TailoredResumeRead:
+    """Save the user's edits to the tailored resume and re-check it for invention."""
+    row = await tailoring_service.update_tailored_resume(session, user, job_id, payload.content)
+    current = await tailoring_service.current_fingerprint(session, user)
+    return tailoring_service.to_read(row, current=current)

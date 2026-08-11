@@ -33,12 +33,14 @@ from app.ai.prompts.cover_letter import (
 )
 from app.ai.prompts.scoring import SCORING_SYSTEM_PROMPT, build_scoring_prompt
 from app.ai.prompts.screening import SCREENING_SYSTEM_PROMPT, build_screening_prompt
+from app.ai.prompts.tailoring import TAILORING_SYSTEM_PROMPT, build_tailoring_prompt
 from app.ai.schemas import (
     AIUsage,
     CoverLetter,
     JobScore,
     ScreeningAnswer,
     ScreeningAnswerSet,
+    TailoredResume,
 )
 from app.automation.contracts import FormQuestion, ProfileContext
 from app.config import get_settings
@@ -52,6 +54,9 @@ logger = get_logger(__name__)
 SCORING_MAX_TOKENS = 8192
 SCREENING_MAX_TOKENS = 8192
 COVER_LETTER_MAX_TOKENS = 4096
+# A whole resume plus the structured change list; generous so a long CV is not
+# truncated mid-document (thinking shares this budget on Opus 5).
+TAILORING_MAX_TOKENS = 12288
 
 # Cover letters and screening answers are low-volume and correctness-sensitive;
 # only bulk scoring uses the cheaper effort from settings.
@@ -142,6 +147,79 @@ def detect_language(text: str | None) -> str:
     portuguese = sum(1 for word in words if word in _PORTUGUESE_MARKERS)
     english = sum(1 for word in words if word in _ENGLISH_MARKERS)
     return "pt-BR" if portuguese > english else "en"
+
+
+# Common technologies whose presence in a tailored resume but absence from the
+# source is the clearest, most checkable sign of invention. Lowercased; matched as
+# whole words. Not exhaustive by design — the structural checks below catch the
+# long tail (CamelCase and alphanumeric tokens like FastAPI, PostgreSQL, OAuth2).
+_KNOWN_TECHNOLOGIES = frozenset(
+    {
+        "python", "java", "javascript", "typescript", "golang", "rust", "ruby",
+        "php", "kotlin", "swift", "scala", "elixir", "clojure", "haskell", "perl",
+        "django", "flask", "fastapi", "rails", "laravel", "spring", "express",
+        "nestjs", "react", "angular", "vue", "svelte", "nextjs", "nuxt", "jquery",
+        "node", "deno", "bun", "graphql", "grpc", "rest", "soap", "webpack", "vite",
+        "postgresql", "postgres", "mysql", "mariadb", "sqlite", "oracle", "mongodb",
+        "redis", "cassandra", "elasticsearch", "dynamodb", "snowflake", "clickhouse",
+        "kafka", "rabbitmq", "celery", "airflow", "spark", "hadoop", "flink", "dbt",
+        "docker", "kubernetes", "terraform", "ansible", "puppet", "chef", "helm",
+        "jenkins", "gitlab", "github", "circleci", "argocd", "prometheus", "grafana",
+        "aws", "azure", "gcp", "heroku", "vercel", "netlify", "cloudflare", "lambda",
+        "tensorflow", "pytorch", "keras", "sklearn", "pandas", "numpy", "scipy",
+        "kubeflow", "mlflow", "langchain", "opencv", "huggingface", "transformers",
+        "playwright", "selenium", "cypress", "jest", "pytest", "junit", "mocha",
+        "linux", "bash", "nginx", "apache", "kong", "istio", "consul", "vault",
+        "git", "jira", "confluence", "figma", "tableau", "powerbi", "looker",
+        "sql", "nosql", "html", "css", "sass", "tailwind", "bootstrap", "wasm",
+    }
+)
+
+# CamelCase like FastAPI, PostgreSQL, JavaScript, GraphQL.
+_CAMELCASE = re.compile(r"\b[A-Za-z]*[a-z][A-Z][A-Za-z]*\b")
+# Alphanumeric tokens like S3, OAuth2, Python3, k8s, EC2, gpt4 — almost always tech.
+_ALNUM_TOKEN = re.compile(r"\b(?:[A-Za-z]+\d+[A-Za-z\d]*|\d+[A-Za-z]+[A-Za-z\d]*)\b")
+# A word token, allowing an internal `.`/`+`/`#` (node.js, asp.net) but never a
+# trailing one — otherwise "Kubernetes." captures the sentence period and no longer
+# matches a known technology.
+_ALPHA_WORD = re.compile(r"[a-z][a-z0-9]*(?:[.+#][a-z0-9]+)*")
+# Same shape, original-cased, so a flagged term keeps the casing the model wrote.
+_ORIG_WORD = re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[.+#][A-Za-z0-9]+)*")
+
+
+def flag_unsupported_skills(source_text: str, tailored_text: str) -> list[str]:
+    """Technologies present in the tailored resume but absent from the source.
+
+    A programmatic safety net for the "never invent" rule: it does not trust the
+    model to have obeyed. It targets the most checkable class of invention —
+    fabricated tools and technologies — by comparing tech-shaped tokens in the
+    tailored text against everything the candidate actually provided.
+
+    It cannot catch an invented *achievement* phrased in plain words, and it errs
+    toward over-flagging (a company name in CamelCase may surface). That is by
+    design: every item is a "verify this yourself" prompt to the human, never an
+    automatic block. Missing a real invention is the failure to avoid.
+    """
+    source = _fold(source_text or "")
+    source_words = set(_ALPHA_WORD.findall(source))
+
+    def supported(token: str) -> bool:
+        folded = _fold(token)
+        # Whole-word membership, or a substring for multi-part tokens the word
+        # split would break apart (e.g. "node.js" folding to "node js").
+        return folded in source_words or folded in source
+
+    flagged: dict[str, str] = {}  # folded -> original casing (first seen)
+    for match in _CAMELCASE.findall(tailored_text) + _ALNUM_TOKEN.findall(tailored_text):
+        if not supported(match):
+            flagged.setdefault(_fold(match), match)
+
+    for token in _ORIG_WORD.findall(tailored_text):
+        folded = _fold(token)
+        if folded in _KNOWN_TECHNOLOGIES and not supported(token):
+            flagged.setdefault(folded, token)
+
+    return sorted(flagged.values(), key=str.lower)
 
 
 def _is_retryable(error: Exception) -> bool:
@@ -472,6 +550,58 @@ class AIClient:
         answers = [_reconcile_answer(answer, questions) for answer in parsed.answers]
         return answers, self._usage(response, started_at=started_at)
 
+    async def tailor_resume(
+        self,
+        profile: ProfileContext,
+        job: JobLike,
+    ) -> tuple[TailoredResume, AIUsage]:
+        """Adapt the candidate's resume to one posting, without inventing anything.
+
+        On refusal or unparseable output, returns an empty `TailoredResume` with
+        `AIUsage.refused` set so the caller degrades to "write it by hand".
+        """
+        started_at = time.perf_counter()
+        response = await self._send(
+            system=TAILORING_SYSTEM_PROMPT,
+            user_prompt=build_tailoring_prompt(profile, job),
+            max_tokens=TAILORING_MAX_TOKENS,
+            effort=QUALITY_EFFORT,
+            output_format=TailoredResume,
+        )
+
+        if response.stop_reason == "refusal":
+            category = _refusal_category(response)
+            logger.warning(
+                "Model declined to tailor the resume (category=%s).",
+                category,
+                extra={"action": "ai.tailor.refused", "refusal_category": category},
+            )
+            return (
+                TailoredResume(tailored_markdown=""),
+                self._usage(
+                    response, started_at=started_at, refused=True, refusal_category=category
+                ),
+            )
+
+        parsed = response.parsed_output
+        if parsed is None or not parsed.tailored_markdown.strip():
+            logger.warning(
+                "Tailoring response was empty or unparsable (stop_reason=%s).",
+                response.stop_reason,
+                extra={"action": "ai.tailor.unparsed", "stop_reason": response.stop_reason},
+            )
+            return (
+                TailoredResume(tailored_markdown=""),
+                self._usage(
+                    response,
+                    started_at=started_at,
+                    refused=True,
+                    refusal_category=f"unparsed_output:{response.stop_reason}",
+                ),
+            )
+
+        return parsed, self._usage(response, started_at=started_at)
+
 
 def _reconcile_answer(answer: ScreeningAnswer, questions: list[FormQuestion]) -> ScreeningAnswer:
     """Attach form metadata to a drafted answer and flag anything unfillable."""
@@ -554,5 +684,6 @@ __all__ = [
     "AINotConfiguredError",
     "detect_language",
     "estimate_cost_usd",
+    "flag_unsupported_skills",
     "get_ai_client",
 ]

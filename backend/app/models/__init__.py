@@ -10,7 +10,14 @@ from app.models.enums import (
     AutomationRunStatus,
     JobStatus,
 )
-from app.models.job import AIAnalysis, Application, ApplicationEvent, Job, Search
+from app.models.job import (
+    AIAnalysis,
+    Application,
+    ApplicationEvent,
+    Job,
+    Search,
+    TailoredResume,
+)
 from app.models.user import LinkedInAccount, Profile, User, UserSettings
 
 __all__ = [
@@ -29,6 +36,7 @@ __all__ = [
     "LinkedInAccount",
     "Profile",
     "Search",
+    "TailoredResume",
     "User",
     "UserSettings",
 ]

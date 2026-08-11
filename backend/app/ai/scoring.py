@@ -26,7 +26,7 @@ from app.ai.client import (
     estimate_cost_usd,
     get_ai_client,
 )
-from app.ai.schemas import AIUsage, CoverLetter, JobAnalysis, ScreeningAnswer
+from app.ai.schemas import AIUsage, CoverLetter, JobAnalysis, ScreeningAnswer, TailoredResume
 from app.automation.contracts import FormQuestion, ProfileContext
 from app.models.enums import AnalysisKind, AnswerConfidence, JobStatus
 from app.models.job import AIAnalysis
@@ -232,6 +232,61 @@ async def generate_cover_letter(
     return letter
 
 
+async def tailor_resume(
+    session: AsyncSession,
+    *,
+    user: Any,
+    job: Any,
+    profile_ctx: ProfileContext,
+    settings_row: Any,
+    client: AIClient | None = None,
+) -> TailoredResume | None:
+    """Adapt the resume to one job, persisting the call for audit and cost.
+
+    Returns `None` when the model refuses, fails, or returns nothing — the caller
+    surfaces that as "generate again or edit by hand". The invention guard runs in
+    the service layer, on the returned text.
+    """
+    ai = client or get_ai_client_for(settings_row)
+    try:
+        result, usage = await ai.tailor_resume(profile_ctx, job)
+    except AINotConfiguredError:
+        raise
+    except (anthropic.APIError, ValueError, RuntimeError) as exc:
+        logger.error(
+            "Resume tailoring failed for job_id=%s: %s",
+            getattr(job, "id", None),
+            exc,
+            extra={"action": "ai.tailor.failed", "job_id": getattr(job, "id", None)},
+        )
+        _persist_analysis(
+            session,
+            user_id=user.id,
+            job_id=getattr(job, "id", None),
+            kind=AnalysisKind.CV_TAILORING,
+            model=ai.model,
+            result={},
+            error_message=str(exc),
+        )
+        await session.flush()
+        return None
+
+    _persist_analysis(
+        session,
+        user_id=user.id,
+        job_id=getattr(job, "id", None),
+        kind=AnalysisKind.CV_TAILORING,
+        model=ai.model,
+        result=result.model_dump(mode="json"),
+        usage=usage,
+    )
+    await session.flush()
+
+    if usage.refused or not result.tailored_markdown.strip():
+        return None
+    return result
+
+
 async def answer_screening(
     session: AsyncSession,
     *,
@@ -382,4 +437,5 @@ __all__ = [
     "analyze_job",
     "answer_screening",
     "generate_cover_letter",
+    "tailor_resume",
 ]

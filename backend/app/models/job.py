@@ -96,6 +96,9 @@ class Job(Base, TimestampMixin):
     analyses: Mapped[list[AIAnalysis]] = relationship(
         back_populates="job", cascade="all, delete-orphan"
     )
+    tailored_resume: Mapped[TailoredResume | None] = relationship(
+        back_populates="job", cascade="all, delete-orphan", uselist=False
+    )
 
 
 class Application(Base, TimestampMixin):
@@ -193,3 +196,36 @@ class AIAnalysis(Base, TimestampMixin):
     cost_usd: Mapped[float | None] = mapped_column(Float, default=None)
 
     job: Mapped[Job | None] = relationship(back_populates="analyses")
+
+
+class TailoredResume(Base, TimestampMixin):
+    """A resume adapted to one job — reorganized and re-emphasized, never invented.
+
+    One per (user, job): re-tailoring the same job overwrites the draft. `content`
+    starts as the model's output and becomes the user's once they edit it.
+    `invention_flags` holds the invention-guard's output — technologies present in
+    the tailored text but absent from the source — for the user to verify.
+    """
+
+    __tablename__ = "tailored_resumes"
+    __table_args__ = (UniqueConstraint("job_id", name="uq_tailored_resume_job"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    job_id: Mapped[int] = mapped_column(
+        ForeignKey("jobs.id", ondelete="CASCADE"), unique=True, index=True
+    )
+
+    content: Mapped[str] = mapped_column(Text, default="")
+    # [{"section", "action", "detail"}] — the edits the model reported making.
+    changes: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    unsupported_requirements: Mapped[list[str]] = mapped_column(JSON, default=list)
+    invention_flags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    summary: Mapped[str | None] = mapped_column(Text, default=None)
+    model: Mapped[str | None] = mapped_column(String(100), default=None)
+    # Hash of the source resume when this was generated, to detect a stale draft
+    # after the user edits their profile.
+    source_fingerprint: Mapped[str | None] = mapped_column(String(64), default=None)
+    was_edited: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    job: Mapped[Job] = relationship(back_populates="tailored_resume")

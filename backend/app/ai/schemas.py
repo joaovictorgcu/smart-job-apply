@@ -84,6 +84,41 @@ class CoverLetter(BaseModel):
     language: str = Field(default="pt-BR", description="Detected/used language (e.g. pt-BR, en).")
 
 
+# Every allowed action operates on content that is ALREADY in the resume. There is
+# deliberately no "added" action: adding new experience would be invention, which
+# is the one thing tailoring must never do.
+CVChangeAction = Literal["reordered", "emphasized", "rephrased", "condensed", "omitted"]
+
+
+class CVChange(BaseModel):
+    """One edit the model made while tailoring the resume, for the user to see."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    section: str = Field(description="Which part of the resume changed.")
+    action: CVChangeAction
+    detail: str = Field(description="What changed and why it fits this job.")
+
+
+class TailoredResume(BaseModel):
+    """A resume adapted to one job — reorganized and re-emphasized, never invented.
+
+    `unsupported_requirements` is the honesty valve: anything the posting asks for
+    that the source resume cannot back is surfaced here rather than fabricated into
+    `tailored_markdown`.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    tailored_markdown: str = Field(description="The adapted resume, in Markdown.")
+    changes: list[CVChange] = Field(default_factory=list)
+    unsupported_requirements: list[str] = Field(
+        default_factory=list,
+        description="Requirements the source resume does not support (not invented).",
+    )
+    summary: str | None = Field(default=None, description="A one-line note on the approach.")
+
+
 class JobAnalysis(BaseModel):
     """Consolidated result of a job analysis."""
 

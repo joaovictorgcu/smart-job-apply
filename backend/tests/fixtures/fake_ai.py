@@ -22,7 +22,7 @@ from typing import Any
 import anthropic
 import httpx
 
-from app.ai.schemas import AIUsage, CoverLetter, JobScore, ScreeningAnswer
+from app.ai.schemas import AIUsage, CoverLetter, CVChange, JobScore, ScreeningAnswer, TailoredResume
 from app.models.enums import AnswerConfidence
 
 DEFAULT_MODEL = "claude-opus-5"
@@ -44,6 +44,14 @@ class FakeAIClient:
         cover_letter_text: str = "I am excited about this role and my background fits it well.",
         language: str = "en",
         answer_value: str = "7",
+        # Default tailored resume uses only technologies in the factory profile, so
+        # the invention guard stays quiet unless a test opts into an invention.
+        tailored_markdown: str = (
+            "# Candidate\n\n## Skills\nPython, FastAPI, PostgreSQL\n\n"
+            "## Experience\nBuilt and shipped Python APIs with FastAPI."
+        ),
+        tailor_changes: list[dict[str, str]] | None = None,
+        tailor_unsupported: list[str] | None = None,
         refused: bool = False,
         low_confidence: bool = False,
         api_error: bool = False,
@@ -61,6 +69,13 @@ class FakeAIClient:
         self.cover_letter_text = cover_letter_text
         self.language = language
         self.answer_value = answer_value
+        self.tailored_markdown = tailored_markdown
+        self.tailor_changes = (
+            tailor_changes
+            if tailor_changes is not None
+            else [{"section": "Skills", "action": "reordered", "detail": "Led with Python."}]
+        )
+        self.tailor_unsupported = tailor_unsupported if tailor_unsupported is not None else []
         self.refused = refused
         self.low_confidence = low_confidence
         self.api_error = api_error
@@ -157,6 +172,22 @@ class FakeAIClient:
         if self.refused:
             return [], usage
         return self.build_answers(questions), usage
+
+    async def tailor_resume(
+        self, profile: Any = None, job: Any = None, **_kwargs: Any
+    ) -> tuple[TailoredResume, AIUsage]:
+        usage = self._record("tailor_resume")
+        if self.refused:
+            return TailoredResume(tailored_markdown=""), usage
+        return (
+            TailoredResume(
+                tailored_markdown=self.tailored_markdown,
+                changes=[CVChange(**change) for change in self.tailor_changes],
+                unsupported_requirements=list(self.tailor_unsupported),
+                summary="Deterministic tailored resume.",
+            ),
+            usage,
+        )
 
     # --- helpers ----------------------------------------------------------
 
