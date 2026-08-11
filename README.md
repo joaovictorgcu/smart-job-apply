@@ -175,4 +175,4 @@ Ruff runs with `E, F, I, UP, B, SIM, ASYNC` at a 100-character line length; pyte
 
 ## License
 
-MIT.
+MIT — see [LICENSE](LICENSE).
