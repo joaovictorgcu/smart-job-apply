@@ -51,7 +51,7 @@ class TestScreeningAnswer:
     def test_low_confidence_forces_review(self) -> None:
         """The safety property: nothing low-confidence is submitted silently."""
         answer = ScreeningAnswer(question="Salary?", answer="120000", confidence="low")
-        assert answer.confidence is AnswerConfidence.LOW
+        assert answer.confidence == AnswerConfidence.LOW
         assert answer.needs_review is True
 
     def test_low_confidence_forces_review_when_the_model_says_otherwise(self) -> None:
@@ -73,7 +73,7 @@ class TestScreeningAnswer:
 
     def test_defaults_to_medium_confidence_and_unknown_type(self) -> None:
         answer = ScreeningAnswer(question="Salary?", answer="120000")
-        assert answer.confidence is AnswerConfidence.MEDIUM
+        assert answer.confidence == AnswerConfidence.MEDIUM
         assert answer.question_type == "unknown"
         assert answer.field_id is None
 

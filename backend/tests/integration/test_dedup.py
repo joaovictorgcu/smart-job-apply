@@ -158,7 +158,7 @@ class TestUpsert:
         job = (
             await session.execute(select(Job).where(Job.external_id == "ext-103"))
         ).scalar_one()
-        assert job.status is JobStatus.APPLIED
+        assert job.status == JobStatus.APPLIED
         assert job.score == 95
 
     async def test_a_skipped_job_keeps_its_skip_reason(self, session: AsyncSession) -> None:
@@ -178,7 +178,7 @@ class TestUpsert:
         job = (
             await session.execute(select(Job).where(Job.external_id == "ext-104"))
         ).scalar_one()
-        assert job.status is JobStatus.SKIPPED
+        assert job.status == JobStatus.SKIPPED
         assert job.skip_reason
 
     async def test_one_users_upsert_does_not_touch_another_users_row(

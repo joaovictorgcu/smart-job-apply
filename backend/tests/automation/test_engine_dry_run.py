@@ -129,9 +129,9 @@ class TestSearch:
         )
         assert runs, "a run must be recorded even when it is blocked"
         blocked = next((r for r in runs if r.id == run_id), runs[-1])
-        assert blocked.status is AutomationRunStatus.BLOCKED
+        assert blocked.status == AutomationRunStatus.BLOCKED
         assert blocked.blocked_reason
-        assert blocked.status is not AutomationRunStatus.FAILED
+        assert blocked.status != AutomationRunStatus.FAILED
 
     async def test_stops_at_the_checkpoint_without_further_browser_calls(
         self, session: AsyncSession, fake_ai: FakeAIClient
@@ -179,7 +179,7 @@ class TestDryRunPrepare:
         application = (
             await session.execute(select(Application).where(Application.job_id == job.id))
         ).scalar_one()
-        assert application.status is ApplicationStatus.AWAITING_REVIEW
+        assert application.status == ApplicationStatus.AWAITING_REVIEW
         assert application.was_dry_run is True
         assert application.cover_letter
 
@@ -224,7 +224,7 @@ class TestLivePrepareStopsAtReview:
         application = (
             await session.execute(select(Application).where(Application.job_id == job.id))
         ).scalar_one()
-        assert application.status is ApplicationStatus.AWAITING_REVIEW
+        assert application.status == ApplicationStatus.AWAITING_REVIEW
         assert application.submitted_at is None
         assert application.approved_at is None
 

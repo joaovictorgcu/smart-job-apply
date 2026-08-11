@@ -81,7 +81,7 @@ class TestAIClientContract:
         answers = await client.answer_screening_questions([make_form_question()])
         assert len(answers.answers) == 1
         answer = answers.answers[0]
-        assert answer.confidence is AnswerConfidence.LOW
+        assert answer.confidence == AnswerConfidence.LOW
         assert answer.needs_review is True
 
     async def test_confident_answers_are_not_flagged(self) -> None:

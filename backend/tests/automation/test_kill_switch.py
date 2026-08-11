@@ -72,7 +72,7 @@ class TestStopRequestFlag:
         await stop_all(engine)
 
         await session.refresh(done)
-        assert done.status is AutomationRunStatus.COMPLETED
+        assert done.status == AutomationRunStatus.COMPLETED
 
     async def test_does_not_reach_into_another_users_runs(
         self, session: AsyncSession, fake_ai: FakeAIClient
@@ -115,10 +115,10 @@ class TestRunEndsStopped:
         assert runs, "the stopped run must still be recorded"
         for run in runs:
             await session.refresh(run)
-        assert any(run.status is AutomationRunStatus.STOPPED for run in runs), [
+        assert any(run.status == AutomationRunStatus.STOPPED for run in runs), [
             run.status for run in runs
         ]
-        assert all(run.status is not AutomationRunStatus.FAILED for run in runs)
+        assert all(run.status != AutomationRunStatus.FAILED for run in runs)
 
     async def test_no_browser_call_happens_after_the_stop(
         self, session: AsyncSession, fake_ai: FakeAIClient

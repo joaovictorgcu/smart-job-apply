@@ -150,7 +150,7 @@ class TestPrepareStopsForReview:
         await prepare(engine, [job.id])
 
         application = await application_for(session, job)
-        assert application.status is ApplicationStatus.AWAITING_REVIEW
+        assert application.status == ApplicationStatus.AWAITING_REVIEW
         assert application.approved_at is None
         assert application.submitted_at is None
         assert linkedin.submit_called is False
@@ -199,9 +199,9 @@ class TestSubmitAfterApproval:
 
         await session.refresh(application)
         await session.refresh(job)
-        assert application.status is ApplicationStatus.SUBMITTED
+        assert application.status == ApplicationStatus.SUBMITTED
         assert application.submitted_at is not None
-        assert job.status is JobStatus.APPLIED
+        assert job.status == JobStatus.APPLIED
         assert linkedin.submit_called is True
         assert linkedin.call_count("submit") == 1
 
