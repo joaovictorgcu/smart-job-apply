@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.ai.schemas import JobAnalysis
+from app.ai.schemas import CoverLetter, JobAnalysis
 from app.api.errors import NotFoundError, PreconditionFailedError
 from app.automation.contracts import JobPosting
 from app.config import get_settings
-from app.models import AIAnalysis, AnalysisKind, Job, JobStatus, User
+from app.models import AIAnalysis, AnalysisKind, Job, JobStatus, User, UserSettings
 from app.observability import EventName, get_logger, make_event
 from app.schemas.job import JobDetail, JobRead
 from app.services import user_service
@@ -167,31 +169,44 @@ async def count_by_status(session: AsyncSession, user: User) -> dict[str, int]:
     return counts
 
 
-async def analyze_job(session: AsyncSession, user: User, job_id: int) -> Job:
-    """Score a single job with the AI and persist both the score and the raw call.
+def _split_ai_result(outcome: Any) -> tuple[Any, Any]:
+    """Accept either `result` or `(result, usage)` from the AI layer."""
+    if isinstance(outcome, tuple) and len(outcome) == 2:
+        return outcome[0], outcome[1]
+    return outcome, None
 
-    The call is deliberately the only place in this layer that talks to the AI
-    module, so a change in that boundary is a one-line fix.
-    """
-    from app.ai import analyze_job as ai_analyze_job
 
+def _model_name(usage: Any, user_settings: UserSettings) -> str:
+    return getattr(usage, "model", None) or user_settings.ai_model or get_settings().anthropic_model
+
+
+async def _require_described_job(session: AsyncSession, user: User, job_id: int) -> Job:
     job = await get_job(session, user, job_id)
     if not job.description:
         raise PreconditionFailedError(
             "This job has no description yet. Run a search with analysis enabled first."
         )
+    return job
 
+
+async def analyze_job(session: AsyncSession, user: User, job_id: int) -> Job:
+    """Score a single job with the AI and persist both the score and the raw call.
+
+    This module is the only place in the service layer that calls the AI, so a
+    change on that boundary stays a one-line fix.
+    """
+    from app.ai import analyze_job as ai_analyze_job
+
+    job = await _require_described_job(session, user, job_id)
     profile = await user_service.build_profile_context(session, user)
     user_settings = await user_service.get_or_create_settings(session, user)
     posting = to_posting(job)
 
-    outcome = await ai_analyze_job(profile=profile, job=posting)
-    # The AI layer may return usage metadata alongside the analysis.
-    analysis, usage = outcome if isinstance(outcome, tuple) else (outcome, None)
+    analysis, usage = _split_ai_result(await ai_analyze_job(profile=profile, job=posting))
     if not isinstance(analysis, JobAnalysis):
         analysis = JobAnalysis.model_validate(analysis)
 
-    model = getattr(usage, "model", None) or user_settings.ai_model or get_settings().anthropic_model
+    model = _model_name(usage, user_settings)
     session.add(
         AIAnalysis(
             user_id=user.id,
@@ -235,6 +250,55 @@ async def analyze_job(session: AsyncSession, user: User, job_id: int) -> Job:
         },
     )
     return job
+
+
+async def generate_cover_letter(session: AsyncSession, user: User, job_id: int) -> CoverLetter:
+    """Draft a cover letter for one job and record the call for cost auditing.
+
+    The result is returned to the user for review; it is not attached to any
+    application here, because that would change a draft without an explicit edit.
+    """
+    from app.ai import generate_cover_letter as ai_generate_cover_letter
+
+    job = await _require_described_job(session, user, job_id)
+    profile = await user_service.build_profile_context(session, user)
+    user_settings = await user_service.get_or_create_settings(session, user)
+
+    letter, usage = _split_ai_result(
+        await ai_generate_cover_letter(
+            profile=profile,
+            job=to_posting(job),
+            tone=user_settings.cover_letter_tone,
+            language=user_settings.content_language,
+        )
+    )
+    if not isinstance(letter, CoverLetter):
+        letter = CoverLetter.model_validate(letter)
+
+    session.add(
+        AIAnalysis(
+            user_id=user.id,
+            job_id=job.id,
+            kind=AnalysisKind.COVER_LETTER,
+            model=_model_name(usage, user_settings),
+            result=letter.model_dump(mode="json"),
+            input_tokens=getattr(usage, "input_tokens", None),
+            output_tokens=getattr(usage, "output_tokens", None),
+            latency_ms=getattr(usage, "latency_ms", None),
+        )
+    )
+    await session.flush()
+    logger.info(
+        "Cover letter generated.",
+        extra={
+            "action": "ai.cover_letter",
+            "status": "ok",
+            "user_id": user.id,
+            "job_id": job.id,
+            "language": letter.language,
+        },
+    )
+    return letter
 
 
 def to_posting(job: Job) -> JobPosting:
