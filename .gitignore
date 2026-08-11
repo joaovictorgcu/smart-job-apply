@@ -1,0 +1,35 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Application data (SQLite DB, browser profiles, resumes, screenshots)
+backend/data/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Playwright
+playwright-report/
+test-results/
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+
+# Claude Code local config (machine-specific paths)
+.claude/
