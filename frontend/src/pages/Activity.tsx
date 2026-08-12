@@ -8,15 +8,15 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/ToastProvider';
 import { useRuns } from '@/hooks/useApi';
 import { useEvents } from '@/hooks/useEvents';
-import { formatDuration, formatNumber, formatRelativeTime, humanizeSnakeCase } from '@/lib/format';
+import { enumLabel, formatDuration, formatNumber, formatRelativeTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { EventLevel } from '@/types/events';
 
 const LEVELS: Array<{ value: EventLevel; label: string; active: string }> = [
   { value: 'info', label: 'Info', active: 'border-info/45 bg-info/12 text-info' },
-  { value: 'success', label: 'Success', active: 'border-success/45 bg-success/12 text-success' },
-  { value: 'warning', label: 'Warning', active: 'border-warning/45 bg-warning/12 text-warning' },
-  { value: 'error', label: 'Error', active: 'border-danger/45 bg-danger/12 text-danger' },
+  { value: 'success', label: 'Sucesso', active: 'border-success/45 bg-success/12 text-success' },
+  { value: 'warning', label: 'Aviso', active: 'border-warning/45 bg-warning/12 text-warning' },
+  { value: 'error', label: 'Erro', active: 'border-danger/45 bg-danger/12 text-danger' },
 ];
 
 export function Activity() {
@@ -45,17 +45,17 @@ export function Activity() {
 
     try {
       await navigator.clipboard.writeText(text);
-      toast.success('Log copied', `${formatNumber(filtered.length)} lines on your clipboard.`);
+      toast.success('Log copiado', `${formatNumber(filtered.length)} linhas na sua área de transferência.`);
     } catch {
-      toast.error('Could not copy', 'Your browser blocked clipboard access.');
+      toast.error('Não foi possível copiar', 'O seu navegador bloqueou o acesso à área de transferência.');
     }
   };
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Activity"
-        description="Everything the automation reports, live. Nothing here can start or submit anything — it is a read-only window on the run."
+        title="Atividade"
+        description="Tudo que a automação reporta, ao vivo. Nada aqui pode iniciar ou enviar coisa alguma — é uma janela somente leitura sobre a execução."
       />
 
       <div className="grid gap-4 xl:grid-cols-3">
@@ -63,7 +63,7 @@ export function Activity() {
           <div className="card-header flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
               <span aria-hidden className={cn('live-dot', !connected && 'live-dot-idle')} />
-              <h2 className="text-md">{connected ? 'Streaming' : 'Disconnected'}</h2>
+              <h2 className="text-md">{connected ? 'Transmitindo' : 'Desconectado'}</h2>
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5">
@@ -95,7 +95,7 @@ export function Activity() {
                 disabled={filtered.length === 0}
                 icon={<Copy aria-hidden className="h-3.5 w-3.5" />}
               >
-                Copy
+                Copiar
               </Button>
               <Button
                 size="sm"
@@ -104,7 +104,7 @@ export function Activity() {
                 disabled={events.length === 0}
                 icon={<Eraser aria-hidden className="h-3.5 w-3.5" />}
               >
-                Clear
+                Limpar
               </Button>
             </div>
           </div>
@@ -115,19 +115,19 @@ export function Activity() {
               autoScroll
               className="h-[68vh]"
               emptyTitle={
-                events.length === 0 ? 'Waiting for events' : 'No events match these levels'
+                events.length === 0 ? 'Aguardando eventos' : 'Nenhum evento corresponde a esses níveis'
               }
               emptyDescription={
                 events.length === 0
-                  ? 'Start a browser session and run a search — every step shows up here as it happens.'
-                  : 'Re-enable a level above to see the rest of the log.'
+                  ? 'Inicie uma sessão do navegador e rode uma busca — cada passo aparece aqui conforme acontece.'
+                  : 'Reative um nível acima para ver o restante do log.'
               }
             />
           </div>
         </Card>
 
         <Card className="flex min-h-0 flex-col">
-          <CardHeader title="Recent runs" description="Searches and form-filling batches." />
+          <CardHeader title="Execuções recentes" description="Buscas e lotes de preenchimento." />
 
           {runsLoading ? (
             <div className="card-body space-y-2.5" aria-busy="true">
@@ -139,8 +139,8 @@ export function Activity() {
             <EmptyState
               compact
               icon={History}
-              title="No runs yet"
-              description="Run a saved search to create the first one."
+              title="Nenhuma execução ainda"
+              description="Rode uma busca salva para criar a primeira."
             />
           ) : (
             <ul className="divide-y divide-line">
@@ -148,7 +148,7 @@ export function Activity() {
                 <li key={run.id} className="px-5 py-3">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-medium text-content">
-                      {humanizeSnakeCase(run.kind)} · #{run.id}
+                      {enumLabel(run.kind)} · #{run.id}
                     </p>
                     <StatusBadge kind="run" status={run.status} />
                   </div>
@@ -156,19 +156,19 @@ export function Activity() {
                   <p className="tabular mt-1 text-2xs text-content-subtle">
                     {formatRelativeTime(run.started_at ?? run.created_at)} ·{' '}
                     {formatDuration(run.started_at, run.finished_at)}
-                    {run.dry_run ? ' · dry run' : ''}
+                    {run.dry_run ? ' · modo de teste' : ''}
                   </p>
 
                   <p className="tabular mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-2xs text-content-muted">
-                    <span>{formatNumber(run.jobs_found)} found</span>
-                    <span>{formatNumber(run.jobs_analyzed)} scored</span>
-                    <span>{formatNumber(run.applications_prepared)} filled</span>
-                    <span>{formatNumber(run.applications_submitted)} submitted</span>
+                    <span>{formatNumber(run.jobs_found)} encontradas</span>
+                    <span>{formatNumber(run.jobs_analyzed)} pontuadas</span>
+                    <span>{formatNumber(run.applications_prepared)} preenchidas</span>
+                    <span>{formatNumber(run.applications_submitted)} enviadas</span>
                   </p>
 
                   {run.blocked_reason ? (
                     <p className="mt-1.5 text-2xs leading-relaxed text-danger">
-                      Blocked: {run.blocked_reason}
+                      Bloqueada: {run.blocked_reason}
                     </p>
                   ) : null}
                   {run.error_message ? (

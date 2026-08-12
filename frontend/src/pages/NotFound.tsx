@@ -12,14 +12,14 @@ export function NotFound() {
       </span>
       <p className="tabular text-4xl font-semibold text-gradient">404</p>
       <div className="space-y-1.5">
-        <h1 className="text-xl">This page does not exist</h1>
+        <h1 className="text-xl">Esta página não existe</h1>
         <p className="mx-auto max-w-sm text-sm leading-relaxed text-content-muted">
-          The link may be outdated, or the job or application it pointed at was removed.
+          O link pode estar desatualizado, ou a vaga ou candidatura para onde ele apontava foi removida.
         </p>
       </div>
       <Link to="/" className="btn btn-primary">
         <ArrowLeft aria-hidden className="h-4 w-4" />
-        Back to dashboard
+        Voltar ao painel
       </Link>
     </div>
   );

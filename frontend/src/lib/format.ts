@@ -1,8 +1,8 @@
 import type { ApplicationStatus, AutomationRunStatus, JobStatus } from "@/types/api";
 import type { EventLevel } from "@/types/events";
 
-const NUMBER_FORMAT = new Intl.NumberFormat("en-US");
-const PERCENT_FORMAT = new Intl.NumberFormat("en-US", {
+const NUMBER_FORMAT = new Intl.NumberFormat("pt-BR");
+const PERCENT_FORMAT = new Intl.NumberFormat("pt-BR", {
   style: "percent",
   maximumFractionDigits: 0,
 });
@@ -25,7 +25,7 @@ export function formatScore(score: number | null | undefined): string {
 export function formatCompact(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return "—";
   if (Math.abs(value) < 1000) return String(value);
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("pt-BR", {
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(value);
@@ -40,7 +40,7 @@ function toDate(value: string | Date | null | undefined): Date | null {
 export function formatDate(value: string | Date | null | undefined): string {
   const date = toDate(value);
   if (!date) return "—";
-  return date.toLocaleDateString("en-US", {
+  return date.toLocaleDateString("pt-BR", {
     year: "numeric",
     month: "short",
     day: "2-digit",
@@ -50,7 +50,7 @@ export function formatDate(value: string | Date | null | undefined): string {
 export function formatDateTime(value: string | Date | null | undefined): string {
   const date = toDate(value);
   if (!date) return "—";
-  return date.toLocaleString("en-US", {
+  return date.toLocaleString("pt-BR", {
     month: "short",
     day: "2-digit",
     hour: "2-digit",
@@ -62,7 +62,7 @@ export function formatDateTime(value: string | Date | null | undefined): string 
 export function formatTime(value: string | Date | null | undefined): string {
   const date = toDate(value);
   if (!date) return "—";
-  return date.toLocaleTimeString("en-US", {
+  return date.toLocaleTimeString("pt-BR", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -75,7 +75,7 @@ export function formatRelativeTime(value: string | Date | null | undefined): str
   const date = toDate(value);
   if (!date) return "—";
 
-  const formatter = new Intl.RelativeTimeFormat("en-US", { numeric: "auto" });
+  const formatter = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });
   const deltaSeconds = (date.getTime() - Date.now()) / 1000;
   const thresholds: Array<[Intl.RelativeTimeFormatUnit, number]> = [
     ["second", 60],
@@ -168,12 +168,12 @@ const JOB_STATUS_TONE: Record<JobStatus, ToneName> = {
 };
 
 const JOB_STATUS_LABEL: Record<JobStatus, string> = {
-  discovered: "Discovered",
-  analyzed: "Analyzed",
-  skipped: "Skipped",
-  queued: "Queued",
-  applied: "Applied",
-  failed: "Failed",
+  discovered: "Descoberta",
+  analyzed: "Analisada",
+  skipped: "Pulada",
+  queued: "Na fila",
+  applied: "Candidatada",
+  failed: "Falhou",
 };
 
 export function jobStatusTone(status: JobStatus): ToneName {
@@ -195,13 +195,13 @@ const APPLICATION_STATUS_TONE: Record<ApplicationStatus, ToneName> = {
 };
 
 const APPLICATION_STATUS_LABEL: Record<ApplicationStatus, string> = {
-  draft: "Draft",
-  preparing: "Preparing",
-  awaiting_review: "Awaiting review",
-  submitting: "Submitting",
-  submitted: "Submitted",
-  discarded: "Discarded",
-  failed: "Failed",
+  draft: "Rascunho",
+  preparing: "Preparando",
+  awaiting_review: "Aguardando revisão",
+  submitting: "Enviando",
+  submitted: "Enviada",
+  discarded: "Descartada",
+  failed: "Falhou",
 };
 
 export function applicationStatusTone(status: ApplicationStatus): ToneName {
@@ -226,8 +226,60 @@ export function runStatusTone(status: AutomationRunStatus): ToneName {
   return RUN_STATUS_TONE[status] ?? "neutral";
 }
 
+const RUN_STATUS_LABEL: Record<AutomationRunStatus, string> = {
+  pending: "Pendente",
+  running: "Em execução",
+  paused: "Pausada",
+  completed: "Concluída",
+  stopped: "Parada",
+  failed: "Falhou",
+  blocked: "Bloqueada",
+};
+
 export function runStatusLabel(status: AutomationRunStatus): string {
-  return humanizeSnakeCase(status);
+  return RUN_STATUS_LABEL[status] ?? humanizeSnakeCase(status);
+}
+
+/**
+ * Portuguese labels for the loose snake_case enum values rendered around the UI
+ * (run kinds, remote/workplace filters, date-posted windows, event types).
+ * Falls back to a humanized English form for anything not mapped.
+ */
+const ENUM_LABELS: Record<string, string> = {
+  // Automation run kinds
+  search: "Busca",
+  prepare: "Preenchimento",
+  submit: "Envio",
+  apply: "Candidatura",
+  // Remote / workplace type
+  remote: "Remoto",
+  hybrid: "Híbrido",
+  on_site: "Presencial",
+  "on-site": "Presencial",
+  onsite: "Presencial",
+  office: "Presencial",
+  // Date-posted windows
+  any_time: "Qualquer data",
+  past_month: "Último mês",
+  "past-month": "Último mês",
+  past_week: "Última semana",
+  "past-week": "Última semana",
+  past_24_hours: "Últimas 24 horas",
+  "past-24h": "Últimas 24 horas",
+  // Application event types
+  created: "Criada",
+  prepare_started: "Preenchimento iniciado",
+  prepared: "Preparada",
+  user_edited: "Editada por você",
+  user_approved: "Aprovada por você",
+  submitted: "Enviada",
+  discarded: "Descartada",
+  outcome_changed: "Desfecho alterado",
+  checkpoint: "Verificação de segurança",
+};
+
+export function enumLabel(value: string): string {
+  return ENUM_LABELS[value] ?? humanizeSnakeCase(value);
 }
 
 /** Score colour ramp for badges, bars and chart marks. */

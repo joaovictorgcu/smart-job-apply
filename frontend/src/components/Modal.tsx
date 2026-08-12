@@ -147,7 +147,7 @@ export function Modal({
             variant="ghost"
             size="icon"
             onClick={handleClose}
-            aria-label="Close dialog"
+            aria-label="Fechar diálogo"
             className="-mr-1.5 -mt-1"
           >
             <X aria-hidden className="h-4 w-4" />

@@ -27,7 +27,7 @@ export function Pagination({
   offset,
   onOffsetChange,
   className,
-  unit = 'results',
+  unit = 'resultados',
 }: PaginationProps) {
   const safeLimit = limit > 0 ? limit : 20;
   const pageCount = Math.max(1, Math.ceil(total / safeLimit));
@@ -40,18 +40,18 @@ export function Pagination({
 
   return (
     <nav
-      aria-label="Pagination"
+      aria-label="Paginação"
       className={cn('flex flex-wrap items-center justify-between gap-3', className)}
     >
       <p className="tabular text-xs text-content-subtle">
         {total === 0 ? (
-          `No ${unit}`
+          `Sem ${unit}`
         ) : (
           <>
             <span className="font-medium text-content">
               {formatNumber(from)}–{formatNumber(to)}
             </span>{' '}
-            of {formatNumber(total)} {unit}
+            de {formatNumber(total)} {unit}
           </>
         )}
       </p>
@@ -60,7 +60,7 @@ export function Pagination({
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Previous page"
+          aria-label="Página anterior"
           disabled={current <= 1}
           onClick={() => goTo(current - 1)}
         >
@@ -71,7 +71,7 @@ export function Pagination({
           <button
             key={page}
             type="button"
-            aria-label={`Page ${page}`}
+            aria-label={`Página ${page}`}
             aria-current={page === current ? 'page' : undefined}
             onClick={() => goTo(page)}
             className={cn(
@@ -88,7 +88,7 @@ export function Pagination({
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Next page"
+          aria-label="Próxima página"
           disabled={current >= pageCount}
           onClick={() => goTo(current + 1)}
         >

@@ -39,11 +39,11 @@ export function Dashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Dashboard"
-        description="Search and scoring run on their own. Filling a form and submitting it are two separate, deliberate steps — the second one is always yours."
+        title="Painel"
+        description="A busca e a pontuação rodam sozinhas. Preencher um formulário e enviá-lo são dois passos separados e deliberados — o segundo é sempre seu."
         actions={
           <Link to="/searches" className="btn btn-primary">
-            Run a search
+            Rodar uma busca
             <ArrowRight aria-hidden className="h-4 w-4" />
           </Link>
         }
@@ -56,12 +56,12 @@ export function Dashboard() {
 
         <Card className="flex min-h-0 flex-col xl:col-span-2">
           <CardHeader
-            title="Needs your review"
-            description="Forms already filled and paused at the review step."
+            title="Precisa da sua revisão"
+            description="Formulários já preenchidos e pausados na etapa de revisão."
             actions={
               queue.length > 0 ? (
                 <Link to="/applications?status=awaiting_review" className="btn btn-sm">
-                  See all
+                  Ver todas
                 </Link>
               ) : null
             }
@@ -76,11 +76,11 @@ export function Dashboard() {
           ) : queue.length === 0 ? (
             <EmptyState
               icon={ClipboardCheck}
-              title="Nothing waiting on you"
-              description="When the automation fills an application it stops here for your approval."
+              title="Nada esperando por você"
+              description="Quando a automação preenche uma candidatura, ela para aqui para a sua aprovação."
               action={
                 <Link to="/jobs" className="btn">
-                  Pick jobs to prepare
+                  Escolher vagas para preparar
                 </Link>
               }
             />
@@ -100,13 +100,13 @@ export function Dashboard() {
                     <ScoreBadge score={job?.score ?? null} size="sm" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-content">
-                        {job?.title ?? `Application #${application.id}`}
+                        {job?.title ?? `Candidatura #${application.id}`}
                       </p>
                       <p className="truncate text-xs text-content-subtle">
-                        {job?.company ?? 'Company unknown'} ·{' '}
+                        {job?.company ?? 'Empresa desconhecida'} ·{' '}
                         {formatRelativeTime(application.updated_at ?? application.created_at)}
                         {flagged > 0
-                          ? ` · ${flagged} ${flagged === 1 ? 'answer' : 'answers'} to check`
+                          ? ` · ${flagged} ${flagged === 1 ? 'resposta' : 'respostas'} a conferir`
                           : ''}
                       </p>
                     </div>
@@ -114,7 +114,7 @@ export function Dashboard() {
                       to={`/applications/${application.id}`}
                       className="btn btn-sm btn-primary shrink-0"
                     >
-                      Review
+                      Revisar
                     </Link>
                   </li>
                 );
@@ -132,11 +132,11 @@ export function Dashboard() {
 
       <Card className="flex min-h-0 flex-col">
         <CardHeader
-          title="Live activity"
-          description="The last few events from the automation."
+          title="Atividade ao vivo"
+          description="Os últimos eventos da automação."
           actions={
             <Link to="/activity" className="btn btn-sm">
-              Full log
+              Log completo
             </Link>
           }
         />
@@ -144,15 +144,15 @@ export function Dashboard() {
           <ActivityFeed
             events={recentEvents}
             dense
-            emptyTitle="No activity yet"
-            emptyDescription="Start a browser session and run a search to see events stream in."
+            emptyTitle="Nenhuma atividade ainda"
+            emptyDescription="Inicie uma sessão do navegador e rode uma busca para ver os eventos aparecerem."
           />
         </div>
       </Card>
 
       <p className="flex items-center justify-center gap-1.5 text-2xs text-content-subtle">
         <Radio aria-hidden className="h-3 w-3" />
-        Automating LinkedIn violates its Terms of Service. You run this tool at your own risk.
+        Automatizar o LinkedIn viola os Termos de Uso dele. Você usa esta ferramenta por sua conta e risco.
       </p>
     </div>
   );

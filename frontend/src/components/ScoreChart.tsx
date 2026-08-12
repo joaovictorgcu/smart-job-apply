@@ -90,7 +90,7 @@ function weekdayLabel(isoDate: string): string {
   // Parse as local time: a bare YYYY-MM-DD is treated as UTC and can shift a day.
   const date = new Date(`${isoDate}T00:00:00`);
   if (Number.isNaN(date.getTime())) return isoDate;
-  return date.toLocaleDateString('en-US', { weekday: 'short' });
+  return date.toLocaleDateString('pt-BR', { weekday: 'short' });
 }
 
 export interface ScoreChartProps {
@@ -114,8 +114,8 @@ export function ScoreChart({ distribution, daily, isLoading = false, className }
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader
-            title="Match score distribution"
-            description="How many analyzed jobs fall in each score band."
+            title="Distribuição das notas de aderência"
+            description="Quantas vagas analisadas caem em cada faixa de nota."
           />
           <div className="px-2 py-4">
             {isLoading ? (
@@ -140,15 +140,15 @@ export function ScoreChart({ distribution, daily, isLoading = false, className }
                     />
                     <Tooltip
                       cursor={{ fill: 'rgb(var(--accent-500) / 0.08)' }}
-                      content={<ChartTooltip unit="jobs" labelPrefix="Score" />}
+                      content={<ChartTooltip unit="vagas" labelPrefix="Nota" />}
                     />
                     <Bar dataKey="count" fill={SERIES} radius={[4, 4, 0, 0]} maxBarSize={56} />
                   </BarChart>
                 </ResponsiveContainer>
                 <DataTable
-                  caption="Match score distribution"
-                  keyHeader="Score band"
-                  valueHeader="Jobs"
+                  caption="Distribuição das notas de aderência"
+                  keyHeader="Faixa de nota"
+                  valueHeader="Vagas"
                   rows={distribution.map((bucket) => ({ key: bucket.label, value: bucket.count }))}
                 />
               </>
@@ -156,8 +156,8 @@ export function ScoreChart({ distribution, daily, isLoading = false, className }
               <EmptyState
                 compact
                 icon={BarChart3}
-                title="No scored jobs yet"
-                description="Run a search with AI analysis on and the score bands will fill in here."
+                title="Nenhuma vaga pontuada ainda"
+                description="Rode uma busca com a análise de IA ligada e as faixas de nota vão se preencher aqui."
               />
             )}
           </div>
@@ -165,8 +165,8 @@ export function ScoreChart({ distribution, daily, isLoading = false, className }
 
         <Card>
           <CardHeader
-            title="Applications submitted, last 7 days"
-            description="Counts only applications you approved and submitted."
+            title="Candidaturas enviadas, últimos 7 dias"
+            description="Conta apenas candidaturas que você aprovou e enviou."
           />
           <div className="px-2 py-4">
             {isLoading ? (
@@ -186,7 +186,7 @@ export function ScoreChart({ distribution, daily, isLoading = false, className }
                     />
                     <Tooltip
                       cursor={{ stroke: GRID, strokeWidth: 1 }}
-                      content={<ChartTooltip unit="submitted" />}
+                      content={<ChartTooltip unit="enviadas" />}
                     />
                     <Line
                       type="monotone"
@@ -199,9 +199,9 @@ export function ScoreChart({ distribution, daily, isLoading = false, className }
                   </LineChart>
                 </ResponsiveContainer>
                 <DataTable
-                  caption="Applications submitted per day, last 7 days"
-                  keyHeader="Date"
-                  valueHeader="Submitted"
+                  caption="Candidaturas enviadas por dia, últimos 7 dias"
+                  keyHeader="Data"
+                  valueHeader="Enviadas"
                   rows={daily.map((entry) => ({ key: entry.date, value: entry.count }))}
                 />
               </>
@@ -209,8 +209,8 @@ export function ScoreChart({ distribution, daily, isLoading = false, className }
               <EmptyState
                 compact
                 icon={LineChartIcon}
-                title="Nothing submitted yet"
-                description="Approved submissions will show up here day by day."
+                title="Nada enviado ainda"
+                description="Os envios aprovados vão aparecer aqui dia a dia."
               />
             )}
           </div>

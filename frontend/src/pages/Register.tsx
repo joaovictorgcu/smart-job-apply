@@ -32,21 +32,21 @@ export function Register() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  if (isLoading) return <FullPageSpinner label="Restoring session" />;
+  if (isLoading) return <FullPageSpinner label="Restaurando sessão" />;
   if (user) return <Navigate to="/" replace />;
 
   const validate = (): boolean => {
     const next: FieldErrors = {};
-    if (!email.trim()) next.email = 'Enter your email address.';
-    else if (!EMAIL_PATTERN.test(email.trim())) next.email = 'That does not look like an email address.';
+    if (!email.trim()) next.email = 'Informe o seu e-mail.';
+    else if (!EMAIL_PATTERN.test(email.trim())) next.email = 'Isso não parece um e-mail.';
 
-    if (!password) next.password = 'Choose a password.';
+    if (!password) next.password = 'Escolha uma senha.';
     else if (password.length < MIN_PASSWORD)
-      next.password = `Use at least ${MIN_PASSWORD} characters.`;
+      next.password = `Use pelo menos ${MIN_PASSWORD} caracteres.`;
     else if (password.length > MAX_PASSWORD)
-      next.password = `Use at most ${MAX_PASSWORD} characters.`;
+      next.password = `Use no máximo ${MAX_PASSWORD} caracteres.`;
 
-    if (confirm !== password) next.confirm = 'The two passwords do not match.';
+    if (confirm !== password) next.confirm = 'As duas senhas não coincidem.';
 
     setErrors(next);
     return Object.keys(next).length === 0;
@@ -66,7 +66,7 @@ export function Register() {
       });
       navigate('/', { replace: true });
     } catch (error) {
-      setFormError(errorMessage(error, 'Could not create the account.'));
+      setFormError(errorMessage(error, 'Não foi possível criar a conta.'));
     } finally {
       setSubmitting(false);
     }
@@ -79,7 +79,7 @@ export function Register() {
           variant="ghost"
           size="icon"
           onClick={toggleTheme}
-          aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+          aria-label={theme === 'dark' ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'}
         >
           {theme === 'dark' ? (
             <Sun aria-hidden className="h-[18px] w-[18px]" />
@@ -104,14 +104,14 @@ export function Register() {
               </span>
             </div>
             <p className="text-sm leading-relaxed text-content-muted">
-              One local account guards your dashboard. It is unrelated to your LinkedIn login, which
-              you always type yourself in the browser window.
+              Uma conta local protege o seu painel. Ela não tem relação com o seu login do LinkedIn,
+              que você sempre digita na janela do navegador.
             </p>
           </div>
 
           <div className="card">
             <form onSubmit={onSubmit} noValidate className="card-body space-y-4">
-              <h1 className="text-lg">Create your account</h1>
+              <h1 className="text-lg">Crie a sua conta</h1>
 
               {formError ? (
                 <div role="alert" className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2.5 text-xs leading-relaxed text-danger-strong">
@@ -119,7 +119,7 @@ export function Register() {
                 </div>
               ) : null}
 
-              <Field label="Full name" htmlFor="register-name" hint="Optional — used in cover letters.">
+              <Field label="Nome completo" htmlFor="register-name" hint="Opcional — usado nas cartas de apresentação.">
                 <Input
                   id="register-name"
                   name="name"
@@ -130,7 +130,7 @@ export function Register() {
                 />
               </Field>
 
-              <Field label="Email" htmlFor="register-email" error={errors.email} required>
+              <Field label="E-mail" htmlFor="register-email" error={errors.email} required>
                 <Input
                   id="register-email"
                   name="email"
@@ -140,15 +140,15 @@ export function Register() {
                   aria-invalid={Boolean(errors.email)}
                   aria-describedby={errors.email ? 'register-email-error' : undefined}
                   onChange={(event) => setEmail(event.target.value)}
-                  placeholder="you@example.com"
+                  placeholder="voce@exemplo.com"
                 />
               </Field>
 
               <Field
-                label="Password"
+                label="Senha"
                 htmlFor="register-password"
                 error={errors.password}
-                hint={`At least ${MIN_PASSWORD} characters.`}
+                hint={`Pelo menos ${MIN_PASSWORD} caracteres.`}
                 required
               >
                 <Input
@@ -166,7 +166,7 @@ export function Register() {
                 />
               </Field>
 
-              <Field label="Confirm password" htmlFor="register-confirm" error={errors.confirm} required>
+              <Field label="Confirmar senha" htmlFor="register-confirm" error={errors.confirm} required>
                 <Input
                   id="register-confirm"
                   name="confirm-password"
@@ -187,22 +187,22 @@ export function Register() {
                 loading={submitting}
                 icon={<ArrowRight aria-hidden className="h-4 w-4" />}
               >
-                Create account
+                Criar conta
               </Button>
 
               <p className="text-center text-xs text-content-subtle">
-                Already have an account?{' '}
+                Já tem uma conta?{' '}
                 <Link to="/login" className="font-medium text-accent-400 hover:underline">
-                  Sign in
+                  Entrar
                 </Link>
               </p>
             </form>
           </div>
 
           <Note tone="neutral" icon={<ShieldAlert aria-hidden className="h-3.5 w-3.5" />}>
-            This is a self-hosted tool that automates LinkedIn. Automating LinkedIn violates
-            LinkedIn&apos;s Terms of Service and may get your account restricted or banned — you run
-            it at your own risk.
+            Esta é uma ferramenta auto-hospedada que automatiza o LinkedIn. Automatizar o LinkedIn
+            viola os Termos de Uso do LinkedIn e pode fazer a sua conta ser restringida ou banida —
+            você usa por sua conta e risco.
           </Note>
         </div>
       </div>

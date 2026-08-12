@@ -7,7 +7,7 @@ import { Button, Card, Note, PageHeader, Skeleton } from '@/components/primitive
 import { SearchFormDialog } from '@/components/SearchFormDialog';
 import { useToast } from '@/components/ToastProvider';
 import { useDeleteSearch, useRunSearch, useSearches, useSessionStatus } from '@/hooks/useApi';
-import { badgeClass, formatRelativeTime, humanizeSnakeCase } from '@/lib/format';
+import { badgeClass, enumLabel, formatRelativeTime } from '@/lib/format';
 import { errorMessage } from '@/services/client';
 import type { Search } from '@/types/api';
 
@@ -25,22 +25,22 @@ export function Searches() {
     onSuccess: (automationRun) => {
       setRunningId(null);
       toast.success(
-        'Search started',
-        `Run #${automationRun.id} is finding and scoring jobs. It will not apply to anything.`,
+        'Busca iniciada',
+        `A execução #${automationRun.id} está encontrando e pontuando vagas. Ela não vai se candidatar a nada.`,
       );
     },
     onError: (error) => {
       setRunningId(null);
-      toast.error('Could not start the search', errorMessage(error));
+      toast.error('Não foi possível iniciar a busca', errorMessage(error));
     },
   });
 
   const remove = useDeleteSearch({
     onSuccess: () => {
       setDeleting(null);
-      toast.toast({ title: 'Search deleted', variant: 'info' });
+      toast.toast({ title: 'Busca excluída', variant: 'info' });
     },
-    onError: (error) => toast.error('Could not delete the search', errorMessage(error)),
+    onError: (error) => toast.error('Não foi possível excluir a busca', errorMessage(error)),
   });
 
   const sessionReady = Boolean(session?.browser_open && session.logged_in);
@@ -59,19 +59,19 @@ export function Searches() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Searches"
-        description="Saved LinkedIn queries. Running one finds and scores jobs — it never starts an application."
+        title="Buscas"
+        description="Consultas salvas do LinkedIn. Rodar uma encontra e pontua vagas — nunca inicia uma candidatura."
         actions={
           <Button variant="primary" onClick={openCreate} icon={<Plus aria-hidden className="h-4 w-4" />}>
-            New search
+            Nova busca
           </Button>
         }
       />
 
       {!sessionReady ? (
         <Note tone="warning">
-          No signed-in browser session yet. Start one from the dashboard and sign in to LinkedIn
-          yourself — searches need that window to be open.
+          Ainda não há uma sessão do navegador autenticada. Inicie uma no painel e faça login no
+          LinkedIn você mesmo — as buscas precisam dessa janela aberta.
         </Note>
       ) : null}
 
@@ -85,11 +85,11 @@ export function Searches() {
         <Card>
           <EmptyState
             icon={SearchIcon}
-            title="No saved searches"
-            description="A search is a set of keywords and filters you can re-run whenever you want fresh postings."
+            title="Nenhuma busca salva"
+            description="Uma busca é um conjunto de palavras-chave e filtros que você pode rodar de novo sempre que quiser anúncios novos."
             action={
               <Button variant="primary" onClick={openCreate} icon={<Plus aria-hidden className="h-4 w-4" />}>
-                Create your first search
+                Criar a sua primeira busca
               </Button>
             }
           />
@@ -102,7 +102,7 @@ export function Searches() {
                 <div className="flex items-start justify-between gap-2">
                   <h2 className="min-w-0 text-md leading-snug">{search.name}</h2>
                   <span className={badgeClass(search.is_active ? 'success' : 'neutral')}>
-                    {search.is_active ? 'Active' : 'Paused'}
+                    {search.is_active ? 'Ativa' : 'Pausada'}
                   </span>
                 </div>
 
@@ -119,30 +119,30 @@ export function Searches() {
                   ) : null}
                   {search.remote_filter ? (
                     <span className={badgeClass('neutral')}>
-                      {humanizeSnakeCase(search.remote_filter)}
+                      {enumLabel(search.remote_filter)}
                     </span>
                   ) : null}
                   {search.date_posted ? (
                     <span className={badgeClass('neutral')}>
                       <Clock aria-hidden className="h-3 w-3" />
-                      {humanizeSnakeCase(search.date_posted)}
+                      {enumLabel(search.date_posted)}
                     </span>
                   ) : null}
                   {search.easy_apply_only ? (
-                    <span className={badgeClass('accent')}>Easy Apply only</span>
+                    <span className={badgeClass('accent')}>Só Candidatura Simplificada</span>
                   ) : null}
-                  <span className={badgeClass('neutral')}>max {search.max_results}</span>
+                  <span className={badgeClass('neutral')}>máx {search.max_results}</span>
                   {search.experience_levels.length > 0 ? (
                     <span className={badgeClass('neutral')}>
-                      {search.experience_levels.length} levels
+                      {search.experience_levels.length} níveis
                     </span>
                   ) : null}
                 </div>
 
                 <p className="mt-3 text-2xs text-content-subtle">
                   {search.last_run_at
-                    ? `Last run ${formatRelativeTime(search.last_run_at)}`
-                    : 'Never run yet'}
+                    ? `Última execução ${formatRelativeTime(search.last_run_at)}`
+                    : 'Nunca executada'}
                 </p>
 
                 <div className="mt-4 flex items-center gap-2 border-t border-line pt-3.5">
@@ -153,8 +153,8 @@ export function Searches() {
                     loading={run.isPending && runningId === search.id}
                     title={
                       sessionReady
-                        ? 'Find and score jobs for this search'
-                        : 'Start a signed-in browser session first'
+                        ? 'Encontrar e pontuar vagas para esta busca'
+                        : 'Inicie primeiro uma sessão do navegador autenticada'
                     }
                     onClick={() => {
                       setRunningId(search.id);
@@ -162,7 +162,7 @@ export function Searches() {
                     }}
                     icon={<Play aria-hidden className="h-3.5 w-3.5" />}
                   >
-                    Run search
+                    Rodar busca
                   </Button>
 
                   <Button
@@ -170,7 +170,7 @@ export function Searches() {
                     onClick={() => openEdit(search)}
                     icon={<Pencil aria-hidden className="h-3.5 w-3.5" />}
                   >
-                    Edit
+                    Editar
                   </Button>
 
                   <Button
@@ -178,7 +178,7 @@ export function Searches() {
                     variant="ghost"
                     className="ml-auto text-danger hover:bg-danger/10 hover:text-danger"
                     onClick={() => setDeleting(search)}
-                    aria-label={`Delete ${search.name}`}
+                    aria-label={`Excluir ${search.name}`}
                   >
                     <Trash2 aria-hidden className="h-3.5 w-3.5" />
                   </Button>
@@ -195,16 +195,16 @@ export function Searches() {
         open={deleting !== null}
         onClose={() => setDeleting(null)}
         size="sm"
-        title="Delete this search?"
+        title="Excluir esta busca?"
         description={
           deleting
-            ? `"${deleting.name}" will be removed. Jobs it already found stay in your list.`
+            ? `"${deleting.name}" será removida. As vagas que ela já encontrou continuam na sua lista.`
             : undefined
         }
         footer={
           <>
             <Button onClick={() => setDeleting(null)} disabled={remove.isPending}>
-              Cancel
+              Cancelar
             </Button>
             <Button
               variant="danger"
@@ -213,7 +213,7 @@ export function Searches() {
                 if (deleting) remove.mutate(deleting.id);
               }}
             >
-              Delete
+              Excluir
             </Button>
           </>
         }

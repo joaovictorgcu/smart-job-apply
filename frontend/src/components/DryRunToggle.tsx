@@ -28,14 +28,14 @@ export function DryRunToggle({ className, compact = false }: DryRunToggleProps) 
   const updateSettings = useUpdateSettings({
     onSuccess: (next) => {
       toast.toast({
-        title: next.dry_run ? 'Dry run enabled' : 'Dry run disabled',
+        title: next.dry_run ? 'Modo de teste ativado' : 'Modo de teste desativado',
         description: next.dry_run
-          ? 'Forms will be filled for review, but nothing will be submitted.'
-          : 'Approved applications can now be submitted to LinkedIn.',
+          ? 'Os formulários serão preenchidos para revisão, mas nada será enviado.'
+          : 'Candidaturas aprovadas agora podem ser enviadas ao LinkedIn.',
         variant: next.dry_run ? 'success' : 'warning',
       });
     },
-    onError: (error) => toast.error('Could not change dry run', errorMessage(error)),
+    onError: (error) => toast.error('Não foi possível alterar o modo de teste', errorMessage(error)),
   });
 
   if (isLoading || !settings) {
@@ -73,10 +73,10 @@ export function DryRunToggle({ className, compact = false }: DryRunToggleProps) 
             enabled ? 'text-content-muted' : 'text-warning-strong',
           )}
         >
-          {enabled ? 'Dry run' : 'Live mode'}
+          {enabled ? 'Modo de teste' : 'Modo real'}
         </span>
         <Toggle
-          label={enabled ? 'Dry run enabled — turn off to allow real submissions' : 'Dry run disabled — turn on to block submissions'}
+          label={enabled ? 'Modo de teste ativado — desligue para permitir envios reais' : 'Modo de teste desativado — ligue para bloquear envios'}
           checked={enabled}
           tone="success"
           disabled={updateSettings.isPending}
@@ -87,12 +87,12 @@ export function DryRunToggle({ className, compact = false }: DryRunToggleProps) 
       <Modal
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
-        title="Turn off dry run?"
-        description="This is the switch that allows real applications to leave your account."
+        title="Desligar o modo de teste?"
+        description="Este é o interruptor que permite candidaturas reais saírem da sua conta."
         size="md"
         footer={
           <>
-            <Button onClick={() => setConfirmOpen(false)}>Keep dry run on</Button>
+            <Button onClick={() => setConfirmOpen(false)}>Manter o modo de teste ligado</Button>
             <Button
               variant="danger"
               loading={updateSettings.isPending}
@@ -103,24 +103,24 @@ export function DryRunToggle({ className, compact = false }: DryRunToggleProps) 
                 )
               }
             >
-              Turn off dry run
+              Desligar o modo de teste
             </Button>
           </>
         }
       >
         <div className="space-y-3 text-sm leading-relaxed text-content-muted">
           <p>
-            With dry run on, the tool opens the Easy Apply form, fills it in and stops at the review
-            step — the submit button is never clicked.
+            Com o modo de teste ligado, a ferramenta abre o formulário de Candidatura Simplificada,
+            preenche e para na etapa de revisão — o botão de enviar nunca é clicado.
           </p>
           <p>
-            With dry run off, an application can actually be sent to LinkedIn. Every submission
-            still requires you to open the application and approve it individually; nothing is sent
-            in bulk or in the background.
+            Com o modo de teste desligado, uma candidatura pode de fato ser enviada ao LinkedIn. Todo
+            envio ainda exige que você abra a candidatura e a aprove individualmente; nada é enviado em
+            massa nem em segundo plano.
           </p>
           <Note tone="warning" icon={<TriangleAlert aria-hidden className="h-3.5 w-3.5" />}>
-            Automating LinkedIn violates LinkedIn&apos;s Terms of Service and can get your account
-            restricted. Only leave dry run off while you are watching the run.
+            Automatizar o LinkedIn viola os Termos de Uso do LinkedIn e pode fazer a sua conta ser
+            restringida. Só deixe o modo de teste desligado enquanto estiver acompanhando a execução.
           </Note>
         </div>
       </Modal>

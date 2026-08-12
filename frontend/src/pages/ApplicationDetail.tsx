@@ -7,7 +7,7 @@ import { Card, CardHeader, MetaRow, Note, Skeleton } from '@/components/primitiv
 import { ScoreBadge } from '@/components/ScoreBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useApplication } from '@/hooks/useApi';
-import { badgeClass, formatDateTime, formatTime, humanizeSnakeCase } from '@/lib/format';
+import { badgeClass, enumLabel, formatDateTime, formatTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { ApplicationEvent } from '@/types/api';
 
@@ -16,8 +16,8 @@ function Timeline({ events }: { events: ApplicationEvent[] }) {
     return (
       <EmptyState
         compact
-        title="No events yet"
-        description="Steps the automation took will be logged here."
+        title="Nenhum evento ainda"
+        description="Os passos que a automação executou serão registrados aqui."
       />
     );
   }
@@ -41,7 +41,7 @@ function Timeline({ events }: { events: ApplicationEvent[] }) {
                 event.is_error ? 'text-danger' : 'text-content',
               )}
             >
-              {humanizeSnakeCase(event.event_type)}
+              {enumLabel(event.event_type)}
             </p>
             <time
               dateTime={event.created_at}
@@ -84,11 +84,11 @@ export function ApplicationDetail() {
       <Card>
         <EmptyState
           icon={CircleAlert}
-          title="Application not found"
-          description="It may have been discarded, or the link is out of date."
+          title="Candidatura não encontrada"
+          description="Ela pode ter sido descartada, ou o link está desatualizado."
           action={
             <Link to="/applications" className="btn">
-              Back to applications
+              Voltar às candidaturas
             </Link>
           }
         />
@@ -109,7 +109,7 @@ export function ApplicationDetail() {
         className="inline-flex items-center gap-1.5 text-xs font-medium text-content-muted hover:text-content"
       >
         <ArrowLeft aria-hidden className="h-3.5 w-3.5" />
-        All applications
+        Todas as candidaturas
       </Link>
 
       <Card className="px-5 py-5">
@@ -118,10 +118,10 @@ export function ApplicationDetail() {
 
           <div className="min-w-0 flex-1">
             <h1 className="text-xl leading-snug">
-              {job ? job.title : `Application #${application.id}`}
+              {job ? job.title : `Candidatura #${application.id}`}
             </h1>
             <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-content-muted">
-              <span>{job?.company ?? 'Company unknown'}</span>
+              <span>{job?.company ?? 'Empresa desconhecida'}</span>
               {job?.location ? <span>{job.location}</span> : null}
               {job ? (
                 <Link
@@ -129,7 +129,7 @@ export function ApplicationDetail() {
                   className="inline-flex items-center gap-1.5 text-accent-400 hover:underline"
                 >
                   <Briefcase aria-hidden className="h-3.5 w-3.5" />
-                  Job details
+                  Detalhes da vaga
                 </Link>
               ) : null}
               {job?.url ? (
@@ -140,7 +140,7 @@ export function ApplicationDetail() {
                   className="inline-flex items-center gap-1.5 text-accent-400 hover:underline"
                 >
                   <ExternalLink aria-hidden className="h-3.5 w-3.5" />
-                  Posting
+                  Anúncio
                 </a>
               ) : null}
             </p>
@@ -148,11 +148,11 @@ export function ApplicationDetail() {
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
               <StatusBadge kind="application" status={application.status} />
               {application.was_dry_run ? (
-                <span className={badgeClass('neutral')}>filled in dry run</span>
+                <span className={badgeClass('neutral')}>preenchida em modo de teste</span>
               ) : null}
               {showSteps ? (
                 <span className={badgeClass('info')}>
-                  step {application.current_step} of {application.total_steps}
+                  etapa {application.current_step} de {application.total_steps}
                 </span>
               ) : null}
               {application.resume_filename ? (
@@ -170,8 +170,8 @@ export function ApplicationDetail() {
 
         {application.needs_human_input ? (
           <Note tone="warning" className="mt-3">
-            The form asked something the automation could not answer on its own. Check the flagged
-            answers below before approving.
+            O formulário perguntou algo que a automação não conseguiu responder sozinha. Confira as
+            respostas sinalizadas abaixo antes de aprovar.
           </Note>
         ) : null}
       </Card>
@@ -181,22 +181,22 @@ export function ApplicationDetail() {
 
         <div className="space-y-4">
           <Card>
-            <CardHeader title="Timeline" description="Everything that happened, oldest first." />
+            <CardHeader title="Linha do tempo" description="Tudo que aconteceu, do mais antigo ao mais recente." />
             <div className="card-body">
               <Timeline events={application.events} />
             </div>
           </Card>
 
           <Card>
-            <CardHeader title="Details" />
+            <CardHeader title="Detalhes" />
             <div className="card-body">
               <dl className="divide-y divide-line">
-                <MetaRow label="Created">{formatDateTime(application.created_at)}</MetaRow>
-                <MetaRow label="Last update">{formatDateTime(application.updated_at)}</MetaRow>
-                <MetaRow label="Approved">
+                <MetaRow label="Criada">{formatDateTime(application.created_at)}</MetaRow>
+                <MetaRow label="Última atualização">{formatDateTime(application.updated_at)}</MetaRow>
+                <MetaRow label="Aprovada">
                   {application.approved_at ? formatDateTime(application.approved_at) : '—'}
                 </MetaRow>
-                <MetaRow label="Submitted">
+                <MetaRow label="Enviada">
                   {application.submitted_at ? formatDateTime(application.submitted_at) : '—'}
                 </MetaRow>
               </dl>

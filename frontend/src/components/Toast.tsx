@@ -49,7 +49,7 @@ export function Toast({ toast, onDismiss }: ToastProps) {
       <button
         type="button"
         onClick={() => onDismiss(toast.id)}
-        aria-label="Dismiss notification"
+        aria-label="Dispensar notificação"
         className="-mr-1 -mt-0.5 rounded-lg p-1 text-content-subtle transition-colors duration-150 hover:bg-surface-sunken hover:text-content"
       >
         <X aria-hidden className="h-3.5 w-3.5" />

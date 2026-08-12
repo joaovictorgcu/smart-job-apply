@@ -25,9 +25,9 @@ export const DEFAULT_JOB_FILTERS: JobFiltersValue = {
 };
 
 const SORT_LABEL: Record<JobSort, string> = {
-  score: 'Highest score',
-  newest: 'Most recent',
-  company: 'Company A–Z',
+  score: 'Maior nota',
+  newest: 'Mais recente',
+  company: 'Empresa A–Z',
 };
 
 export interface JobFiltersProps {
@@ -52,7 +52,7 @@ export function JobFilters({ value, onChange, className }: JobFiltersProps) {
       <div className="flex items-center justify-between gap-3">
         <p className="flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.1em] text-content-subtle">
           <SlidersHorizontal aria-hidden className="h-3.5 w-3.5" />
-          Filters
+          Filtros
         </p>
         {isDefault ? null : (
           <Button
@@ -61,7 +61,7 @@ export function JobFilters({ value, onChange, className }: JobFiltersProps) {
             onClick={() => onChange(DEFAULT_JOB_FILTERS)}
             icon={<RotateCcw aria-hidden className="h-3.5 w-3.5" />}
           >
-            Reset
+            Reverter
           </Button>
         )}
       </div>
@@ -75,7 +75,7 @@ export function JobFilters({ value, onChange, className }: JobFiltersProps) {
               patch({ status: event.target.value as JobFiltersValue['status'] })
             }
           >
-            <option value="all">Any status</option>
+            <option value="all">Qualquer status</option>
             {JOB_STATUSES.map((status) => (
               <option key={status} value={status}>
                 {jobStatusLabel(status)}
@@ -84,7 +84,7 @@ export function JobFilters({ value, onChange, className }: JobFiltersProps) {
           </Select>
         </Field>
 
-        <Field label="Saved search" htmlFor="job-filter-search">
+        <Field label="Busca salva" htmlFor="job-filter-search">
           <Select
             id="job-filter-search"
             value={value.searchId === 'all' ? 'all' : String(value.searchId)}
@@ -94,7 +94,7 @@ export function JobFilters({ value, onChange, className }: JobFiltersProps) {
               })
             }
           >
-            <option value="all">Any search</option>
+            <option value="all">Qualquer busca</option>
             {(searches ?? []).map((search) => (
               <option key={search.id} value={search.id}>
                 {search.name}
@@ -104,9 +104,9 @@ export function JobFilters({ value, onChange, className }: JobFiltersProps) {
         </Field>
 
         <Field
-          label="Sort"
+          label="Ordenar"
           htmlFor="job-filter-sort"
-          hint="Sorts the jobs on this page."
+          hint="Ordena as vagas nesta página."
         >
           <Select
             id="job-filter-sort"
@@ -124,7 +124,7 @@ export function JobFilters({ value, onChange, className }: JobFiltersProps) {
         <Field
           label={
             <span className="flex w-full items-baseline justify-between gap-2">
-              <span>Minimum score</span>
+              <span>Nota mínima</span>
               <span className="tabular text-2xs font-semibold normal-case tracking-normal text-accent-400">
                 {value.minScore}
               </span>
@@ -140,7 +140,7 @@ export function JobFilters({ value, onChange, className }: JobFiltersProps) {
             step={5}
             value={value.minScore}
             onChange={(event) => patch({ minScore: Number(event.target.value) })}
-            aria-valuetext={`${value.minScore} out of 100`}
+            aria-valuetext={`${value.minScore} de 100`}
             className="h-9 w-full cursor-pointer accent-accent-500"
           />
         </Field>

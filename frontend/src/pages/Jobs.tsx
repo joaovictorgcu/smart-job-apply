@@ -54,11 +54,11 @@ export function Jobs() {
       setDialogOpen(false);
       setSelectedIds([]);
       toast.success(
-        'Filling applications',
-        `Run #${run.id} started. Each form stops at the review step — watch progress in Activity.`,
+        'Preenchendo candidaturas',
+        `Execução #${run.id} iniciada. Cada formulário para na etapa de revisão — acompanhe o progresso em Atividade.`,
       );
     },
-    onError: (error) => toast.error('Could not start filling', errorMessage(error)),
+    onError: (error) => toast.error('Não foi possível iniciar o preenchimento', errorMessage(error)),
   });
 
   const items = useMemo(() => sortJobs(data?.items ?? [], filters.sort), [data, filters.sort]);
@@ -96,11 +96,11 @@ export function Jobs() {
   return (
     <div className="space-y-5 pb-24">
       <PageHeader
-        title="Jobs"
-        description="Everything the searches found, with the AI's verdict. Selecting jobs here only fills forms for review — it never submits."
+        title="Vagas"
+        description="Tudo que as buscas encontraram, com o veredito da IA. Selecionar vagas aqui apenas preenche formulários para revisão — nunca envia."
         actions={
           <Link to="/searches" className="btn">
-            Run a search
+            Rodar uma busca
           </Link>
         }
       />
@@ -121,10 +121,10 @@ export function Jobs() {
               )
             }
           >
-            {allOnPageSelected ? 'Deselect this page' : 'Select this page'}
+            {allOnPageSelected ? 'Desmarcar esta página' : 'Selecionar esta página'}
           </Button>
           <p className="tabular text-xs text-content-subtle">
-            {isFetching ? 'Refreshing…' : `${formatNumber(data?.total ?? 0)} jobs match`}
+            {isFetching ? 'Atualizando…' : `${formatNumber(data?.total ?? 0)} vagas encontradas`}
           </p>
         </div>
       ) : null}
@@ -137,7 +137,7 @@ export function Jobs() {
         onToggleSelect={toggleSelect}
         emptyAction={
           <Link to="/searches" className="btn btn-primary">
-            Create a search
+            Criar uma busca
           </Link>
         }
       />
@@ -148,7 +148,7 @@ export function Jobs() {
           limit={data.limit}
           offset={data.offset}
           onOffsetChange={setOffset}
-          unit="jobs"
+          unit="vagas"
         />
       ) : null}
 
@@ -156,10 +156,10 @@ export function Jobs() {
         <div className="sticky bottom-4 z-20 mx-auto w-full max-w-3xl">
           <Card className="flex flex-wrap items-center gap-3 border-accent-500/40 px-4 py-3 shadow-lifted">
             <p className="tabular text-sm font-medium text-content">
-              {formatNumber(selectedIds.length)} selected
+              {formatNumber(selectedIds.length)} selecionadas
             </p>
             <Button size="sm" variant="ghost" onClick={() => setSelectedIds([])}>
-              Clear
+              Limpar
             </Button>
             <Button
               variant="primary"
@@ -167,19 +167,19 @@ export function Jobs() {
               disabled={overBatchLimit}
               title={
                 overBatchLimit
-                  ? `Select at most ${MAX_PREPARE_BATCH} jobs per batch`
-                  : 'Preview what filling these forms would do'
+                  ? `Selecione no máximo ${MAX_PREPARE_BATCH} vagas por lote`
+                  : 'Pré-visualize o que preencher esses formulários faria'
               }
               onClick={openPreview}
               icon={<Wand2 aria-hidden className="h-4 w-4" />}
             >
-              Prepare applications…
+              Preparar candidaturas…
             </Button>
 
             {overBatchLimit ? (
               <p className="w-full text-xs leading-relaxed text-warning">
-                A batch is capped at {MAX_PREPARE_BATCH} jobs. Deselect{' '}
-                {formatNumber(selectedIds.length - MAX_PREPARE_BATCH)} and run the rest afterwards.
+                Um lote é limitado a {MAX_PREPARE_BATCH} vagas. Desmarque{' '}
+                {formatNumber(selectedIds.length - MAX_PREPARE_BATCH)} e rode o restante depois.
               </p>
             ) : null}
           </Card>

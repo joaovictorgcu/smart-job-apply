@@ -20,11 +20,11 @@ interface Column {
 }
 
 const COLUMNS: Column[] = [
-  { outcome: 'applied', label: 'Applied', text: 'text-info', dot: 'bg-info' },
-  { outcome: 'interview', label: 'Interview', text: 'text-accent-400', dot: 'bg-accent-500' },
-  { outcome: 'offer', label: 'Offer', text: 'text-success', dot: 'bg-success' },
-  { outcome: 'rejected', label: 'Rejected', text: 'text-danger', dot: 'bg-danger' },
-  { outcome: 'ghosted', label: 'No response', text: 'text-content-muted', dot: 'bg-content-subtle' },
+  { outcome: 'applied', label: 'Enviada', text: 'text-info', dot: 'bg-info' },
+  { outcome: 'interview', label: 'Entrevista', text: 'text-accent-400', dot: 'bg-accent-500' },
+  { outcome: 'offer', label: 'Proposta', text: 'text-success', dot: 'bg-success' },
+  { outcome: 'rejected', label: 'Rejeitada', text: 'text-danger', dot: 'bg-danger' },
+  { outcome: 'ghosted', label: 'Sem resposta', text: 'text-content-muted', dot: 'bg-content-subtle' },
 ];
 
 function percent(rate: number | null): string {
@@ -36,7 +36,7 @@ export function Pipeline() {
   const { data: cards, isLoading } = useBoard();
   const { data: stats } = useOutcomeStats();
   const move = useUpdateOutcome({
-    onError: (error) => toast.error('Could not move the application', errorMessage(error)),
+    onError: (error) => toast.error('Não foi possível mover a candidatura', errorMessage(error)),
   });
   const [overColumn, setOverColumn] = useState<ApplicationOutcome | null>(null);
 
@@ -63,8 +63,8 @@ export function Pipeline() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Pipeline"
-        description="What happened after you applied. Drag a card, or use its menu, to record the outcome."
+        title="Funil"
+        description="O que aconteceu depois que você se candidatou. Arraste um card, ou use o menu dele, para registrar o desfecho."
       />
 
       <OutcomeAnalytics
@@ -92,11 +92,11 @@ export function Pipeline() {
         <Card>
           <EmptyState
             icon={Columns3}
-            title="Nothing submitted yet"
-            description="Once you approve and submit an application, it lands here so you can track whether it turns into an interview."
+            title="Nada enviado ainda"
+            description="Quando você aprovar e enviar uma candidatura, ela aparece aqui para você acompanhar se vira entrevista."
             action={
               <Link to="/applications" className="btn">
-                Go to applications
+                Ir para candidaturas
               </Link>
             }
           />
@@ -134,7 +134,7 @@ export function Pipeline() {
                 <div className="flex flex-1 flex-col gap-2 pt-1">
                   {items.length === 0 ? (
                     <p className="px-1.5 py-6 text-center text-xs text-content-subtle">
-                      Drop a card here
+                      Solte um card aqui
                     </p>
                   ) : (
                     items.map((card) => (
@@ -161,10 +161,10 @@ export function Pipeline() {
                         </div>
                         <div className="mt-2 flex items-center justify-between gap-2">
                           <span className="text-2xs text-content-subtle">
-                            {card.submitted_at ? `Applied ${formatDate(card.submitted_at)}` : ''}
+                            {card.submitted_at ? `Enviada em ${formatDate(card.submitted_at)}` : ''}
                           </span>
                           <Select
-                            aria-label={`Outcome for ${card.title}`}
+                            aria-label={`Desfecho de ${card.title}`}
                             value={card.outcome}
                             onChange={(event) =>
                               move.mutate({
@@ -200,10 +200,10 @@ interface AnalyticsProps {
 
 function OutcomeAnalytics({ stats }: AnalyticsProps) {
   const tiles: { label: string; value: ReactNode; icon: typeof Send; hint?: string }[] = [
-    { label: 'Submitted', value: stats.total_submitted, icon: Send },
-    { label: 'Interviews', value: stats.interviews, icon: CalendarCheck, hint: 'interview or offer' },
-    { label: 'Offers', value: stats.offers, icon: Trophy },
-    { label: 'Interview rate', value: percent(stats.interview_rate), icon: Percent },
+    { label: 'Enviadas', value: stats.total_submitted, icon: Send },
+    { label: 'Entrevistas', value: stats.interviews, icon: CalendarCheck, hint: 'entrevista ou proposta' },
+    { label: 'Propostas', value: stats.offers, icon: Trophy },
+    { label: 'Taxa de entrevista', value: percent(stats.interview_rate), icon: Percent },
   ];
 
   const bands = stats.interview_rate_by_band;
@@ -232,15 +232,15 @@ function OutcomeAnalytics({ stats }: AnalyticsProps) {
 
       <Card className="lg:col-span-3">
         <CardHeader
-          title="Does a higher score mean an interview?"
-          description="Interview rate by AI match-score band, over your submitted applications."
+          title="Uma nota maior significa entrevista?"
+          description="Taxa de entrevista por faixa de nota de aderência da IA, sobre as suas candidaturas enviadas."
         />
         <div className="card-body">
           {!hasData ? (
             <EmptyState
               compact
-              title="Not enough data yet"
-              description="Submit applications and record their outcomes to see whether the score predicts interviews."
+              title="Dados insuficientes ainda"
+              description="Envie candidaturas e registre os desfechos para ver se a nota prevê entrevistas."
             />
           ) : (
             <div className="space-y-2.5">
@@ -264,8 +264,8 @@ function OutcomeAnalytics({ stats }: AnalyticsProps) {
                 </div>
               ))}
               <p className="pt-1 text-2xs text-content-subtle">
-                "Interview" counts applications currently in Interview or Offer — a floor, since a
-                post-interview rejection is recorded as Rejected.
+                "Entrevista" conta as candidaturas atualmente em Entrevista ou Proposta — um piso, já
+                que uma rejeição após a entrevista é registrada como Rejeitada.
               </p>
             </div>
           )}

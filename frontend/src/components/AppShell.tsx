@@ -47,7 +47,7 @@ export function AppShell() {
         onClose={() => setNavOpen(false)}
         side="left"
         width="max-w-[17rem]"
-        title="Navigation"
+        title="Navegação"
       >
         <Sidebar alwaysShowLabels onNavigate={() => setNavOpen(false)} className="py-0" />
       </Drawer>

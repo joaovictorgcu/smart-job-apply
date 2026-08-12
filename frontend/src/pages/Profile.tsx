@@ -99,7 +99,7 @@ function TagEditor({
                 <button
                   type="button"
                   onClick={() => onChange(tags.filter((entry) => entry !== tag))}
-                  aria-label={`Remove ${tag}`}
+                  aria-label={`Remover ${tag}`}
                   className="rounded-full p-0.5 hover:bg-accent-500/20"
                 >
                   <X aria-hidden className="h-3 w-3" />
@@ -136,8 +136,8 @@ export function Profile() {
   }, [profile]);
 
   const update = useUpdateProfile({
-    onSuccess: () => toast.success('Profile saved'),
-    onError: (error) => toast.error('Could not save your profile', errorMessage(error)),
+    onSuccess: () => toast.success('Perfil salvo'),
+    onError: (error) => toast.error('Não foi possível salvar o seu perfil', errorMessage(error)),
   });
 
   const isDirty = useMemo(() => {
@@ -182,37 +182,37 @@ export function Profile() {
   return (
     <div className="space-y-5 pb-24">
       <PageHeader
-        title="Profile"
-        description="What the AI knows about you. Everything here feeds job scoring, cover letters and screening answers."
+        title="Perfil"
+        description="O que a IA sabe sobre você. Tudo aqui alimenta a pontuação de vagas, as cartas de apresentação e as respostas de triagem."
       />
 
       <Card>
-        <CardHeader title="Basics" />
+        <CardHeader title="Informações básicas" />
         <div className="card-body grid gap-4 sm:grid-cols-2">
           <Field
-            label="Headline"
+            label="Título"
             htmlFor="profile-headline"
-            hint="One line, like your LinkedIn headline."
+            hint="Uma linha, como o título do seu LinkedIn."
             className="sm:col-span-2"
           >
             <Input
               id="profile-headline"
               value={draft.headline}
               onChange={(event) => patch({ headline: event.target.value })}
-              placeholder="Senior backend engineer — Python, distributed systems"
+              placeholder="Engenheiro backend sênior — Python, sistemas distribuídos"
             />
           </Field>
 
-          <Field label="Location" htmlFor="profile-location">
+          <Field label="Localização" htmlFor="profile-location">
             <Input
               id="profile-location"
               value={draft.location}
               onChange={(event) => patch({ location: event.target.value })}
-              placeholder="Lisbon, Portugal"
+              placeholder="Lisboa, Portugal"
             />
           </Field>
 
-          <Field label="Phone" htmlFor="profile-phone" hint="Used to fill contact fields in forms.">
+          <Field label="Telefone" htmlFor="profile-phone" hint="Usado para preencher campos de contato nos formulários.">
             <Input
               id="profile-phone"
               type="tel"
@@ -222,7 +222,7 @@ export function Profile() {
             />
           </Field>
 
-          <Field label="Years of experience" htmlFor="profile-years">
+          <Field label="Anos de experiência" htmlFor="profile-years">
             <Input
               id="profile-years"
               type="number"
@@ -237,29 +237,29 @@ export function Profile() {
 
       <Card>
         <CardHeader
-          title="Summary"
-          description="A short professional summary. The AI leans on this for cover letters."
+          title="Resumo"
+          description="Um breve resumo profissional. A IA se apoia nisso para as cartas de apresentação."
         />
         <div className="card-body">
           <label htmlFor="profile-summary" className="sr-only">
-            Summary
+            Resumo
           </label>
           <Textarea
             id="profile-summary"
             rows={5}
             value={draft.summary}
             onChange={(event) => patch({ summary: event.target.value })}
-            placeholder="Eight years building payment systems, mostly Python and Postgres…"
+            placeholder="Oito anos construindo sistemas de pagamento, principalmente Python e Postgres…"
           />
         </div>
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Skills" description="Press Enter or comma to add. Backspace removes the last one." />
+          <CardHeader title="Habilidades" description="Pressione Enter ou vírgula para adicionar. Backspace remove a última." />
           <div className="card-body">
             <label htmlFor="profile-skills" className="sr-only">
-              Add a skill
+              Adicionar uma habilidade
             </label>
             <TagEditor
               id="profile-skills"
@@ -272,18 +272,18 @@ export function Profile() {
 
         <Card>
           <CardHeader
-            title="Preferred languages"
-            description="Which languages you are comfortable applying in."
+            title="Idiomas preferidos"
+            description="Em quais idiomas você se sente confortável para se candidatar."
           />
           <div className="card-body">
             <label htmlFor="profile-languages" className="sr-only">
-              Add a language
+              Adicionar um idioma
             </label>
             <TagEditor
               id="profile-languages"
               tags={draft.languages}
               onChange={(languages) => patch({ languages })}
-              placeholder="English, Portuguese…"
+              placeholder="Inglês, Português…"
             />
           </div>
         </Card>
@@ -291,25 +291,26 @@ export function Profile() {
 
       <Card>
         <CardHeader
-          title="Résumé"
-          description="The PDF is uploaded to LinkedIn; the text version is what the AI reads."
+          title="Currículo"
+          description="O PDF é enviado ao LinkedIn; a versão em texto é o que a IA lê."
         />
         <div className="card-body grid gap-4 lg:grid-cols-2">
           <ResumeUploader filename={profile?.resume_filename ?? null} />
 
           <div>
             <label htmlFor="profile-resume-text" className="label">
-              Résumé text
+              Texto do currículo
             </label>
             <Textarea
               id="profile-resume-text"
               rows={10}
               value={draft.resumeText}
               onChange={(event) => patch({ resumeText: event.target.value })}
-              placeholder="Paste the plain text of your résumé here."
+              placeholder="Cole aqui o texto puro do seu currículo."
             />
             <p className="hint">
-              Keep this in sync with the PDF. Mismatched claims are what screening questions catch.
+              Mantenha isto em sincronia com o PDF. Afirmações que não batem são o que as perguntas de
+              triagem pegam.
             </p>
           </div>
         </div>
@@ -317,8 +318,8 @@ export function Profile() {
 
       <Card>
         <CardHeader
-          title="Answer bank"
-          description="Fixed answers to the questions LinkedIn asks over and over."
+          title="Banco de respostas"
+          description="Respostas fixas para as perguntas que o LinkedIn faz sem parar."
           actions={
             <Button
               size="sm"
@@ -328,21 +329,21 @@ export function Profile() {
               }}
               icon={<Plus aria-hidden className="h-3.5 w-3.5" />}
             >
-              Add answer
+              Adicionar resposta
             </Button>
           }
         />
         <div className="card-body space-y-3">
           <Note tone="neutral" icon={<Info aria-hidden className="h-3.5 w-3.5" />}>
-            The AI checks this bank first and only invents an answer when nothing matches — and any
-            answer it invents with low confidence is flagged for your review before submission. Use
-            keys like <span className="font-mono">work_authorization</span> or{' '}
+            A IA consulta este banco primeiro e só inventa uma resposta quando nada corresponde — e
+            qualquer resposta que ela invente com baixa confiança é sinalizada para a sua revisão antes
+            do envio. Use chaves como <span className="font-mono">work_authorization</span> ou{' '}
             <span className="font-mono">notice_period</span>.
           </Note>
 
           {draft.answers.length === 0 ? (
             <p className="text-xs text-content-subtle">
-              No stored answers yet. Add the ones you type most often.
+              Nenhuma resposta salva ainda. Adicione as que você digita com mais frequência.
             </p>
           ) : (
             <ul className="space-y-2">
@@ -350,12 +351,12 @@ export function Profile() {
                 <li key={row.id} className="flex flex-col gap-2 sm:flex-row sm:items-start">
                   <div className="sm:w-64">
                     <label htmlFor={`answer-key-${row.id}`} className="sr-only">
-                      Question key {index + 1}
+                      Chave da pergunta {index + 1}
                     </label>
                     <Input
                       id={`answer-key-${row.id}`}
                       value={row.key}
-                      placeholder="question key"
+                      placeholder="chave da pergunta"
                       className="font-mono"
                       onChange={(event) =>
                         patch({
@@ -368,12 +369,12 @@ export function Profile() {
                   </div>
                   <div className="flex-1">
                     <label htmlFor={`answer-value-${row.id}`} className="sr-only">
-                      Answer {index + 1}
+                      Resposta {index + 1}
                     </label>
                     <Input
                       id={`answer-value-${row.id}`}
                       value={row.value}
-                      placeholder="answer"
+                      placeholder="resposta"
                       onChange={(event) =>
                         patch({
                           answers: draft.answers.map((entry) =>
@@ -386,7 +387,7 @@ export function Profile() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    aria-label={`Remove answer ${row.key || index + 1}`}
+                    aria-label={`Remover resposta ${row.key || index + 1}`}
                     className="text-danger hover:bg-danger/10 hover:text-danger"
                     onClick={() =>
                       patch({ answers: draft.answers.filter((entry) => entry.id !== row.id) })
@@ -404,13 +405,13 @@ export function Profile() {
       {isDirty ? (
         <div className="sticky bottom-4 z-20 mx-auto w-full max-w-2xl">
           <Card className="flex items-center gap-3 border-accent-500/40 px-4 py-3 shadow-lifted">
-            <p className="text-sm text-content-muted">You have unsaved changes.</p>
+            <p className="text-sm text-content-muted">Você tem alterações não salvas.</p>
             <Button
               className="ml-auto"
               onClick={() => baseline && setDraft(baseline)}
               disabled={update.isPending}
             >
-              Reset
+              Reverter
             </Button>
             <Button
               variant="primary"
@@ -418,7 +419,7 @@ export function Profile() {
               onClick={save}
               icon={<Save aria-hidden className="h-4 w-4" />}
             >
-              Save profile
+              Salvar perfil
             </Button>
           </Card>
         </div>

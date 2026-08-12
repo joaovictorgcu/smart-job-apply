@@ -23,14 +23,14 @@ interface NavEntry {
 }
 
 const NAV: NavEntry[] = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/jobs', label: 'Jobs', icon: Briefcase },
-  { to: '/applications', label: 'Applications', icon: Send },
-  { to: '/pipeline', label: 'Pipeline', icon: Columns3 },
-  { to: '/searches', label: 'Searches', icon: Search },
-  { to: '/activity', label: 'Activity', icon: Activity },
-  { to: '/profile', label: 'Profile', icon: User },
-  { to: '/settings', label: 'Settings', icon: Settings },
+  { to: '/', label: 'Painel', icon: LayoutDashboard, end: true },
+  { to: '/jobs', label: 'Vagas', icon: Briefcase },
+  { to: '/applications', label: 'Candidaturas', icon: Send },
+  { to: '/pipeline', label: 'Funil', icon: Columns3 },
+  { to: '/searches', label: 'Buscas', icon: Search },
+  { to: '/activity', label: 'Atividade', icon: Activity },
+  { to: '/profile', label: 'Perfil', icon: User },
+  { to: '/settings', label: 'Configurações', icon: Settings },
 ];
 
 export interface SidebarProps {
@@ -62,12 +62,12 @@ export function Sidebar({ alwaysShowLabels = false, onNavigate, className }: Sid
             Auto Apply
           </span>
           <span className="block truncate text-2xs leading-tight text-content-subtle">
-            assisted mode
+            modo assistido
           </span>
         </span>
       </div>
 
-      <nav aria-label="Main navigation" className="scroll-area min-h-0 flex-1 px-2">
+      <nav aria-label="Navegação principal" className="scroll-area min-h-0 flex-1 px-2">
         <ul className="space-y-0.5">
           {NAV.map(({ to, label, icon: Icon, end }) => (
             <li key={to}>
@@ -96,11 +96,11 @@ export function Sidebar({ alwaysShowLabels = false, onNavigate, className }: Sid
         <div className="rounded-lg border border-line bg-surface-sunken p-3">
           <p className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-content-subtle">
             <ShieldCheck aria-hidden className="h-3.5 w-3.5" />
-            Assisted mode
+            Modo assistido
           </p>
           <p className="mt-1.5 text-xs leading-relaxed text-content-muted">
-            Searching, scoring and form filling are separate from submitting. No application is
-            ever sent without your explicit approval.
+            Busca, pontuação e preenchimento são separados do envio. Nenhuma candidatura é
+            enviada sem a sua aprovação explícita.
           </p>
         </div>
       </div>

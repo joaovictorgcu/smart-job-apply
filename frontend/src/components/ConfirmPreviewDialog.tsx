@@ -87,17 +87,17 @@ export function ConfirmPreviewDialog({
       open={open}
       onClose={onClose}
       size="lg"
-      title="Review before anything is filled in"
-      description="This step opens each posting and fills the Easy Apply form. Submitting is a separate action you take per application."
+      title="Revise antes de preencher qualquer coisa"
+      description="Este passo abre cada anúncio e preenche o formulário de Candidatura Simplificada. Enviar é uma ação separada que você faz por candidatura."
       footer={
         <>
           <Button onClick={onClose} disabled={isSubmitting}>
-            Cancel
+            Cancelar
           </Button>
           <Button variant="primary" disabled={!canConfirm} loading={isSubmitting} onClick={onConfirm}>
             {count > 0
-              ? `Fill ${count} ${count === 1 ? 'application' : 'applications'} for review — nothing will be submitted`
-              : 'Nothing to fill'}
+              ? `Preencher ${count} ${count === 1 ? 'candidatura' : 'candidaturas'} para revisão — nada será enviado`
+              : 'Nada para preencher'}
           </Button>
         </>
       }
@@ -122,25 +122,25 @@ export function ConfirmPreviewDialog({
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Metric
-              label="Will be filled"
+              label="Serão preenchidas"
               value={formatNumber(count)}
-              hint="Forms filled, then paused for review"
+              hint="Formulários preenchidos e pausados para revisão"
               tone="accent"
             />
             <Metric
-              label="Already applied"
+              label="Já candidatadas"
               value={formatNumber(preview.already_applied)}
-              hint="Skipped — no duplicates"
+              hint="Puladas — sem duplicatas"
             />
             <Metric
-              label="Below threshold"
+              label="Abaixo do limite"
               value={formatNumber(preview.below_threshold)}
-              hint="Under your minimum score"
+              hint="Abaixo da sua nota mínima"
             />
             <Metric
-              label="Quota left today"
+              label="Cota restante hoje"
               value={`${formatNumber(preview.remaining_today)} / ${formatNumber(preview.daily_cap)}`}
-              hint={overQuota ? 'Fewer than requested will be sendable' : 'Submissions remaining'}
+              hint={overQuota ? 'Menos que o solicitado poderá ser enviado' : 'Envios restantes'}
               tone={overQuota ? 'warning' : 'neutral'}
             />
           </div>
@@ -165,21 +165,21 @@ export function ConfirmPreviewDialog({
                   preview.dry_run ? 'text-success' : 'text-warning-strong',
                 )}
               >
-                {preview.dry_run ? 'Dry run is ON' : 'Dry run is OFF'}
+                {preview.dry_run ? 'Modo de teste LIGADO' : 'Modo de teste DESLIGADO'}
               </p>
               <p className="text-content-muted">
                 {preview.dry_run
-                  ? 'Even after you approve an application, the submit button will not be clicked. Turn dry run off in Settings when you are ready to send for real.'
-                  : 'Applications you explicitly approve will be really submitted to LinkedIn. This batch still only fills forms.'}
+                  ? 'Mesmo depois de você aprovar uma candidatura, o botão de enviar não será clicado. Desligue o modo de teste em Configurações quando estiver pronto para enviar de verdade.'
+                  : 'As candidaturas que você aprovar explicitamente serão de fato enviadas ao LinkedIn. Este lote ainda apenas preenche formulários.'}
               </p>
             </div>
           </div>
 
           {overQuota ? (
             <Note tone="warning" icon={<TriangleAlert aria-hidden className="h-3.5 w-3.5" />}>
-              You picked {formatNumber(count)} jobs but only{' '}
-              {formatNumber(preview.remaining_today)} submissions are left under today&apos;s cap of{' '}
-              {formatNumber(preview.daily_cap)}. The extra drafts will wait for tomorrow.
+              Você escolheu {formatNumber(count)} vagas, mas só restam{' '}
+              {formatNumber(preview.remaining_today)} envios dentro do limite de hoje, que é de{' '}
+              {formatNumber(preview.daily_cap)}. Os rascunhos extras vão esperar até amanhã.
             </Note>
           ) : null}
 
@@ -197,34 +197,34 @@ export function ConfirmPreviewDialog({
 
           {count === 0 ? (
             <Note tone="neutral" icon={<CircleSlash aria-hidden className="h-3.5 w-3.5" />}>
-              Nothing in this selection is eligible. Everything you picked is already applied to, is
-              below your minimum score, or is not an Easy Apply posting.
+              Nada nesta seleção é elegível. Tudo que você escolheu já foi candidatado, está abaixo da
+              sua nota mínima ou não é um anúncio de Candidatura Simplificada.
             </Note>
           ) : (
             <>
               <div className="rounded-lg border border-line bg-surface-sunken px-3.5 py-3">
                 <p className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-content-subtle">
                   <ShieldCheck aria-hidden className="h-3.5 w-3.5" />
-                  What happens next
+                  O que acontece a seguir
                 </p>
                 <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs leading-relaxed text-content-muted">
-                  <li>Each posting is opened in the browser window you signed in to.</li>
-                  <li>The Easy Apply form is filled from your profile and answer bank.</li>
+                  <li>Cada anúncio é aberto na janela do navegador em que você fez login.</li>
+                  <li>O formulário de Candidatura Simplificada é preenchido com o seu perfil e o banco de respostas.</li>
                   <li>
-                    The run stops at the review step and the application appears under{' '}
-                    <span className="font-medium text-content">Awaiting review</span>.
+                    A execução para na etapa de revisão e a candidatura aparece em{' '}
+                    <span className="font-medium text-content">Aguardando revisão</span>.
                   </li>
-                  <li>You open each one, edit it, and approve it individually — or discard it.</li>
+                  <li>Você abre cada uma, edita e aprova individualmente — ou descarta.</li>
                 </ol>
               </div>
 
               <Checkbox
                 checked={acknowledged}
                 onChange={(event) => setAcknowledged(event.target.checked)}
-                label={`I understand this will open and fill ${count} LinkedIn ${
-                  count === 1 ? 'application' : 'applications'
-                } and stop for my review.`}
-                description="Automating LinkedIn violates its Terms of Service and is done at your own risk."
+                label={`Entendo que isto vai abrir e preencher ${count} ${
+                  count === 1 ? 'candidatura' : 'candidaturas'
+                } do LinkedIn e parar para a minha revisão.`}
+                description="Automatizar o LinkedIn viola os Termos de Uso dele e é feito por sua conta e risco."
               />
             </>
           )}

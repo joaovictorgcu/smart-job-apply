@@ -14,9 +14,9 @@ const CONFIDENCE_TONE: Record<AnswerConfidence, ToneName> = {
 };
 
 const CONFIDENCE_LABEL: Record<AnswerConfidence, string> = {
-  high: 'High confidence',
-  medium: 'Medium confidence',
-  low: 'Low confidence',
+  high: 'Confiança alta',
+  medium: 'Confiança média',
+  low: 'Confiança baixa',
 };
 
 export interface ScreeningAnswerEditorProps {
@@ -44,8 +44,8 @@ export function ScreeningAnswerEditor({
       <EmptyState
         compact
         icon={CircleHelp}
-        title="No screening questions"
-        description="This application had no extra questions to answer."
+        title="Sem perguntas de triagem"
+        description="Esta candidatura não tinha perguntas extras a responder."
         className={className}
       />
     );
@@ -80,7 +80,7 @@ export function ScreeningAnswerEditor({
                 {flagged ? (
                   <span className={badgeClass('warning')}>
                     <TriangleAlert aria-hidden className="h-3 w-3" />
-                    Needs your review
+                    Precisa da sua revisão
                   </span>
                 ) : null}
               </div>
@@ -111,8 +111,8 @@ export function ScreeningAnswerEditor({
                   value={answer.answer}
                   onChange={(event) => patch(index, { answer: event.target.value })}
                 >
-                  <option value="Yes">Yes</option>
-                  <option value="No">No</option>
+                  <option value="Yes">Sim</option>
+                  <option value="No">Não</option>
                 </Select>
               ) : (
                 <Input
@@ -121,7 +121,7 @@ export function ScreeningAnswerEditor({
                   value={answer.answer}
                   placeholder={
                     answer.question_type === 'select' || answer.question_type === 'radio'
-                      ? 'Must match one of the options LinkedIn offers'
+                      ? 'Deve corresponder a uma das opções que o LinkedIn oferece'
                       : undefined
                   }
                   onChange={(event) => patch(index, { answer: event.target.value })}
@@ -139,7 +139,7 @@ export function ScreeningAnswerEditor({
             {flagged ? (
               <div className="mt-2.5 flex items-center justify-between gap-3">
                 <p className="text-xs leading-relaxed text-warning-strong">
-                  Check this answer against the posting before approving.
+                  Confira esta resposta com o anúncio antes de aprovar.
                 </p>
                 <Button
                   size="sm"
@@ -156,7 +156,7 @@ export function ScreeningAnswerEditor({
                   }
                   icon={<Check aria-hidden className="h-3.5 w-3.5" />}
                 >
-                  This is correct
+                  Está correta
                 </Button>
               </div>
             ) : null}

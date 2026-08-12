@@ -23,8 +23,8 @@ export function KillSwitchButton({ className, iconOnly = false }: KillSwitchButt
   const { data: session } = useSessionStatus();
   const stop = useStopAutomation({
     onSuccess: (message) =>
-      toast.warning('Stop requested', message.detail || 'The run will halt at the next safe point.'),
-    onError: (error) => toast.error('Could not stop the run', errorMessage(error)),
+      toast.warning('Parada solicitada', message.detail || 'A execução vai parar no próximo ponto seguro.'),
+    onError: (error) => toast.error('Não foi possível parar a execução', errorMessage(error)),
   });
 
   const isActive = Boolean(session?.active_run_id);
@@ -35,12 +35,12 @@ export function KillSwitchButton({ className, iconOnly = false }: KillSwitchButt
       onClick={() => stop.mutate()}
       disabled={!isActive}
       loading={stop.isPending}
-      aria-label="Stop automation now"
-      title={isActive ? 'Stop the running automation now' : 'No automation run is active'}
+      aria-label="Parar a automação agora"
+      title={isActive ? 'Parar a automação em execução agora' : 'Nenhuma execução de automação está ativa'}
       className={cn(isActive && 'animate-fade-in', className)}
       icon={<OctagonX aria-hidden className="h-4 w-4" />}
     >
-      <span className={cn(iconOnly && 'sr-only')}>Stop</span>
+      <span className={cn(iconOnly && 'sr-only')}>Parar</span>
     </Button>
   );
 }

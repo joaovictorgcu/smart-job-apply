@@ -50,13 +50,13 @@ export function JobDetail() {
 
   const analyze = useAnalyzeJob({
     onSuccess: (updated) =>
-      toast.success('Analysis complete', `The AI scored this job ${updated.score ?? 0}/100.`),
-    onError: (error) => toast.error('Analysis failed', errorMessage(error)),
+      toast.success('Análise concluída', `A IA deu a esta vaga a nota ${updated.score ?? 0}/100.`),
+    onError: (error) => toast.error('A análise falhou', errorMessage(error)),
   });
 
   const skip = useSkipJob({
-    onSuccess: () => toast.toast({ title: 'Job skipped', variant: 'info' }),
-    onError: (error) => toast.error('Could not skip the job', errorMessage(error)),
+    onSuccess: () => toast.toast({ title: 'Vaga pulada', variant: 'info' }),
+    onError: (error) => toast.error('Não foi possível pular a vaga', errorMessage(error)),
   });
 
   const preview = usePreviewJobs();
@@ -64,11 +64,11 @@ export function JobDetail() {
     onSuccess: (run) => {
       setDialogOpen(false);
       toast.success(
-        'Filling the application',
-        `Run #${run.id} started. It will stop at the review step.`,
+        'Preenchendo a candidatura',
+        `Execução #${run.id} iniciada. Ela vai parar na etapa de revisão.`,
       );
     },
-    onError: (error) => toast.error('Could not start filling', errorMessage(error)),
+    onError: (error) => toast.error('Não foi possível iniciar o preenchimento', errorMessage(error)),
   });
 
   if (isLoading) {
@@ -90,11 +90,11 @@ export function JobDetail() {
       <Card>
         <EmptyState
           icon={CircleAlert}
-          title="Job not found"
-          description="It may have been removed, or the link is out of date."
+          title="Vaga não encontrada"
+          description="Ela pode ter sido removida, ou o link está desatualizado."
           action={
             <Link to="/jobs" className="btn">
-              Back to jobs
+              Voltar às vagas
             </Link>
           }
         />
@@ -111,7 +111,7 @@ export function JobDetail() {
         className="inline-flex items-center gap-1.5 text-xs font-medium text-content-muted hover:text-content"
       >
         <ArrowLeft aria-hidden className="h-3.5 w-3.5" />
-        All jobs
+        Todas as vagas
       </Link>
 
       <Card className="px-5 py-5">
@@ -139,7 +139,7 @@ export function JobDetail() {
                   className="inline-flex items-center gap-1.5 text-accent-400 hover:underline"
                 >
                   <ExternalLink aria-hidden className="h-4 w-4" />
-                  Open on LinkedIn
+                  Abrir no LinkedIn
                 </a>
               ) : null}
             </p>
@@ -147,9 +147,9 @@ export function JobDetail() {
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
               <StatusBadge kind="job" status={job.status} />
               {job.easy_apply ? (
-                <span className={badgeClass('accent')}>Easy Apply</span>
+                <span className={badgeClass('accent')}>Candidatura Simplificada</span>
               ) : (
-                <span className={badgeClass('neutral')}>External form</span>
+                <span className={badgeClass('neutral')}>Formulário externo</span>
               )}
               {job.workplace_type ? (
                 <span className={badgeClass('neutral')}>{humanizeSnakeCase(job.workplace_type)}</span>
@@ -164,13 +164,13 @@ export function JobDetail() {
             disabled={!session?.ai_configured}
             title={
               session?.ai_configured
-                ? 'Score this job against your profile'
-                : 'No AI API key is configured'
+                ? 'Pontuar esta vaga em relação ao seu perfil'
+                : 'Nenhuma chave de API de IA configurada'
             }
             onClick={() => analyze.mutate(job.id)}
             icon={<Sparkles aria-hidden className="h-4 w-4" />}
           >
-            {job.score === null ? 'Analyze with AI' : 'Re-analyze'}
+            {job.score === null ? 'Analisar com IA' : 'Analisar de novo'}
           </Button>
 
           <Button
@@ -179,13 +179,13 @@ export function JobDetail() {
             onClick={() => skip.mutate(job.id)}
             icon={<SkipForward aria-hidden className="h-4 w-4" />}
           >
-            Skip
+            Pular
           </Button>
 
           {job.application_id !== null ? (
             <Link to={`/applications/${job.application_id}`} className="btn btn-primary">
               <Send aria-hidden className="h-4 w-4" />
-              Open application
+              Abrir candidatura
             </Link>
           ) : (
             <Button
@@ -193,8 +193,8 @@ export function JobDetail() {
               disabled={!canPrepare}
               title={
                 canPrepare
-                  ? 'Fill the Easy Apply form and stop for review'
-                  : 'Only Easy Apply jobs without an application can be prepared'
+                  ? 'Preencher o formulário de Candidatura Simplificada e parar para revisão'
+                  : 'Só vagas de Candidatura Simplificada sem candidatura podem ser preparadas'
               }
               onClick={() => {
                 setDialogOpen(true);
@@ -202,7 +202,7 @@ export function JobDetail() {
               }}
               icon={<Wand2 aria-hidden className="h-4 w-4" />}
             >
-              Prepare application…
+              Preparar candidatura…
             </Button>
           )}
         </div>
@@ -210,7 +210,7 @@ export function JobDetail() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <CardHeader title="Job description" description="Exactly as scraped from the posting." />
+          <CardHeader title="Descrição da vaga" description="Exatamente como foi extraída do anúncio." />
           <div className="card-body">
             {job.description ? (
               <div className="whitespace-pre-wrap text-sm leading-relaxed text-content-muted">
@@ -219,8 +219,8 @@ export function JobDetail() {
             ) : (
               <EmptyState
                 compact
-                title="No description stored"
-                description="The posting had no readable description, or it was not fetched."
+                title="Nenhuma descrição armazenada"
+                description="O anúncio não tinha uma descrição legível, ou ela não foi obtida."
               />
             )}
           </div>
@@ -229,21 +229,21 @@ export function JobDetail() {
         <div className="space-y-4">
           <Card>
             <CardHeader
-              title="AI verdict"
+              title="Veredito da IA"
               description={
-                job.score === null ? 'Not analyzed yet.' : `Scored ${job.score} out of 100.`
+                job.score === null ? 'Ainda não analisada.' : `Nota ${job.score} de 100.`
               }
             />
             <div className="card-body space-y-4">
               {job.score === null ? (
                 <Note tone="neutral">
-                  Run the analysis to see how your profile matches this posting.
+                  Rode a análise para ver como o seu perfil combina com este anúncio.
                 </Note>
               ) : (
                 <>
                   {job.score_reasons.length > 0 ? (
                     <div>
-                      <SectionLabel>Why it fits</SectionLabel>
+                      <SectionLabel>Por que combina</SectionLabel>
                       <ul className="mt-2 space-y-1.5">
                         {job.score_reasons.map((reason) => (
                           <li
@@ -260,7 +260,7 @@ export function JobDetail() {
 
                   {job.missing_requirements.length > 0 ? (
                     <div>
-                      <SectionLabel>Requirements you may not meet</SectionLabel>
+                      <SectionLabel>Requisitos que você pode não atender</SectionLabel>
                       <ul className="mt-2 space-y-1.5">
                         {job.missing_requirements.map((requirement) => (
                           <li
@@ -278,21 +278,21 @@ export function JobDetail() {
               )}
 
               {job.skip_reason ? (
-                <Note tone="neutral">Skipped: {job.skip_reason}</Note>
+                <Note tone="neutral">Pulada: {job.skip_reason}</Note>
               ) : null}
             </div>
           </Card>
 
           <Card>
-            <CardHeader title="Details" />
+            <CardHeader title="Detalhes" />
             <div className="card-body">
               <dl className="divide-y divide-line">
-                <MetaRow label="Posted">{formatDate(job.posted_at)}</MetaRow>
-                <MetaRow label="First seen">{formatDate(job.created_at)}</MetaRow>
-                <MetaRow label="Language">
+                <MetaRow label="Publicada">{formatDate(job.posted_at)}</MetaRow>
+                <MetaRow label="Vista pela primeira vez">{formatDate(job.created_at)}</MetaRow>
+                <MetaRow label="Idioma">
                   {job.detected_language ? job.detected_language.toUpperCase() : '—'}
                 </MetaRow>
-                <MetaRow label="LinkedIn ID">
+                <MetaRow label="ID do LinkedIn">
                   <span className="font-mono text-xs">{job.external_id}</span>
                 </MetaRow>
               </dl>

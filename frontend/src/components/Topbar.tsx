@@ -15,7 +15,7 @@ function ConnectionDot({ connected }: { connected: boolean }) {
   return (
     <span
       className="flex items-center gap-1.5"
-      title={connected ? 'Live event stream connected' : 'Live event stream disconnected'}
+      title={connected ? 'Transmissão de eventos ao vivo conectada' : 'Transmissão de eventos ao vivo desconectada'}
     >
       <span aria-hidden className={cn('live-dot', !connected && 'live-dot-idle')} />
       <span
@@ -24,10 +24,10 @@ function ConnectionDot({ connected }: { connected: boolean }) {
           connected ? 'text-content-muted' : 'text-content-subtle',
         )}
       >
-        {connected ? 'Live' : 'Offline'}
+        {connected ? 'Ao vivo' : 'Offline'}
       </span>
       <span className="sr-only" role="status">
-        {connected ? 'Live event stream connected' : 'Live event stream disconnected'}
+        {connected ? 'Transmissão de eventos ao vivo conectada' : 'Transmissão de eventos ao vivo desconectada'}
       </span>
     </span>
   );
@@ -55,7 +55,7 @@ function UserMenu() {
     };
   }, [open]);
 
-  const label = user?.full_name || user?.email || 'Account';
+  const label = user?.full_name || user?.email || 'Conta';
 
   return (
     <div className="relative" ref={containerRef}>
@@ -82,12 +82,12 @@ function UserMenu() {
       {open ? (
         <div
           role="menu"
-          aria-label="Account"
+          aria-label="Conta"
           className="absolute right-0 z-40 mt-1.5 w-60 overflow-hidden rounded-xl border border-line bg-surface-overlay shadow-lifted animate-fade-in"
         >
           <div className="border-b border-line px-3 py-2.5">
             <p className="truncate text-sm font-medium text-content">
-              {user?.full_name || 'Operator'}
+              {user?.full_name || 'Operador'}
             </p>
             <p className="truncate text-xs text-content-subtle">{user?.email}</p>
           </div>
@@ -99,7 +99,7 @@ function UserMenu() {
               className="nav-item w-full text-sm"
             >
               <UserIcon aria-hidden className="h-4 w-4" />
-              Profile
+              Perfil
             </Link>
             <button
               type="button"
@@ -112,7 +112,7 @@ function UserMenu() {
               className="nav-item w-full text-sm text-danger hover:bg-danger/10 hover:text-danger"
             >
               <LogOut aria-hidden className="h-4 w-4" />
-              Sign out
+              Sair
             </button>
           </div>
         </div>
@@ -137,7 +137,7 @@ export function Topbar({ onOpenNav }: TopbarProps) {
           size="icon"
           className="md:hidden"
           onClick={onOpenNav}
-          aria-label="Open navigation"
+          aria-label="Abrir navegação"
         >
           <Menu aria-hidden className="h-[18px] w-[18px]" />
         </Button>
@@ -152,8 +152,8 @@ export function Topbar({ onOpenNav }: TopbarProps) {
             variant="ghost"
             size="icon"
             onClick={toggleTheme}
-            aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-            title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            aria-label={theme === 'dark' ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'}
+            title={theme === 'dark' ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'}
           >
             {theme === 'dark' ? (
               <Sun aria-hidden className="h-[18px] w-[18px]" />

@@ -25,8 +25,8 @@ export function ResumeUploader({ filename, className }: ResumeUploaderProps) {
 
   const upload = useUploadResume({
     onSuccess: (profile) =>
-      toast.success('Résumé uploaded', profile.resume_filename ?? undefined),
-    onError: (error) => toast.error('Upload failed', errorMessage(error)),
+      toast.success('Currículo enviado', profile.resume_filename ?? undefined),
+    onError: (error) => toast.error('Falha no envio', errorMessage(error)),
   });
 
   const accept = (file: File | undefined) => {
@@ -36,11 +36,11 @@ export function ResumeUploader({ filename, className }: ResumeUploaderProps) {
     const isPdf =
       file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
     if (!isPdf) {
-      setLocalError('Only PDF files are accepted.');
+      setLocalError('Apenas arquivos PDF são aceitos.');
       return;
     }
     if (file.size > MAX_BYTES) {
-      setLocalError(`That file is ${formatBytes(file.size)}. The limit is ${formatBytes(MAX_BYTES)}.`);
+      setLocalError(`Esse arquivo tem ${formatBytes(file.size)}. O limite é ${formatBytes(MAX_BYTES)}.`);
       return;
     }
     upload.mutate(file);
@@ -72,9 +72,9 @@ export function ResumeUploader({ filename, className }: ResumeUploaderProps) {
         >
           <Upload className="h-4 w-4" />
         </span>
-        <p className="mt-2.5 text-sm font-medium text-content">Drop your résumé here</p>
+        <p className="mt-2.5 text-sm font-medium text-content">Solte o seu currículo aqui</p>
         <p className="mt-1 text-xs text-content-subtle">
-          PDF only, up to {formatBytes(MAX_BYTES)}. It is uploaded to LinkedIn as-is.
+          Apenas PDF, até {formatBytes(MAX_BYTES)}. Ele é enviado ao LinkedIn como está.
         </p>
 
         <input
@@ -94,7 +94,7 @@ export function ResumeUploader({ filename, className }: ResumeUploaderProps) {
           loading={upload.isPending}
           onClick={() => inputRef.current?.click()}
         >
-          Choose a PDF
+          Escolher um PDF
         </Button>
       </div>
 
@@ -112,12 +112,12 @@ export function ResumeUploader({ filename, className }: ResumeUploaderProps) {
             <p className="truncate text-sm font-medium text-content" title={filename}>
               {filename}
             </p>
-            <p className="text-2xs text-content-subtle">Stored on the server and attached to applications.</p>
+            <p className="text-2xs text-content-subtle">Armazenado no servidor e anexado às candidaturas.</p>
           </div>
         </div>
       ) : (
         <p className="mt-3 text-xs text-content-subtle">
-          No résumé stored yet. Applications that require a file upload will fail until you add one.
+          Nenhum currículo armazenado ainda. Candidaturas que exigem o envio de arquivo vão falhar até você adicionar um.
         </p>
       )}
     </div>

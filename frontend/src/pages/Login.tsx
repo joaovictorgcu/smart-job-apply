@@ -28,16 +28,16 @@ export function Login() {
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  if (isLoading) return <FullPageSpinner label="Restoring session" />;
+  if (isLoading) return <FullPageSpinner label="Restaurando sessão" />;
   if (user) return <Navigate to="/" replace />;
 
   const redirectTo = (location.state as { from?: string } | null)?.from ?? '/';
 
   const validate = (): boolean => {
     const next: FieldErrors = {};
-    if (!email.trim()) next.email = 'Enter your email address.';
-    else if (!EMAIL_PATTERN.test(email.trim())) next.email = 'That does not look like an email address.';
-    if (!password) next.password = 'Enter your password.';
+    if (!email.trim()) next.email = 'Informe o seu e-mail.';
+    else if (!EMAIL_PATTERN.test(email.trim())) next.email = 'Isso não parece um e-mail.';
+    if (!password) next.password = 'Informe a sua senha.';
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -52,7 +52,7 @@ export function Login() {
       await login({ email: email.trim(), password });
       navigate(redirectTo, { replace: true });
     } catch (error) {
-      setFormError(errorMessage(error, 'Sign in failed. Check your email and password.'));
+      setFormError(errorMessage(error, 'Não foi possível entrar. Confira o seu e-mail e a senha.'));
     } finally {
       setSubmitting(false);
     }
@@ -65,7 +65,7 @@ export function Login() {
           variant="ghost"
           size="icon"
           onClick={toggleTheme}
-          aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+          aria-label={theme === 'dark' ? 'Mudar para o tema claro' : 'Mudar para o tema escuro'}
         >
           {theme === 'dark' ? (
             <Sun aria-hidden className="h-[18px] w-[18px]" />
@@ -90,14 +90,14 @@ export function Login() {
               </span>
             </div>
             <p className="text-sm leading-relaxed text-content-muted">
-              Finds Easy Apply jobs, scores them with AI and fills the form — then stops and waits
-              for you to approve every single submission.
+              Encontra vagas de Candidatura Simplificada, pontua com IA e preenche o formulário —
+              depois para e espera você aprovar cada envio.
             </p>
           </div>
 
           <div className="card">
             <form onSubmit={onSubmit} noValidate className="card-body space-y-4">
-              <h1 className="text-lg">Sign in</h1>
+              <h1 className="text-lg">Entrar</h1>
 
               {formError ? (
                 <div role="alert" className="rounded-lg border border-danger/40 bg-danger/10 px-3 py-2.5 text-xs leading-relaxed text-danger-strong">
@@ -105,7 +105,7 @@ export function Login() {
                 </div>
               ) : null}
 
-              <Field label="Email" htmlFor="login-email" error={errors.email} required>
+              <Field label="E-mail" htmlFor="login-email" error={errors.email} required>
                 <Input
                   id="login-email"
                   name="email"
@@ -116,11 +116,11 @@ export function Login() {
                   aria-invalid={Boolean(errors.email)}
                   aria-describedby={errors.email ? 'login-email-error' : undefined}
                   onChange={(event) => setEmail(event.target.value)}
-                  placeholder="you@example.com"
+                  placeholder="voce@exemplo.com"
                 />
               </Field>
 
-              <Field label="Password" htmlFor="login-password" error={errors.password} required>
+              <Field label="Senha" htmlFor="login-password" error={errors.password} required>
                 <Input
                   id="login-password"
                   name="password"
@@ -141,23 +141,23 @@ export function Login() {
                 loading={submitting}
                 icon={<ArrowRight aria-hidden className="h-4 w-4" />}
               >
-                Sign in
+                Entrar
               </Button>
 
               <p className="text-center text-xs text-content-subtle">
-                No account yet?{' '}
+                Ainda não tem conta?{' '}
                 <Link to="/register" className="font-medium text-accent-400 hover:underline">
-                  Create one
+                  Criar uma
                 </Link>
               </p>
             </form>
           </div>
 
           <Note tone="neutral" icon={<ShieldAlert aria-hidden className="h-3.5 w-3.5" />}>
-            This is a self-hosted tool that automates LinkedIn. Automating LinkedIn violates
-            LinkedIn&apos;s Terms of Service and may get your account restricted or banned — you run
-            it at your own risk. Your LinkedIn password is never stored: you sign in manually in the
-            browser window the tool opens.
+            Esta é uma ferramenta auto-hospedada que automatiza o LinkedIn. Automatizar o LinkedIn
+            viola os Termos de Uso do LinkedIn e pode fazer a sua conta ser restringida ou banida —
+            você usa por sua conta e risco. A sua senha do LinkedIn nunca é armazenada: você faz o
+            login manualmente na janela do navegador que a ferramenta abre.
           </Note>
         </div>
       </div>

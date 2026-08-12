@@ -42,8 +42,8 @@ export function JobList({
   selectable = false,
   selectedIds = [],
   onToggleSelect,
-  emptyTitle = 'No jobs match these filters',
-  emptyDescription = 'Loosen the filters, or run a saved search to bring in new postings.',
+  emptyTitle = 'Nenhuma vaga corresponde a esses filtros',
+  emptyDescription = 'Afrouxe os filtros, ou rode uma busca salva para trazer anúncios novos.',
   emptyAction,
   className,
 }: JobListProps) {

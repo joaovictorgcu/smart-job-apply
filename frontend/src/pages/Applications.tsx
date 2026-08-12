@@ -58,8 +58,8 @@ export function Applications() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Applications"
-        description="Every draft the automation filled and every application you approved."
+        title="Candidaturas"
+        description="Todo rascunho que a automação preencheu e toda candidatura que você aprovou."
       />
 
       <Card className="px-4 py-3.5 sm:px-5">
@@ -70,7 +70,7 @@ export function Applications() {
               value={status}
               onChange={(event) => changeStatus(event.target.value)}
             >
-              <option value="all">Any status</option>
+              <option value="all">Qualquer status</option>
               {APPLICATION_STATUSES.map((value) => (
                 <option key={value} value={value}>
                   {applicationStatusLabel(value)}
@@ -92,15 +92,15 @@ export function Applications() {
         ) : items.length === 0 ? (
           <EmptyState
             icon={Send}
-            title={status === 'all' ? 'No applications yet' : 'Nothing with this status'}
+            title={status === 'all' ? 'Nenhuma candidatura ainda' : 'Nada com este status'}
             description={
               status === 'all'
-                ? 'Pick jobs on the Jobs page to fill their forms. They will appear here waiting for your review.'
-                : 'Try another status filter.'
+                ? 'Escolha vagas na página Vagas para preencher os formulários. Elas aparecem aqui aguardando a sua revisão.'
+                : 'Tente outro filtro de status.'
             }
             action={
               <Link to="/jobs" className="btn btn-primary">
-                Go to jobs
+                Ir para vagas
               </Link>
             }
           />
@@ -108,18 +108,18 @@ export function Applications() {
           <div className="overflow-x-auto">
             <table className="table-base">
               <caption className="sr-only">
-                Applications, {formatNumber(data?.total ?? 0)} in total
+                Candidaturas, {formatNumber(data?.total ?? 0)} no total
               </caption>
               <thead>
                 <tr>
                   <th scope="col">Status</th>
-                  <th scope="col">Score</th>
-                  <th scope="col">Job</th>
-                  <th scope="col">Company</th>
-                  <th scope="col">Last update</th>
-                  <th scope="col">Submitted</th>
+                  <th scope="col">Nota</th>
+                  <th scope="col">Vaga</th>
+                  <th scope="col">Empresa</th>
+                  <th scope="col">Última atualização</th>
+                  <th scope="col">Enviada</th>
                   <th scope="col">
-                    <span className="sr-only">Actions</span>
+                    <span className="sr-only">Ações</span>
                   </th>
                 </tr>
               </thead>
@@ -136,7 +136,7 @@ export function Applications() {
                         <div className="flex flex-wrap items-center gap-1.5">
                           <StatusBadge kind="application" status={application.status} />
                           {application.was_dry_run ? (
-                            <span className={badgeClass('neutral')}>dry run</span>
+                            <span className={badgeClass('neutral')}>modo de teste</span>
                           ) : null}
                         </div>
                       </td>
@@ -149,11 +149,11 @@ export function Applications() {
                           className="block truncate font-medium text-content hover:text-accent-400 hover:underline"
                           title={job?.title ?? undefined}
                         >
-                          {job?.title ?? `Application #${application.id}`}
+                          {job?.title ?? `Candidatura #${application.id}`}
                         </Link>
                         {flagged > 0 ? (
                           <span className="text-2xs text-warning">
-                            {flagged} {flagged === 1 ? 'answer needs' : 'answers need'} review
+                            {flagged} {flagged === 1 ? 'resposta precisa' : 'respostas precisam'} de revisão
                           </span>
                         ) : null}
                       </td>
@@ -168,7 +168,7 @@ export function Applications() {
                       </td>
                       <td className="text-right">
                         <Link to={`/applications/${application.id}`} className="btn btn-sm">
-                          {application.status === 'awaiting_review' ? 'Review' : 'Open'}
+                          {application.status === 'awaiting_review' ? 'Revisar' : 'Abrir'}
                         </Link>
                       </td>
                     </tr>
@@ -186,7 +186,7 @@ export function Applications() {
           limit={data.limit}
           offset={data.offset}
           onOffsetChange={setOffset}
-          unit="applications"
+          unit="candidaturas"
         />
       ) : null}
     </div>

@@ -33,7 +33,7 @@ function CheckRow({ icon: Icon, label, ok, okText, pendingText }: CheckRowProps)
       ) : (
         <Circle aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-content-subtle/60" />
       )}
-      <span className="sr-only">{ok ? 'ready' : 'not ready'}</span>
+      <span className="sr-only">{ok ? 'pronto' : 'não pronto'}</span>
     </li>
   );
 }
@@ -45,23 +45,23 @@ export function SessionStatusCard({ className }: { className?: string }) {
   const start = useStartSession({
     onSuccess: () =>
       toast.toast({
-        title: 'Browser session starting',
-        description: 'Sign in to LinkedIn in the window that just opened.',
+        title: 'Iniciando a sessão do navegador',
+        description: 'Faça login no LinkedIn na janela que acabou de abrir.',
         variant: 'info',
         duration: 9000,
       }),
-    onError: (error) => toast.error('Could not start the browser', errorMessage(error)),
+    onError: (error) => toast.error('Não foi possível iniciar o navegador', errorMessage(error)),
   });
 
   const stop = useStopSession({
-    onSuccess: () => toast.success('Browser session closed'),
-    onError: (error) => toast.error('Could not close the browser', errorMessage(error)),
+    onSuccess: () => toast.success('Sessão do navegador encerrada'),
+    onError: (error) => toast.error('Não foi possível encerrar o navegador', errorMessage(error)),
   });
 
   if (isLoading || !session) {
     return (
       <Card className={className}>
-        <CardHeader title="Session" />
+        <CardHeader title="Sessão" />
         <div className="card-body space-y-3">
           <Skeleton className="h-4 w-2/3" />
           <Skeleton className="h-4 w-1/2" />
@@ -77,32 +77,32 @@ export function SessionStatusCard({ className }: { className?: string }) {
   return (
     <Card className={className}>
       <CardHeader
-        title="Session"
-        description={ready ? 'Ready to search and prepare applications.' : 'Not ready yet.'}
+        title="Sessão"
+        description={ready ? 'Pronta para buscar e preparar candidaturas.' : 'Ainda não está pronta.'}
       />
 
       <div className="card-body">
         <ul className="divide-y divide-line">
           <CheckRow
             icon={MonitorPlay}
-            label="Browser window"
+            label="Janela do navegador"
             ok={session.browser_open}
-            okText="A controlled Chrome window is open."
-            pendingText="Closed — start a session to open one."
+            okText="Uma janela controlada do Chrome está aberta."
+            pendingText="Fechada — inicie uma sessão para abrir uma."
           />
           <CheckRow
             icon={Linkedin}
-            label="LinkedIn sign-in"
+            label="Login no LinkedIn"
             ok={session.logged_in}
-            okText="Signed in; only the session cookies are stored, encrypted."
-            pendingText="Sign in yourself in the browser window. Your password is never stored."
+            okText="Autenticado; apenas os cookies da sessão são armazenados, criptografados."
+            pendingText="Faça login você mesmo na janela do navegador. A sua senha nunca é armazenada."
           />
           <CheckRow
             icon={Bot}
-            label="AI analysis"
+            label="Análise por IA"
             ok={session.ai_configured}
-            okText="An API key is configured; jobs can be scored automatically."
-            pendingText="No API key configured — scoring and cover letters are unavailable."
+            okText="Uma chave de API está configurada; as vagas podem ser pontuadas automaticamente."
+            pendingText="Nenhuma chave de API configurada — pontuação e cartas de apresentação ficam indisponíveis."
           />
         </ul>
 
@@ -114,7 +114,7 @@ export function SessionStatusCard({ className }: { className?: string }) {
               onClick={() => stop.mutate()}
               icon={<Power aria-hidden className="h-4 w-4" />}
             >
-              Close browser session
+              Encerrar a sessão do navegador
             </Button>
           ) : (
             <Button
@@ -123,16 +123,16 @@ export function SessionStatusCard({ className }: { className?: string }) {
               onClick={() => start.mutate()}
               icon={<MonitorPlay aria-hidden className="h-4 w-4" />}
             >
-              Start browser session
+              Iniciar a sessão do navegador
             </Button>
           )}
         </div>
 
         <Note tone="neutral" className="mt-3" icon={<Info aria-hidden className="h-3.5 w-3.5" />}>
-          Starting a session opens a real, visible browser window. You sign in to LinkedIn there
-          yourself — this app never asks for, sends or stores your LinkedIn password. Keep that
-          window open while a run is in progress, and if LinkedIn ever shows a verification, solve it
-          in that window.
+          Iniciar uma sessão abre uma janela de navegador real e visível. Você faz login no LinkedIn
+          ali mesmo — este app nunca pede, envia ou armazena a sua senha do LinkedIn. Mantenha essa
+          janela aberta enquanto uma execução estiver em andamento e, se o LinkedIn mostrar uma
+          verificação, resolva-a nessa janela.
         </Note>
       </div>
     </Card>

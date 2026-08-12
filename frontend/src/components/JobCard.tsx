@@ -1,7 +1,7 @@
 import { Building2, ExternalLink, MapPin, Sparkles, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-import { badgeClass, formatRelativeTime, humanizeSnakeCase, truncate } from '@/lib/format';
+import { badgeClass, enumLabel, formatRelativeTime, truncate } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { Job } from '@/types/api';
 
@@ -44,7 +44,7 @@ export function JobCard({
             className="h-4 w-4 cursor-pointer rounded border-line-strong bg-surface-sunken accent-accent-500"
           />
           <label htmlFor={checkboxId} className="sr-only">
-            Select {job.title} at {job.company}
+            Selecionar {job.title} em {job.company}
           </label>
         </div>
       ) : null}
@@ -95,13 +95,13 @@ export function JobCard({
           {job.easy_apply ? (
             <span className={badgeClass('accent')}>
               <Zap aria-hidden className="h-3 w-3" />
-              Easy Apply
+              Candidatura Simplificada
             </span>
           ) : (
-            <span className={badgeClass('neutral')}>External form</span>
+            <span className={badgeClass('neutral')}>Formulário externo</span>
           )}
           {job.workplace_type ? (
-            <span className={badgeClass('neutral')}>{humanizeSnakeCase(job.workplace_type)}</span>
+            <span className={badgeClass('neutral')}>{enumLabel(job.workplace_type)}</span>
           ) : null}
         </div>
 
@@ -112,7 +112,7 @@ export function JobCard({
           </p>
         ) : job.skip_reason ? (
           <p className="mt-2.5 text-xs leading-relaxed text-content-subtle">
-            Skipped: {truncate(job.skip_reason, 160)}
+            Pulada: {truncate(job.skip_reason, 160)}
           </p>
         ) : null}
       </div>

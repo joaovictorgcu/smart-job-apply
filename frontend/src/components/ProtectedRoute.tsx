@@ -15,7 +15,7 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   const location = useLocation();
 
   if (isLoading) {
-    return <FullPageSpinner label="Restoring session" />;
+    return <FullPageSpinner label="Restaurando sessão" />;
   }
 
   if (!user) {

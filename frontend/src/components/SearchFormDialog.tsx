@@ -10,26 +10,26 @@ import { Button, Checkbox, Field, Input, Note, Select } from './primitives';
 import { useToast } from './ToastProvider';
 
 const REMOTE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: '', label: 'Any workplace' },
-  { value: 'remote', label: 'Remote' },
-  { value: 'hybrid', label: 'Hybrid' },
-  { value: 'on-site', label: 'On-site' },
+  { value: '', label: 'Qualquer local' },
+  { value: 'remote', label: 'Remoto' },
+  { value: 'hybrid', label: 'Híbrido' },
+  { value: 'on-site', label: 'Presencial' },
 ];
 
 const DATE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: '', label: 'Any time' },
-  { value: 'past-24h', label: 'Past 24 hours' },
-  { value: 'past-week', label: 'Past week' },
-  { value: 'past-month', label: 'Past month' },
+  { value: '', label: 'Qualquer data' },
+  { value: 'past-24h', label: 'Últimas 24 horas' },
+  { value: 'past-week', label: 'Última semana' },
+  { value: 'past-month', label: 'Último mês' },
 ];
 
 const EXPERIENCE_LEVELS: Array<{ value: string; label: string }> = [
-  { value: 'internship', label: 'Internship' },
-  { value: 'entry', label: 'Entry level' },
-  { value: 'associate', label: 'Associate' },
-  { value: 'mid-senior', label: 'Mid-senior' },
-  { value: 'director', label: 'Director' },
-  { value: 'executive', label: 'Executive' },
+  { value: 'internship', label: 'Estágio' },
+  { value: 'entry', label: 'Júnior' },
+  { value: 'associate', label: 'Pleno' },
+  { value: 'mid-senior', label: 'Sênior' },
+  { value: 'director', label: 'Diretor' },
+  { value: 'executive', label: 'Executivo' },
 ];
 
 interface FormState {
@@ -89,18 +89,18 @@ export function SearchFormDialog({ open, onClose, search }: SearchFormDialogProp
 
   const create = useCreateSearch({
     onSuccess: () => {
-      toast.success('Search saved');
+      toast.success('Busca salva');
       onClose();
     },
-    onError: (error) => toast.error('Could not save the search', errorMessage(error)),
+    onError: (error) => toast.error('Não foi possível salvar a busca', errorMessage(error)),
   });
 
   const update = useUpdateSearch({
     onSuccess: () => {
-      toast.success('Search updated');
+      toast.success('Busca atualizada');
       onClose();
     },
-    onError: (error) => toast.error('Could not update the search', errorMessage(error)),
+    onError: (error) => toast.error('Não foi possível atualizar a busca', errorMessage(error)),
   });
 
   const isPending = create.isPending || update.isPending;
@@ -120,8 +120,8 @@ export function SearchFormDialog({ open, onClose, search }: SearchFormDialogProp
     event.preventDefault();
 
     const nextErrors: { name?: string; keywords?: string } = {};
-    if (!form.name.trim()) nextErrors.name = 'Give the search a name you will recognise.';
-    if (!form.keywords.trim()) nextErrors.keywords = 'Keywords are required.';
+    if (!form.name.trim()) nextErrors.name = 'Dê à busca um nome que você reconheça.';
+    if (!form.keywords.trim()) nextErrors.keywords = 'As palavras-chave são obrigatórias.';
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
@@ -148,47 +148,47 @@ export function SearchFormDialog({ open, onClose, search }: SearchFormDialogProp
       open={open}
       onClose={onClose}
       size="lg"
-      title={search ? 'Edit search' : 'New search'}
-      description="Saved searches only find and score jobs. They never start an application."
+      title={search ? 'Editar busca' : 'Nova busca'}
+      description="Buscas salvas apenas encontram e pontuam vagas. Elas nunca iniciam uma candidatura."
       footer={
         <>
           <Button onClick={onClose} disabled={isPending}>
-            Cancel
+            Cancelar
           </Button>
           <Button type="submit" form="search-form" variant="primary" loading={isPending}>
-            {search ? 'Save changes' : 'Create search'}
+            {search ? 'Salvar alterações' : 'Criar busca'}
           </Button>
         </>
       }
     >
       <form id="search-form" onSubmit={onSubmit} noValidate className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Name" htmlFor="search-name" error={errors.name} required>
+          <Field label="Nome" htmlFor="search-name" error={errors.name} required>
             <Input
               id="search-name"
               data-autofocus
               value={form.name}
               aria-invalid={Boolean(errors.name)}
               onChange={(event) => patch({ name: event.target.value })}
-              placeholder="Senior backend — remote"
+              placeholder="Backend sênior — remoto"
             />
           </Field>
 
-          <Field label="Location" htmlFor="search-location" hint="Leave empty to search everywhere.">
+          <Field label="Localização" htmlFor="search-location" hint="Deixe vazio para buscar em qualquer lugar.">
             <Input
               id="search-location"
               value={form.location}
               onChange={(event) => patch({ location: event.target.value })}
-              placeholder="Berlin, Germany"
+              placeholder="Berlim, Alemanha"
             />
           </Field>
         </div>
 
         <Field
-          label="Keywords"
+          label="Palavras-chave"
           htmlFor="search-keywords"
           error={errors.keywords}
-          hint="Exactly what you would type into the LinkedIn search box."
+          hint="Exatamente o que você digitaria na caixa de busca do LinkedIn."
           required
         >
           <Input
@@ -201,7 +201,7 @@ export function SearchFormDialog({ open, onClose, search }: SearchFormDialogProp
         </Field>
 
         <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Workplace" htmlFor="search-remote">
+          <Field label="Local de trabalho" htmlFor="search-remote">
             <Select
               id="search-remote"
               value={form.remoteFilter}
@@ -215,7 +215,7 @@ export function SearchFormDialog({ open, onClose, search }: SearchFormDialogProp
             </Select>
           </Field>
 
-          <Field label="Posted" htmlFor="search-date">
+          <Field label="Publicada" htmlFor="search-date">
             <Select
               id="search-date"
               value={form.datePosted}
@@ -230,9 +230,9 @@ export function SearchFormDialog({ open, onClose, search }: SearchFormDialogProp
           </Field>
 
           <Field
-            label="Max results"
+            label="Máx. de resultados"
             htmlFor="search-max"
-            hint="1–100 per run."
+            hint="1–100 por execução."
           >
             <Input
               id="search-max"
@@ -248,7 +248,7 @@ export function SearchFormDialog({ open, onClose, search }: SearchFormDialogProp
         </div>
 
         <fieldset>
-          <legend className="label">Experience levels</legend>
+          <legend className="label">Níveis de experiência</legend>
           <div className="grid gap-2 sm:grid-cols-3">
             {EXPERIENCE_LEVELS.map((level) => (
               <Checkbox
@@ -262,15 +262,16 @@ export function SearchFormDialog({ open, onClose, search }: SearchFormDialogProp
         </fieldset>
 
         <Checkbox
-          label="Easy Apply only"
-          description="The tool can only fill LinkedIn's own Easy Apply form. Turning this off surfaces jobs you would have to apply to yourself."
+          label="Apenas Candidatura Simplificada"
+          description="A ferramenta só consegue preencher o próprio formulário de Candidatura Simplificada do LinkedIn. Desligar isto mostra vagas às quais você teria que se candidatar por conta própria."
           checked={form.easyApplyOnly}
           onChange={(event) => patch({ easyApplyOnly: event.target.checked })}
         />
 
         <Note tone="neutral">
-          Keep max results modest. Long scraping runs are the pattern LinkedIn notices first, and a
-          short run you actually review beats a hundred drafts you never open.
+          Mantenha o máximo de resultados modesto. Execuções longas de coleta são o padrão que o
+          LinkedIn percebe primeiro, e uma execução curta que você realmente revisa vale mais do que
+          cem rascunhos que você nunca abre.
         </Note>
       </form>
     </Modal>

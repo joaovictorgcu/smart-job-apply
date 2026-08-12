@@ -8,6 +8,7 @@ import {
   useSubmitApplication,
   useUpdateApplication,
 } from '@/hooks/useApi';
+import { applicationStatusLabel } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { errorMessage } from '@/services/client';
 import type { ApplicationDetail, ScreeningAnswer } from '@/types/api';
@@ -63,32 +64,32 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
   }
 
   const update = useUpdateApplication({
-    onSuccess: () => toast.success('Changes saved'),
-    onError: (error) => toast.error('Could not save your changes', errorMessage(error)),
+    onSuccess: () => toast.success('Alterações salvas'),
+    onError: (error) => toast.error('Não foi possível salvar as suas alterações', errorMessage(error)),
   });
 
   const submit = useSubmitApplication({
     onSuccess: () => {
       setConfirmOpen(false);
-      toast.success('Application submitted', 'LinkedIn has received it.');
+      toast.success('Candidatura enviada', 'O LinkedIn a recebeu.');
     },
-    onError: (error) => toast.error('Submission failed', errorMessage(error)),
+    onError: (error) => toast.error('Falha no envio', errorMessage(error)),
   });
 
   const discard = useDiscardApplication({
     onSuccess: () => {
       setDiscardOpen(false);
-      toast.toast({ title: 'Application discarded', variant: 'info' });
+      toast.toast({ title: 'Candidatura descartada', variant: 'info' });
     },
-    onError: (error) => toast.error('Could not discard', errorMessage(error)),
+    onError: (error) => toast.error('Não foi possível descartar', errorMessage(error)),
   });
 
   const generate = useGenerateCoverLetter({
     onSuccess: (result) => {
       setDraft((current) => ({ ...current, coverLetter: result.content }));
-      toast.success('Cover letter drafted', 'Review it, then save your changes.');
+      toast.success('Carta de apresentação gerada', 'Revise e salve as suas alterações.');
     },
-    onError: (error) => toast.error('Could not draft a cover letter', errorMessage(error)),
+    onError: (error) => toast.error('Não foi possível gerar a carta de apresentação', errorMessage(error)),
   });
 
   const dryRun = settings?.dry_run ?? true;
@@ -104,33 +105,33 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
   const blockers: string[] = [];
   if (!isReviewable) {
     blockers.push(
-      `This application is "${application.status.replace(/_/g, ' ')}", not waiting for review, so it cannot be submitted.`,
+      `Esta candidatura está "${applicationStatusLabel(application.status)}", não aguardando revisão, então não pode ser enviada.`,
     );
   }
   if (pendingReview > 0) {
     blockers.push(
-      `${pendingReview} ${pendingReview === 1 ? 'answer' : 'answers'} still need your review. Confirm each flagged answer above.`,
+      `${pendingReview} ${pendingReview === 1 ? 'resposta ainda precisa' : 'respostas ainda precisam'} da sua revisão. Confirme cada resposta sinalizada acima.`,
     );
   }
   if (isDirty) {
-    blockers.push('You have unsaved edits. Save them first so LinkedIn gets what you see here.');
+    blockers.push('Você tem edições não salvas. Salve primeiro para o LinkedIn receber o que você vê aqui.');
   }
   if (dryRun) {
     blockers.push(
-      'Dry run is on, so submitting is blocked on purpose. Turn it off in Settings when you are ready to send applications for real.',
+      'O modo de teste está ligado, então o envio está bloqueado de propósito. Desligue em Configurações quando estiver pronto para enviar candidaturas de verdade.',
     );
   }
 
   const canSubmit = blockers.length === 0 && !isBusy;
-  const jobTitle = application.job?.title ?? `job #${application.job_id}`;
-  const company = application.job?.company ?? 'this company';
+  const jobTitle = application.job?.title ?? `vaga #${application.job_id}`;
+  const company = application.job?.company ?? 'esta empresa';
 
   return (
     <div className={cn('space-y-4', className)}>
       <Card>
         <CardHeader
-          title="Cover letter"
-          description="Edit freely — this exact text is what gets pasted into the form."
+          title="Carta de apresentação"
+          description="Edite à vontade — este texto exato é o que será colado no formulário."
           actions={
             <Button
               size="sm"
@@ -139,20 +140,20 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
               onClick={() => generate.mutate(application.job_id)}
               icon={<Sparkles aria-hidden className="h-3.5 w-3.5" />}
             >
-              Draft with AI
+              Gerar com IA
             </Button>
           }
         />
         <div className="card-body space-y-2">
           <label htmlFor="cover-letter" className="sr-only">
-            Cover letter
+            Carta de apresentação
           </label>
           <Textarea
             id="cover-letter"
             rows={10}
             value={draft.coverLetter}
             disabled={isBusy}
-            placeholder="No cover letter was generated for this application."
+            placeholder="Nenhuma carta de apresentação foi gerada para esta candidatura."
             onChange={(event) =>
               setDraft((current) => ({ ...current, coverLetter: event.target.value }))
             }
@@ -166,9 +167,9 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
             )}
             aria-live="polite"
           >
-            {draft.coverLetter.length.toLocaleString()} characters
+            {draft.coverLetter.length.toLocaleString('pt-BR')} caracteres
             {draft.coverLetter.length > SOFT_COVER_LETTER_LIMIT
-              ? ' — long answers are often truncated by LinkedIn'
+              ? ' — respostas longas costumam ser cortadas pelo LinkedIn'
               : ''}
           </p>
         </div>
@@ -176,11 +177,11 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
 
       <Card>
         <CardHeader
-          title="Screening answers"
+          title="Respostas de triagem"
           description={
             pendingReview > 0
-              ? `${pendingReview} of ${draft.answers.length} need your attention.`
-              : 'All answers are confirmed.'
+              ? `${pendingReview} de ${draft.answers.length} ${pendingReview === 1 ? 'precisa' : 'precisam'} da sua atenção.`
+              : 'Todas as respostas estão confirmadas.'
           }
         />
         <div className="card-body">
@@ -210,7 +211,7 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
               }
               icon={<Save aria-hidden className="h-4 w-4" />}
             >
-              Save changes
+              Salvar alterações
             </Button>
 
             <Button
@@ -219,7 +220,7 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
               onClick={() => setConfirmOpen(true)}
               icon={<Send aria-hidden className="h-4 w-4" />}
             >
-              Approve &amp; submit
+              Aprovar e enviar
             </Button>
 
             <Button
@@ -229,14 +230,14 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
               onClick={() => setDiscardOpen(true)}
               icon={<Trash2 aria-hidden className="h-4 w-4" />}
             >
-              Discard
+              Descartar
             </Button>
           </div>
 
           {blockers.length > 0 ? (
             <div className="space-y-2">
               <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
-                Why &ldquo;Approve &amp; submit&rdquo; is disabled
+                Por que &ldquo;Aprovar e enviar&rdquo; está desativado
               </p>
               <ul className="space-y-1.5">
                 {blockers.map((blocker) => (
@@ -250,7 +251,7 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
             </div>
           ) : (
             <Note tone="warning" icon={<TriangleAlert aria-hidden className="h-3.5 w-3.5" />}>
-              Approving will really submit this application to LinkedIn. There is no undo.
+              Aprovar vai realmente enviar esta candidatura ao LinkedIn. Não há como desfazer.
             </Note>
           )}
         </div>
@@ -260,33 +261,34 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         size="md"
-        title="Submit this application?"
-        description="This is the only action in the app that sends anything to LinkedIn."
+        title="Enviar esta candidatura?"
+        description="Esta é a única ação do app que envia algo ao LinkedIn."
         footer={
           <>
             <Button onClick={() => setConfirmOpen(false)} disabled={submit.isPending}>
-              Cancel
+              Cancelar
             </Button>
             <Button
               variant="primary"
               loading={submit.isPending}
               onClick={() => submit.mutate(application.id)}
             >
-              Submit to {company}
+              Enviar para {company}
             </Button>
           </>
         }
       >
         <div className="space-y-3 text-sm leading-relaxed text-content-muted">
           <div className="rounded-lg border border-line bg-surface-sunken px-3.5 py-3">
-            <p className="text-2xs uppercase tracking-wider text-content-subtle">Applying to</p>
+            <p className="text-2xs uppercase tracking-wider text-content-subtle">Candidatando-se a</p>
             <p className="mt-1 font-semibold text-content">{jobTitle}</p>
             <p className="text-xs text-content-muted">{company}</p>
           </div>
           <p>
-            The saved cover letter and all {draft.answers.length} screening{' '}
-            {draft.answers.length === 1 ? 'answer' : 'answers'} will be sent exactly as they appear
-            on this page, and the form will be submitted. This cannot be undone.
+            A carta de apresentação salva e {draft.answers.length === 1 ? 'a' : 'as'}{' '}
+            {draft.answers.length} {draft.answers.length === 1 ? 'resposta de triagem' : 'respostas de triagem'}{' '}
+            serão enviadas exatamente como aparecem nesta página, e o formulário será enviado. Isto não
+            pode ser desfeito.
           </p>
         </div>
       </Modal>
@@ -295,19 +297,19 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
         open={discardOpen}
         onClose={() => setDiscardOpen(false)}
         size="sm"
-        title="Discard this application?"
-        description="The draft is closed and the job is left un-applied. Nothing is sent."
+        title="Descartar esta candidatura?"
+        description="O rascunho é fechado e a vaga fica sem candidatura. Nada é enviado."
         footer={
           <>
             <Button onClick={() => setDiscardOpen(false)} disabled={discard.isPending}>
-              Keep it
+              Manter
             </Button>
             <Button
               variant="danger"
               loading={discard.isPending}
               onClick={() => discard.mutate(application.id)}
             >
-              Discard
+              Descartar
             </Button>
           </>
         }

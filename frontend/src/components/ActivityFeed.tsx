@@ -45,12 +45,12 @@ function EventRow({ event, dense }: { event: AppEvent; dense: boolean }) {
         {!dense ? (
           <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-content-subtle">
             <span className="font-mono">{event.name}</span>
-            {event.run_id !== null ? <span>run #{event.run_id}</span> : null}
+            {event.run_id !== null ? <span>execução #{event.run_id}</span> : null}
             {target ? (
               <Link to={target} className="font-medium text-accent-400 hover:underline">
                 {event.application_id !== null
-                  ? `application #${event.application_id}`
-                  : `job #${event.job_id}`}
+                  ? `candidatura #${event.application_id}`
+                  : `vaga #${event.job_id}`}
               </Link>
             ) : null}
           </p>
@@ -76,8 +76,8 @@ export function ActivityFeed({
   autoScroll = false,
   dense = false,
   className,
-  emptyTitle = 'Nothing has happened yet',
-  emptyDescription = 'Live events from searches, scoring and form filling will appear here.',
+  emptyTitle = 'Nada aconteceu ainda',
+  emptyDescription = 'Eventos ao vivo de buscas, pontuação e preenchimento aparecerão aqui.',
 }: ActivityFeedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [pinned, setPinned] = useState(true);
@@ -135,7 +135,7 @@ export function ActivityFeed({
             className="pointer-events-auto shadow-lifted"
             icon={<ArrowDownToLine aria-hidden className="h-3.5 w-3.5" />}
           >
-            Auto-scroll paused — jump to latest
+            Rolagem automática pausada — ir para o mais recente
           </Button>
         </div>
       ) : null}

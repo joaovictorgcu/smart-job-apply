@@ -14,7 +14,7 @@ const SIZE: Record<NonNullable<SpinnerProps['size']>, string> = {
   lg: 'h-7 w-7',
 };
 
-export function Spinner({ size = 'md', className, label = 'Loading' }: SpinnerProps) {
+export function Spinner({ size = 'md', className, label = 'Carregando' }: SpinnerProps) {
   return (
     <span role="status" className={cn('inline-flex items-center', className)}>
       <Loader2 aria-hidden className={cn('animate-spin text-accent-500', SIZE[size])} />
@@ -23,7 +23,7 @@ export function Spinner({ size = 'md', className, label = 'Loading' }: SpinnerPr
   );
 }
 
-export function FullPageSpinner({ label = 'Loading' }: { label?: string }) {
+export function FullPageSpinner({ label = 'Carregando' }: { label?: string }) {
   return (
     <div className="flex min-h-[60vh] w-full flex-col items-center justify-center gap-3">
       <Spinner size="lg" label={label} />

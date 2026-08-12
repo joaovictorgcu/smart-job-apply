@@ -39,28 +39,28 @@ export function CVTailorPanel({ jobId, aiConfigured }: CVTailorPanelProps) {
   }, [data?.content, data?.updated_at]);
 
   const tailor = useTailorResume(jobId, {
-    onSuccess: () => toast.success('Resume tailored', 'Review the changes and flags below.'),
-    onError: (error) => toast.error('Could not tailor the resume', errorMessage(error)),
+    onSuccess: () => toast.success('Currículo adaptado', 'Revise as mudanças e os alertas abaixo.'),
+    onError: (error) => toast.error('Não foi possível adaptar o currículo', errorMessage(error)),
   });
   const save = useUpdateTailoredResume(jobId, {
-    onSuccess: () => toast.toast({ title: 'Edits saved', variant: 'success' }),
-    onError: (error) => toast.error('Could not save edits', errorMessage(error)),
+    onSuccess: () => toast.toast({ title: 'Edições salvas', variant: 'success' }),
+    onError: (error) => toast.error('Não foi possível salvar as edições', errorMessage(error)),
   });
 
   const dirty = data != null && draft !== data.content;
-  const generateLabel = data ? 'Regenerate' : 'Tailor my resume';
+  const generateLabel = data ? 'Gerar novamente' : 'Adaptar meu currículo';
   const busy = tailor.isPending;
 
   return (
     <Card>
       <CardHeader
-        title="Tailored resume"
-        description="Adapts your CV to this job — reorganized and re-emphasized, never invented."
+        title="Currículo adaptado"
+        description="Adapta o seu CV a esta vaga — reorganizado e reenfatizado, nunca inventado."
         actions={
           <Button
             loading={busy}
             disabled={!aiConfigured}
-            title={aiConfigured ? 'Adapt your resume to this posting' : 'No AI API key is configured'}
+            title={aiConfigured ? 'Adaptar o seu currículo a este anúncio' : 'Nenhuma chave de API de IA configurada'}
             onClick={() => tailor.mutate()}
             icon={
               data ? (
@@ -80,45 +80,44 @@ export function CVTailorPanel({ jobId, aiConfigured }: CVTailorPanelProps) {
             AI — so the "AI is off" note only shows when there is nothing to show. */}
         {!isLoading && !aiConfigured && !data ? (
           <Note tone="warning">
-            AI features are off. Set an Anthropic API key to tailor your resume.
+            Os recursos de IA estão desligados. Configure uma chave de API da Anthropic para adaptar o seu currículo.
           </Note>
         ) : isLoading ? (
           <Skeleton className="h-40 w-full rounded-lg" />
         ) : !data ? (
           <div className="space-y-2 text-sm text-content-muted">
             <p>
-              Generate a version of your CV adapted to this posting. It reorganizes and
-              re-emphasizes what is already in your profile — it never adds experience you
-              do not have.
+              Gere uma versão do seu CV adaptada a este anúncio. Ela reorganiza e reenfatiza o que já
+              está no seu perfil — nunca adiciona experiência que você não tem.
             </p>
             <p className="text-xs text-content-subtle">
-              Needs the résumé text on your Profile page. Nothing is submitted anywhere.
+              Precisa do texto do currículo na sua página de Perfil. Nada é enviado a lugar nenhum.
             </p>
           </div>
         ) : (
           <>
             {data.is_stale ? (
               <Note tone="warning" icon={<TriangleAlert aria-hidden className="h-4 w-4" />}>
-                Your profile changed after this was generated. Regenerate to refresh it.
+                O seu perfil mudou depois que isto foi gerado. Gere novamente para atualizar.
               </Note>
             ) : null}
 
             {data.invention_flags.length > 0 ? (
               <Note tone="danger" icon={<TriangleAlert aria-hidden className="h-4 w-4" />}>
-                <span className="font-medium">Verify these yourself.</span> They appear in the
-                tailored CV but not in your profile, so they may be invented:{' '}
-                <span className="font-medium">{data.invention_flags.join(', ')}</span>. The tool
-                flags them for you; it does not remove them.
+                <span className="font-medium">Verifique você mesmo.</span> Aparecem no CV adaptado, mas
+                não no seu perfil, então podem ter sido inventados:{' '}
+                <span className="font-medium">{data.invention_flags.join(', ')}</span>. A ferramenta
+                os sinaliza para você; ela não os remove.
               </Note>
             ) : (
               <Note tone="accent" icon={<ShieldCheck aria-hidden className="h-4 w-4" />}>
-                No invented technologies detected against your profile.
+                Nenhuma tecnologia inventada detectada em relação ao seu perfil.
               </Note>
             )}
 
             {data.unsupported_requirements.length > 0 ? (
               <div>
-                <SectionLabel>Gaps it did not paper over</SectionLabel>
+                <SectionLabel>Lacunas que ele não disfarçou</SectionLabel>
                 <ul className="mt-2 space-y-1.5">
                   {data.unsupported_requirements.map((requirement) => (
                     <li
@@ -135,7 +134,7 @@ export function CVTailorPanel({ jobId, aiConfigured }: CVTailorPanelProps) {
 
             {data.changes.length > 0 ? (
               <div>
-                <SectionLabel>What changed</SectionLabel>
+                <SectionLabel>O que mudou</SectionLabel>
                 <ul className="mt-2 space-y-2">
                   {data.changes.map((change, index) => (
                     <li key={`${change.section}-${index}`} className="text-xs leading-relaxed">
@@ -152,13 +151,13 @@ export function CVTailorPanel({ jobId, aiConfigured }: CVTailorPanelProps) {
 
             <div>
               <div className="flex items-center justify-between">
-                <SectionLabel>Tailored CV — edit before you use it</SectionLabel>
+                <SectionLabel>CV adaptado — edite antes de usar</SectionLabel>
                 {data.was_edited ? (
-                  <span className="text-[11px] text-content-subtle">edited by you</span>
+                  <span className="text-[11px] text-content-subtle">editado por você</span>
                 ) : null}
               </div>
               <Textarea
-                aria-label="Tailored resume"
+                aria-label="Currículo adaptado"
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 rows={16}
@@ -174,10 +173,10 @@ export function CVTailorPanel({ jobId, aiConfigured }: CVTailorPanelProps) {
                 onClick={() => save.mutate(draft)}
                 icon={<Save aria-hidden className="h-4 w-4" />}
               >
-                Save edits
+                Salvar edições
               </Button>
               {dirty ? (
-                <Button onClick={() => setDraft(data.content)}>Discard edits</Button>
+                <Button onClick={() => setDraft(data.content)}>Descartar edições</Button>
               ) : null}
               <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] text-content-subtle">
                 {data.model ? (

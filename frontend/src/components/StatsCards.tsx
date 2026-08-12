@@ -89,28 +89,28 @@ export function StatsCards({ stats, isLoading = false, className }: StatsCardsPr
   return (
     <div className={cn('grid gap-4 sm:grid-cols-2 xl:grid-cols-4', className)}>
       <Card className="flex items-center gap-4 px-5 py-4">
-        <ProgressRing value={today} max={cap} caption={`of ${cap}`} />
+        <ProgressRing value={today} max={cap} caption={`de ${cap}`} />
         <div className="min-w-0">
-          <SectionLabel>Submitted today</SectionLabel>
+          <SectionLabel>Enviadas hoje</SectionLabel>
           <p className="mt-1.5 text-sm font-medium text-content">
-            {atCap ? 'Daily cap reached' : `${formatNumber(Math.max(0, cap - today))} left`}
+            {atCap ? 'Limite diário atingido' : `${formatNumber(Math.max(0, cap - today))} restantes`}
           </p>
           <p className="mt-1 text-xs leading-snug text-content-subtle">
             {atCap
-              ? 'No more submissions today. The cap protects the account from looking automated.'
-              : 'The cap is a guard rail, not a target.'}
+              ? 'Nenhum envio a mais hoje. O limite protege a conta de parecer automatizada.'
+              : 'O limite é uma salvaguarda, não uma meta.'}
           </p>
         </div>
       </Card>
 
       <StatTile
         icon={ClipboardCheck}
-        label="Awaiting review"
+        label="Aguardando revisão"
         value={formatNumber(stats.awaiting_review)}
         hint={
           stats.awaiting_review > 0
-            ? 'Filled and stopped — waiting for your approval.'
-            : 'Nothing is waiting on you.'
+            ? 'Preenchidas e paradas — aguardando a sua aprovação.'
+            : 'Nada esperando por você.'
         }
         to="/applications?status=awaiting_review"
         emphasis={stats.awaiting_review > 0}
@@ -118,21 +118,21 @@ export function StatsCards({ stats, isLoading = false, className }: StatsCardsPr
 
       <StatTile
         icon={Briefcase}
-        label="Jobs found"
+        label="Vagas encontradas"
         value={formatNumber(stats.jobs_total)}
-        hint={`${formatNumber(stats.applications_total)} applications in total`}
+        hint={`${formatNumber(stats.applications_total)} candidaturas no total`}
         to="/jobs"
       />
 
       <StatTile
         icon={stats.average_score === null ? Gauge : TrendingUp}
-        label="Average score"
+        label="Nota média"
         value={formatScore(stats.average_score)}
         suffix={stats.average_score === null ? undefined : '/ 100'}
         hint={
           stats.average_score === null
-            ? 'No jobs have been scored yet.'
-            : `${formatNumber(stats.ai_calls_total)} AI calls so far`
+            ? 'Nenhuma vaga foi pontuada ainda.'
+            : `${formatNumber(stats.ai_calls_total)} chamadas de IA até agora`
         }
       />
     </div>

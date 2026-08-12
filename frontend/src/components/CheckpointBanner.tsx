@@ -27,11 +27,11 @@ export function CheckpointBanner({ className }: { className?: string }) {
     const result = await refetch();
     if (result.data && !result.data.blocked) {
       clearBlocked();
-      toast.success('Checkpoint cleared', 'The session is no longer blocked.');
+      toast.success('Verificação concluída', 'A sessão não está mais bloqueada.');
     } else {
       toast.warning(
-        'Still blocked',
-        'LinkedIn is still showing the verification. Finish it in the browser window, then re-check.',
+        'Ainda bloqueada',
+        'O LinkedIn ainda está mostrando a verificação. Conclua na janela do navegador e verifique de novo.',
       );
     }
   };
@@ -51,12 +51,13 @@ export function CheckpointBanner({ className }: { className?: string }) {
 
         <div className="min-w-0 flex-1 space-y-1">
           <p className="text-sm font-semibold text-danger-strong">
-            LinkedIn is asking for a security verification — automation is paused
+            O LinkedIn está pedindo uma verificação de segurança — a automação está pausada
           </p>
           <p className="text-xs leading-relaxed text-content-muted">
-            Switch to the browser window the tool opened and complete the check yourself (CAPTCHA,
-            code, or &ldquo;unusual activity&rdquo; prompt). This tool will never try to bypass a
-            security challenge, so the run stays stopped until you confirm it is cleared.
+            Vá até a janela do navegador que a ferramenta abriu e conclua a verificação você mesmo
+            (CAPTCHA, código ou aviso de &ldquo;atividade incomum&rdquo;). Esta ferramenta nunca vai
+            tentar burlar um desafio de segurança, então a execução fica parada até você confirmar que
+            foi resolvido.
           </p>
           {reason ? (
             <p className="truncate text-xs font-medium text-danger" title={reason}>
@@ -73,10 +74,10 @@ export function CheckpointBanner({ className }: { className?: string }) {
             className="btn btn-sm"
           >
             <ExternalLink aria-hidden className="h-3.5 w-3.5" />
-            Open LinkedIn
+            Abrir o LinkedIn
           </a>
           <Button size="sm" variant="danger" loading={isFetching} onClick={recheck}>
-            I solved it — re-check
+            Resolvi — verificar de novo
           </Button>
         </div>
       </div>

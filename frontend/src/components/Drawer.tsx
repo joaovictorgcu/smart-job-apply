@@ -72,7 +72,7 @@ export function Drawer({
               </p>
             ) : null}
           </div>
-          <Button variant="ghost" size="icon" onClick={handleClose} aria-label="Close panel">
+          <Button variant="ghost" size="icon" onClick={handleClose} aria-label="Fechar painel">
             <X aria-hidden className="h-4 w-4" />
           </Button>
         </div>

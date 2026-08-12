@@ -297,7 +297,7 @@ export function ProgressRing({ value, max, size = 88, caption, className }: Prog
       className={cn('relative shrink-0', className)}
       style={{ width: size, height: size }}
       role="img"
-      aria-label={`${value} of ${max} ${caption ?? 'used'}`}
+      aria-label={`${value} de ${max} ${caption ?? 'usados'}`}
     >
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
         <circle
@@ -323,7 +323,7 @@ export function ProgressRing({ value, max, size = 88, caption, className }: Prog
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="tabular text-xl font-semibold text-content">{value}</span>
         <span className="text-2xs uppercase tracking-wider text-content-subtle">
-          {caption ?? `of ${max}`}
+          {caption ?? `de ${max}`}
         </span>
       </div>
     </div>
