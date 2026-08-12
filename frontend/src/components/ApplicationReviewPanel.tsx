@@ -1,4 +1,4 @@
-import { Info, Save, Send, Sparkles, Trash2, TriangleAlert } from 'lucide-react';
+import { CheckCircle2, Info, Save, Send, Sparkles, Trash2, TriangleAlert, XCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import {
@@ -8,7 +8,7 @@ import {
   useSubmitApplication,
   useUpdateApplication,
 } from '@/hooks/useApi';
-import { applicationStatusLabel } from '@/lib/format';
+import { applicationStatusLabel, badgeClass } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { errorMessage } from '@/services/client';
 import type { ApplicationDetail, ScreeningAnswer } from '@/types/api';
@@ -24,6 +24,35 @@ interface Draft {
   coverLetter: string;
   answers: ScreeningAnswer[];
 }
+
+/**
+ * One line of the readiness checklist. `fail` blocks approval; `warn` is a fact
+ * worth knowing that does not — an unscored job or a missing letter is still
+ * submittable, an unconfirmed answer is not.
+ */
+interface ReadinessCheck {
+  state: 'ok' | 'warn' | 'fail';
+  label: string;
+  detail?: string;
+}
+
+const CHECK_ICON: Record<ReadinessCheck['state'], typeof CheckCircle2> = {
+  ok: CheckCircle2,
+  warn: TriangleAlert,
+  fail: XCircle,
+};
+
+const CHECK_ICON_CLASS: Record<ReadinessCheck['state'], string> = {
+  ok: 'text-success',
+  warn: 'text-warning',
+  fail: 'text-danger',
+};
+
+const CHECK_SR_PREFIX: Record<ReadinessCheck['state'], string> = {
+  ok: 'ok:',
+  warn: 'atenção:',
+  fail: 'pendente:',
+};
 
 function draftFrom(application: ApplicationDetail): Draft {
   return {
@@ -102,27 +131,64 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
   const isReviewable = application.status === 'awaiting_review';
   const isBusy = update.isPending || submit.isPending || discard.isPending;
 
-  const blockers: string[] = [];
+  // Content facts (warn) and hard gates (fail), in the order a reviewer scans them.
+  const coverLetterReady = draft.coverLetter.trim().length > 0;
+  const checks: ReadinessCheck[] = [
+    application.job?.score != null
+      ? { state: 'ok', label: `Vaga analisada — nota ${application.job.score}/100` }
+      : {
+          state: 'warn',
+          label: 'Vaga não analisada pela IA',
+          detail: 'Opcional — você ainda pode enviar.',
+        },
+    application.resume_filename
+      ? { state: 'ok', label: `Currículo anexado (${application.resume_filename})` }
+      : {
+          state: 'warn',
+          label: 'Nenhum currículo anexado ao formulário',
+          detail: 'Confira na janela do navegador se a vaga exige um.',
+        },
+    coverLetterReady
+      ? { state: 'ok', label: 'Carta de apresentação pronta' }
+      : settings === undefined
+        // Settings still loading: state the fact without guessing the preference.
+        ? { state: 'warn', label: 'Sem carta de apresentação' }
+        : settings.generate_cover_letter === false
+          ? { state: 'ok', label: 'Carta de apresentação desativada em Configurações' }
+          : {
+              state: 'warn',
+              label: 'Sem carta de apresentação',
+              detail: 'Muitos formulários de Candidatura Simplificada não pedem uma.',
+            },
+    pendingReview === 0
+      ? { state: 'ok', label: 'Todas as respostas confirmadas' }
+      : {
+          state: 'fail',
+          label: `${pendingReview} ${pendingReview === 1 ? 'resposta precisa' : 'respostas precisam'} de revisão`,
+          detail: 'Confirme cada resposta sinalizada acima.',
+        },
+    isDirty
+      ? {
+          state: 'fail',
+          label: 'Edições não salvas',
+          detail: 'Salve para o LinkedIn receber o que você vê aqui.',
+        }
+      : { state: 'ok', label: 'Edições salvas' },
+  ];
   if (!isReviewable) {
-    blockers.push(
-      `Esta candidatura está "${applicationStatusLabel(application.status)}", não aguardando revisão, então não pode ser enviada.`,
-    );
-  }
-  if (pendingReview > 0) {
-    blockers.push(
-      `${pendingReview} ${pendingReview === 1 ? 'resposta ainda precisa' : 'respostas ainda precisam'} da sua revisão. Confirme cada resposta sinalizada acima.`,
-    );
-  }
-  if (isDirty) {
-    blockers.push('Você tem edições não salvas. Salve primeiro para o LinkedIn receber o que você vê aqui.');
-  }
-  if (dryRun) {
-    blockers.push(
-      'O modo de teste está ligado, então o envio está bloqueado de propósito. Desligue em Configurações quando estiver pronto para enviar candidaturas de verdade.',
-    );
+    checks.unshift({
+      state: 'fail',
+      label: `Status "${applicationStatusLabel(application.status)}"`,
+      detail: 'Só uma candidatura aguardando revisão pode ser enviada.',
+    });
   }
 
-  const canSubmit = blockers.length === 0 && !isBusy;
+  const ready = checks.every((check) => check.state !== 'fail');
+  // A submitted or discarded application has no readiness to report.
+  const showReadiness = !['submitted', 'submitting', 'discarded'].includes(application.status);
+
+  // Same gate as before the checklist existed: dry run still blocks the click.
+  const canSubmit = !isBusy && isReviewable && pendingReview === 0 && !isDirty && !dryRun;
   const jobTitle = application.job?.title ?? `vaga #${application.job_id}`;
   const company = application.job?.company ?? 'esta empresa';
 
@@ -234,26 +300,71 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
             </Button>
           </div>
 
-          {blockers.length > 0 ? (
-            <div className="space-y-2">
-              <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
-                Por que &ldquo;Aprovar e enviar&rdquo; está desativado
-              </p>
+          {showReadiness ? (
+            <div className="space-y-2.5 rounded-lg border border-line bg-surface-sunken px-3.5 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+                  Prontidão da candidatura
+                </p>
+                <span className={badgeClass(!ready ? 'warning' : dryRun ? 'info' : 'success')}>
+                  {!ready
+                    ? 'Ainda não pronta'
+                    : dryRun
+                      ? 'Pronta — modo de teste ligado'
+                      : 'Pronta para aprovação'}
+                </span>
+              </div>
               <ul className="space-y-1.5">
-                {blockers.map((blocker) => (
-                  <li key={blocker}>
-                    <Note tone="neutral" icon={<Info aria-hidden className="h-3.5 w-3.5" />}>
-                      {blocker}
-                    </Note>
-                  </li>
-                ))}
+                {checks.map((check) => {
+                  const Icon = CHECK_ICON[check.state];
+                  return (
+                    <li key={check.label} className="flex items-start gap-2 text-xs leading-relaxed">
+                      <Icon
+                        aria-hidden
+                        className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', CHECK_ICON_CLASS[check.state])}
+                      />
+                      <span className="min-w-0">
+                        <span className="sr-only">{CHECK_SR_PREFIX[check.state]} </span>
+                        <span
+                          className={
+                            check.state === 'fail' ? 'font-medium text-content' : 'text-content-muted'
+                          }
+                        >
+                          {check.label}
+                        </span>
+                        {check.detail ? (
+                          <span className="text-content-subtle"> — {check.detail}</span>
+                        ) : null}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
-          ) : (
+          ) : null}
+
+          {!showReadiness ? (
+            <Note tone="neutral" icon={<Info aria-hidden className="h-3.5 w-3.5" />}>
+              {application.status === 'submitted'
+                ? 'Esta candidatura já foi enviada — não há mais nada para aprovar aqui.'
+                : application.status === 'submitting'
+                  ? 'Enviando ao LinkedIn…'
+                  : 'Esta candidatura foi descartada. Nada foi enviado.'}
+            </Note>
+          ) : null}
+
+          {showReadiness && dryRun ? (
+            <Note tone="neutral" icon={<Info aria-hidden className="h-3.5 w-3.5" />}>
+              O modo de teste está ligado, então &ldquo;Aprovar e enviar&rdquo; fica bloqueado de
+              propósito. Desligue em Configurações quando estiver pronto para enviar de verdade.
+            </Note>
+          ) : null}
+
+          {showReadiness && ready && !dryRun ? (
             <Note tone="warning" icon={<TriangleAlert aria-hidden className="h-3.5 w-3.5" />}>
               Aprovar vai realmente enviar esta candidatura ao LinkedIn. Não há como desfazer.
             </Note>
-          )}
+          ) : null}
         </div>
       </Card>
 
