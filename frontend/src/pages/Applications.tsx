@@ -1,13 +1,16 @@
-import { Send } from 'lucide-react';
+import { Download, Send } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { EmptyState } from '@/components/EmptyState';
 import { Pagination } from '@/components/Pagination';
-import { Card, Field, PageHeader, Select, Skeleton } from '@/components/primitives';
+import { Button, Card, Field, PageHeader, Select, Skeleton } from '@/components/primitives';
 import { ScoreBadge } from '@/components/ScoreBadge';
 import { StatusBadge } from '@/components/StatusBadge';
+import { useToast } from '@/components/ToastProvider';
 import { useApplications, useJobs } from '@/hooks/useApi';
+import { downloadApplicationsCsv } from '@/services/applications';
+import { errorMessage } from '@/services/client';
 import { applicationStatusLabel, badgeClass, formatDateTime, formatNumber } from '@/lib/format';
 import { APPLICATION_STATUSES, type ApplicationStatus, type Job } from '@/types/api';
 
@@ -22,9 +25,22 @@ function parseStatus(value: string | null): ApplicationStatus | 'all' {
 }
 
 export function Applications() {
+  const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const [offset, setOffset] = useState(0);
+  const [exporting, setExporting] = useState(false);
   const status = parseStatus(searchParams.get('status'));
+
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      await downloadApplicationsCsv();
+    } catch (error) {
+      toast.error('Não foi possível exportar', errorMessage(error));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const { data, isLoading } = useApplications({
     status: status === 'all' ? undefined : status,
@@ -60,6 +76,15 @@ export function Applications() {
       <PageHeader
         title="Candidaturas"
         description="Todo rascunho que a automação preencheu e toda candidatura que você aprovou."
+        actions={
+          <Button
+            loading={exporting}
+            onClick={exportCsv}
+            icon={<Download aria-hidden className="h-4 w-4" />}
+          >
+            Exportar CSV
+          </Button>
+        }
       />
 
       <Card className="px-4 py-3.5 sm:px-5">
