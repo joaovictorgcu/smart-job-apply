@@ -1,35 +1,35 @@
-# API reference
+# Referência da API
 
-Every route is under `/api`. Request and response bodies are JSON unless noted.
+Toda rota fica sob `/api`. Os corpos de requisição e resposta são JSON salvo indicação em contrário.
 
-> **Live docs beat this page.** The running app serves interactive OpenAPI at
-> **<http://localhost:8000/docs>** (and the raw schema at `/openapi.json`), generated from the actual
-> Pydantic models. Use it to try calls and to confirm exact field types; use this page for the shape of the
-> whole surface and the reasoning behind it.
+> **Os docs ao vivo superam esta página.** O app em execução serve o OpenAPI interativo em
+> **<http://localhost:8000/docs>** (e o schema bruto em `/openapi.json`), gerado a partir dos modelos
+> Pydantic reais. Use-o para experimentar chamadas e confirmar os tipos exatos dos campos; use esta página para o formato de
+> toda a superfície e o raciocínio por trás dela.
 
-## Authentication
+## Autenticação
 
-All routes except `POST /api/auth/register`, `POST /api/auth/login`, and `GET /api/health` require a bearer
+Todas as rotas exceto `POST /api/auth/register`, `POST /api/auth/login` e `GET /api/health` exigem um bearer
 token:
 
 ```
 Authorization: Bearer <access_token>
 ```
 
-Get one from `/api/auth/login`. It is a JWT signed with `SECRET_KEY`, valid for
-`ACCESS_TOKEN_TTL_MINUTES` (12 hours by default). There is no refresh token — log in again when it expires.
+Obtenha um em `/api/auth/login`. É um JWT assinado com `SECRET_KEY`, válido por
+`ACCESS_TOKEN_TTL_MINUTES` (12 horas por padrão). Não há refresh token — faça login de novo quando ele expirar.
 
-Every query is scoped to the authenticated user. Requesting another user's job or application returns `404`,
-not `403`, so ids are not enumerable.
+Toda query é escopada ao usuário autenticado. Requisitar a vaga ou candidatura de outro usuário retorna `404`,
+não `403`, para que os ids não sejam enumeráveis.
 
-## Conventions
+## Convenções
 
 | | |
 |---|---|
-| Timestamps | ISO 8601, UTC, timezone-aware — `2026-08-11T14:23:05+00:00` |
-| Enums | lower-case snake_case strings (`awaiting_review`, `job_found`) |
-| Pagination | `?limit=&offset=` on list endpoints, wrapped in `Page` |
-| Rate limits | `120/minute` by default, `10/minute` on auth routes |
+| Timestamps | ISO 8601, UTC, com timezone — `2026-08-11T14:23:05+00:00` |
+| Enums | strings snake_case em minúsculas (`awaiting_review`, `job_found`) |
+| Paginação | `?limit=&offset=` nos endpoints de lista, embrulhado em `Page` |
+| Limites de taxa | `120/minute` por padrão, `10/minute` nas rotas de auth |
 
 `Page<T>`:
 
@@ -43,18 +43,18 @@ not `403`, so ids are not enumerable.
 { "detail": "..." }
 ```
 
-### Status codes
+### Códigos de status
 
-| Code | Meaning |
+| Código | Significado |
 |---|---|
-| `200` | Success |
-| `201` | Created (only `POST /api/auth/register`) |
-| `204` | Success, no body (only `DELETE /api/searches/{id}`) |
-| `401` | Missing, malformed, or expired token |
-| `404` | Not found, or not yours |
-| `409` | Conflict — e.g. registering an email that exists, or preparing a job that already has an application |
-| `422` | Validation error — Pydantic's standard `{"detail": [...]}` shape |
-| `429` | Rate limited |
+| `200` | Sucesso |
+| `201` | Criado (apenas `POST /api/auth/register`) |
+| `204` | Sucesso, sem corpo (apenas `DELETE /api/searches/{id}`) |
+| `401` | Token ausente, malformado ou expirado |
+| `404` | Não encontrado, ou não é seu |
+| `409` | Conflito — ex.: registrar um e-mail que existe, ou preparar uma vaga que já tem uma candidatura |
+| `422` | Erro de validação — o formato padrão `{"detail": [...]}` do Pydantic |
+| `429` | Limite de taxa atingido |
 
 ---
 
@@ -62,19 +62,19 @@ not `403`, so ids are not enumerable.
 
 ### `POST /api/auth/register`
 
-Creates a local account. This is the application's own login, unrelated to LinkedIn.
+Cria uma conta local. Este é o login do próprio aplicativo, sem relação com o LinkedIn.
 
 ```json
 { "email": "you@example.com", "password": "at-least-ten-chars", "full_name": "Your Name" }
 ```
 
-`password` is 10–72 characters; 72 bytes is bcrypt's limit and longer inputs are rejected rather than
-silently truncated. `full_name` is optional.
+`password` tem 10–72 caracteres; 72 bytes é o limite do bcrypt e entradas mais longas são rejeitadas em vez de
+silenciosamente truncadas. `full_name` é opcional.
 
-The new account is created with an empty profile and conservative default guard rails — dry-run on, manual
-approval required — so it cannot submit anything before you configure it.
+A nova conta é criada com um perfil vazio e salvaguardas padrão conservadoras — dry run ligado, aprovação
+manual obrigatória — para que não consiga enviar nada antes de você configurá-la.
 
-→ `201` with `TokenResponse`:
+→ `201` com `TokenResponse`:
 
 ```json
 {
@@ -93,18 +93,18 @@ approval required — so it cannot submit anything before you configure it.
 { "email": "you@example.com", "password": "..." }
 ```
 
-→ `TokenResponse`. `401` on bad credentials, without distinguishing a wrong password from an unknown email.
+→ `TokenResponse`. `401` em credenciais inválidas, sem distinguir uma senha errada de um e-mail desconhecido.
 
 ### `GET /api/auth/me`
 
-→ `UserRead` for the bearer token's subject.
+→ `UserRead` para o sujeito do bearer token.
 
 ---
 
-## Profile
+## Perfil
 
-Your CV and the answer bank the AI draws on. Everything here is optional, but a thin profile produces weak
-scores and vague cover letters.
+O seu currículo e o banco de respostas de que a IA se vale. Tudo aqui é opcional, mas um perfil raso produz notas
+fracas e cartas de apresentação vagas.
 
 ### `GET /api/profile`
 
@@ -128,22 +128,22 @@ scores and vague cover letters.
 
 ### `PUT /api/profile`
 
-`ProfileUpdate` — every field optional; omitted fields are left alone.
+`ProfileUpdate` — todo campo opcional; campos omitidos ficam intocados.
 
-| Field | Constraint |
+| Campo | Restrição |
 |---|---|
-| `headline` | ≤ 300 chars |
-| `location` | ≤ 200 chars |
-| `phone` | ≤ 50 chars |
+| `headline` | ≤ 300 caracteres |
+| `location` | ≤ 200 caracteres |
+| `phone` | ≤ 50 caracteres |
 | `years_of_experience` | 0–70 |
-| `summary`, `resume_text` | free text |
-| `skills`, `preferred_languages` | arrays of strings — replaced wholesale, not merged |
-| `answer_bank` | free-form object — replaced wholesale |
+| `summary`, `resume_text` | texto livre |
+| `skills`, `preferred_languages` | arrays de strings — substituídos por inteiro, não mesclados |
+| `answer_bank` | objeto livre — substituído por inteiro |
 
 → `ProfileRead`.
 
-The `answer_bank` is what turns recurring screening questions into reliable answers. Keys are yours to
-choose; the model matches them semantically against the question text:
+O `answer_bank` é o que transforma perguntas de triagem recorrentes em respostas confiáveis. As chaves são suas para
+escolher; o modelo as compara semanticamente contra o texto da pergunta:
 
 ```json
 { "salary_expectation": "R$ 15.000/month",
@@ -154,7 +154,7 @@ choose; the model matches them semantically against the question text:
 
 ### `POST /api/profile/resume`
 
-`multipart/form-data`, one field named `file`, a PDF.
+`multipart/form-data`, um campo chamado `file`, um PDF.
 
 ```bash
 curl -X POST http://localhost:8000/api/profile/resume \
@@ -162,15 +162,15 @@ curl -X POST http://localhost:8000/api/profile/resume \
   -F "file=@/path/to/cv.pdf"
 ```
 
-The file is stored under `DATA_DIR/resumes/`, its text is extracted into `resume_text`, and both are
-returned in the updated `ProfileRead`. The same file is attached to Easy Apply forms.
+O arquivo é armazenado em `DATA_DIR/resumes/`, o texto dele é extraído para `resume_text`, e ambos são
+retornados no `ProfileRead` atualizado. O mesmo arquivo é anexado aos formulários de Candidatura Simplificada.
 
 ---
 
-## Settings
+## Configurações
 
-Per-user guard rails and AI preferences. Field-by-field meanings, ranges, and the risk of loosening each
-guard rail are in [configuration.md](configuration.md#per-user-settings-usersettings).
+Salvaguardas e preferências de IA por usuário. Os significados campo a campo, faixas e o risco de afrouxar cada
+salvaguarda estão em [configuration.md](configuration.md#per-user-settings-usersettings).
 
 ### `GET /api/settings`
 
@@ -190,17 +190,17 @@ guard rail are in [configuration.md](configuration.md#per-user-settings-usersett
 
 ### `PUT /api/settings`
 
-`UserSettingsUpdate` — all fields optional. Cross-field rules are enforced and return `422` when broken:
-`action_delay_min ≤ action_delay_max`, `apply_delay_min ≤ apply_delay_max`, and
+`UserSettingsUpdate` — todos os campos opcionais. Regras entre campos são impostas e retornam `422` quando quebradas:
+`action_delay_min ≤ action_delay_max`, `apply_delay_min ≤ apply_delay_max` e
 `working_hour_start < working_hour_end`.
 
 → `UserSettingsRead`.
 
 ---
 
-## Searches
+## Buscas
 
-A saved filter set. Saved rather than ad-hoc so a run is reproducible and `max_results` bounds the scan.
+Um conjunto de filtros salvo. Salvo em vez de ad-hoc para que uma execução seja reproduzível e `max_results` limite a varredura.
 
 ### `GET /api/searches`
 
@@ -223,40 +223,40 @@ A saved filter set. Saved rather than ad-hoc so a run is reproducible and `max_r
 }
 ```
 
-| Field | Notes |
+| Campo | Notas |
 |---|---|
-| `name` | required, ≤ 200 chars |
-| `keywords` | required, 1–300 chars |
-| `location` | ≤ 200 chars |
-| `remote_filter` | free-form string, ≤ 50 — `remote`, `hybrid`, `onsite` |
-| `experience_levels` | array of strings |
-| `date_posted` | ≤ 30 chars — `day`, `week`, `month` |
-| `easy_apply_only` | defaults `true`. Only Easy Apply jobs can be auto-filled at all |
-| `max_results` | 1–100, default 25. A per-run ceiling that keeps sweeps short |
+| `name` | obrigatório, ≤ 200 caracteres |
+| `keywords` | obrigatório, 1–300 caracteres |
+| `location` | ≤ 200 caracteres |
+| `remote_filter` | string livre, ≤ 50 — `remote`, `hybrid`, `onsite` |
+| `experience_levels` | array de strings |
+| `date_posted` | ≤ 30 caracteres — `day`, `week`, `month` |
+| `easy_apply_only` | padrão `true`. Só vagas de Candidatura Simplificada podem ser preenchidas automaticamente |
+| `max_results` | 1–100, padrão 25. Um teto por execução que mantém as varreduras curtas |
 
-→ `SearchRead` (adds `id`, `is_active`, `last_run_at`, `created_at`).
+→ `SearchRead` (adiciona `id`, `is_active`, `last_run_at`, `created_at`).
 
 ### `PATCH /api/searches/{id}`
 
-`SearchUpdate` — the same fields, all optional, plus `is_active`. → `SearchRead`.
+`SearchUpdate` — os mesmos campos, todos opcionais, mais `is_active`. → `SearchRead`.
 
 ### `DELETE /api/searches/{id}`
 
-→ `204`. Jobs already found by the search are kept; their `search_id` becomes `null`.
+→ `204`. As vagas já encontradas pela busca são mantidas; o `search_id` delas vira `null`.
 
 ---
 
-## Jobs
+## Vagas
 
 ### `GET /api/jobs`
 
-| Query param | Type | Notes |
+| Query param | Tipo | Notas |
 |---|---|---|
 | `status` | `JobStatus` | `discovered`, `analyzed`, `skipped`, `queued`, `applied`, `failed` |
-| `min_score` | int | Jobs scoring at least this |
-| `search_id` | int | Only jobs from one saved search |
-| `limit` | int | Page size |
-| `offset` | int | Page offset |
+| `min_score` | int | Vagas com nota de pelo menos isto |
+| `search_id` | int | Só vagas de uma busca salva |
+| `limit` | int | Tamanho da página |
+| `offset` | int | Offset da página |
 
 → `Page<JobRead>`:
 
@@ -286,32 +286,32 @@ A saved filter set. Saved rather than ad-hoc so a run is reproducible and `max_r
 }
 ```
 
-`score_reasons` and `missing_requirements` come straight from the model. The second list is the useful one:
-it tells you what a recruiter will ask about.
+`score_reasons` e `missing_requirements` vêm direto do modelo. A segunda lista é a útil:
+ela diz o que um recrutador vai perguntar.
 
 ### `GET /api/jobs/{id}`
 
-→ `JobDetail` — `JobRead` plus the full `description`.
+→ `JobDetail` — `JobRead` mais a `description` completa.
 
 ### `POST /api/jobs/{id}/skip`
 
-Marks the job `skipped` so it is excluded from future runs. → `JobRead`.
+Marca a vaga como `skipped` para que seja excluída de execuções futuras. → `JobRead`.
 
 ### `POST /api/jobs/{id}/analyze`
 
-Scores (or re-scores) one job with the AI. Useful for a job that arrived before you finished your profile,
-or when `analyze: false` was used on the search run. → `JobRead` with `score`, `score_reasons`, and
-`missing_requirements` populated, and `status` set to `analyzed`.
+Pontua (ou repontua) uma vaga com a IA. Útil para uma vaga que chegou antes de você terminar o seu perfil,
+ou quando `analyze: false` foi usado na execução da busca. → `JobRead` com `score`, `score_reasons` e
+`missing_requirements` preenchidos, e `status` definido como `analyzed`.
 
-Requires `ANTHROPIC_API_KEY`; without it the call fails rather than inventing a score.
+Exige `ANTHROPIC_API_KEY`; sem ela a chamada falha em vez de inventar uma nota.
 
 ---
 
-## Applications
+## Candidaturas
 
 ### `GET /api/applications`
 
-| Query param | Type |
+| Query param | Tipo |
 |---|---|
 | `status` | `ApplicationStatus` — `draft`, `preparing`, `awaiting_review`, `submitting`, `submitted`, `discarded`, `failed` |
 | `limit`, `offset` | int |
@@ -349,21 +349,21 @@ Requires `ANTHROPIC_API_KEY`; without it the call fails rather than inventing a 
 }
 ```
 
-Two fields drive the review UI. `needs_review` on an answer means the model was not confident — a `low`
-confidence value sets it automatically, so a low-confidence answer can never reach you unflagged.
-`needs_human_input` on the application means at least one field could not be filled at all.
+Dois campos dirigem a UI de revisão. `needs_review` numa resposta significa que o modelo não estava confiante — um valor de
+confiança `low` o seta automaticamente, para que uma resposta de baixa confiança nunca chegue a você sem marcação.
+`needs_human_input` na candidatura significa que pelo menos um campo não pôde ser preenchido de forma alguma.
 
-`was_dry_run` records whether this was a rehearsal, so your history distinguishes drills from real
-submissions.
+`was_dry_run` registra se isto foi um ensaio, para que o seu histórico distinga treinos de envios
+reais.
 
 ### `GET /api/applications/{id}`
 
-→ `ApplicationDetail` — `ApplicationRead` plus the nested `job` (`JobRead`) and the full `events` array
+→ `ApplicationDetail` — `ApplicationRead` mais o `job` aninhado (`JobRead`) e o array `events` completo
 (`ApplicationEventOut[]`).
 
 ### `PATCH /api/applications/{id}`
 
-Your edits during review, before approving.
+As suas edições durante a revisão, antes de aprovar.
 
 ```json
 {
@@ -376,40 +376,40 @@ Your edits during review, before approving.
 }
 ```
 
-Both fields are optional. `screening_answers` is validated against `ScreeningAnswer` and replaces the whole
-array — send every answer, not just the ones you changed. Preserve each `field_id`; that is how an answer is
-matched back to its form field.
+Ambos os campos são opcionais. `screening_answers` é validado contra `ScreeningAnswer` e substitui o array
+inteiro — envie cada resposta, não só as que você mudou. Preserve cada `field_id`; é assim que uma resposta é
+casada de volta ao seu campo de formulário.
 
-→ `ApplicationDetail`. Records a `USER_EDITED` event.
+→ `ApplicationDetail`. Registra um evento `USER_EDITED`.
 
 ### `POST /api/applications/{id}/submit`
 
-**The only endpoint that submits anything to LinkedIn.**
+**O único endpoint que envia algo ao LinkedIn.**
 
 ```json
 { "confirm": true }
 ```
 
-`confirm` is required and must be `true` — it is the consent, and there is no default. The endpoint acts on
-exactly one application, identified in the path. There is no bulk-submit route, by design.
+`confirm` é obrigatório e precisa ser `true` — é o consentimento, e não há padrão. O endpoint age sobre
+exatamente uma candidatura, identificada no caminho. Não há rota de envio em massa, por design.
 
-→ `ApplicationDetail` with `status: "submitted"`, `approved_at` and `submitted_at` set. Records
-`USER_APPROVED` and `SUBMITTED` events.
+→ `ApplicationDetail` com `status: "submitted"`, `approved_at` e `submitted_at` definidos. Registra
+os eventos `USER_APPROVED` e `SUBMITTED`.
 
-Refuses when the application is not in `awaiting_review`, when the daily cap is reached, or when the current
-time is outside the working-hours window.
+Recusa quando a candidatura não está em `awaiting_review`, quando o limite diário é atingido, ou quando a hora
+atual está fora da janela de horário.
 
-With `dry_run: true` the flow completes without a real submission and the application is marked
+Com `dry_run: true` o fluxo completa sem um envio real e a candidatura é marcada
 `was_dry_run: true`.
 
 ### `POST /api/applications/{id}/discard`
 
-Abandons the draft and closes the LinkedIn modal. → `ApplicationDetail` with `status: "discarded"`. Records
-a `DISCARDED` event.
+Abandona o rascunho e fecha o modal do LinkedIn. → `ApplicationDetail` com `status: "discarded"`. Registra
+um evento `DISCARDED`.
 
 ### `GET /api/applications/{id}/events`
 
-The audit trail, oldest first.
+A trilha de auditoria, da mais antiga primeiro.
 
 → `ApplicationEventOut[]`:
 
@@ -424,18 +424,18 @@ The audit trail, oldest first.
 ]
 ```
 
-Event types: `job_found`, `job_analyzed`, `score_assigned`, `cover_letter_generated`, `form_opened`,
+Tipos de evento: `job_found`, `job_analyzed`, `score_assigned`, `cover_letter_generated`, `form_opened`,
 `form_step_completed`, `question_answered`, `resume_uploaded`, `awaiting_review`, `user_edited`,
 `user_approved`, `submitted`, `discarded`, `error`.
 
-This is the first place to look when an application fails. The `payload` carries the specifics —
-which field, which options, which selector — so a failure is diagnosable without reproducing it.
+Este é o primeiro lugar a olhar quando uma candidatura falha. O `payload` carrega os detalhes —
+qual campo, quais opções, qual seletor — para que uma falha seja diagnosticável sem reproduzi-la.
 
 ---
 
-## Automation
+## Automação
 
-The engine. Search, prepare, and submit are separate operations that you invoke separately.
+O engine. Buscar, preparar e enviar são operações separadas que você invoca separadamente.
 
 ### `GET /api/automation/session`
 
@@ -455,24 +455,24 @@ The engine. Search, prepare, and submit are separate operations that you invoke 
 }
 ```
 
-`blocked: true` means a security checkpoint was detected. Solve it yourself in the browser; see
+`blocked: true` significa que uma verificação de segurança foi detectada. Resolva você mesmo no navegador; veja
 [safety.md](safety.md#security-checkpoints).
 
 ### `POST /api/automation/session/start`
 
-Opens Chromium, restoring the saved session if one exists. → `SessionStatus`.
+Abre o Chromium, restaurando a sessão salva se houver uma. → `SessionStatus`.
 
-If `logged_in` is `false`, log in **manually in the browser window** — through noVNC at
-<http://localhost:6080> under Docker, or the desktop window locally. The project never receives your
-LinkedIn password.
+Se `logged_in` for `false`, faça login **manualmente na janela do navegador** — pelo noVNC em
+<http://localhost:6080> no Docker, ou pela janela do desktop localmente. O projeto nunca recebe a sua
+senha do LinkedIn.
 
 ### `POST /api/automation/session/stop`
 
-Closes the browser and persists the encrypted session state. → `SessionStatus`.
+Fecha o navegador e persiste o estado de sessão criptografado. → `SessionStatus`.
 
 ### `POST /api/automation/search`
 
-Runs a search and, by default, scores what it finds. Never applies to anything.
+Roda uma busca e, por padrão, pontua o que encontra. Nunca se candidata a nada.
 
 `SearchRunRequest`:
 
@@ -480,7 +480,7 @@ Runs a search and, by default, scores what it finds. Never applies to anything.
 { "search_id": 3, "analyze": true }
 ```
 
-or with ad-hoc filters:
+ou com filtros ad-hoc:
 
 ```json
 {
@@ -494,8 +494,8 @@ or with ad-hoc filters:
 }
 ```
 
-`max_results` is 1–100 (default 25). `analyze: false` skips AI scoring — faster and free, and you can score
-individual jobs later with `POST /api/jobs/{id}/analyze`.
+`max_results` é 1–100 (padrão 25). `analyze: false` pula a pontuação por IA — mais rápido e grátis, e você pode pontuar
+vagas individuais depois com `POST /api/jobs/{id}/analyze`.
 
 → `AutomationRunRead`:
 
@@ -510,12 +510,12 @@ individual jobs later with `POST /api/jobs/{id}/analyze`.
 }
 ```
 
-The run proceeds in the background. Follow it on the WebSocket, or poll
+A execução prossegue em segundo plano. Acompanhe-a pelo WebSocket, ou consulte
 `GET /api/automation/runs/{id}`.
 
 ### `POST /api/automation/preview`
 
-**Always call this before `prepare`.** It reports what would happen, and changes nothing.
+**Sempre chame isto antes de `prepare`.** Ele reporta o que aconteceria, e não muda nada.
 
 `PrepareRequest`:
 
@@ -539,53 +539,53 @@ The run proceeds in the background. Follow it on the WebSocket, or poll
 }
 ```
 
-The point is that you see the volume and the conditions before anything runs. There is no path where
-dozens of applications are prepared without you having been shown the number first.
+O objetivo é que você veja o volume e as condições antes de qualquer coisa rodar. Não há caminho em que
+dezenas de candidaturas sejam preparadas sem que o número tenha sido mostrado a você primeiro.
 
 ### `POST /api/automation/prepare`
 
-Opens the Easy Apply form for each job, fills it, and **stops at the review step**.
+Abre o formulário de Candidatura Simplificada para cada vaga, preenche, e **para na etapa de revisão**.
 
 ```json
 { "job_ids": [42, 43], "confirmed": true }
 ```
 
-`job_ids` holds 1–50 entries. `confirmed` must be `true` — it means you have seen the preview.
+`job_ids` tem 1–50 entradas. `confirmed` precisa ser `true` — significa que você viu a pré-visualização.
 
-→ `AutomationRunRead` with `kind: "prepare"`. Each job gets an application in `awaiting_review`.
+→ `AutomationRunRead` com `kind: "prepare"`. Cada vaga ganha uma candidatura em `awaiting_review`.
 
-**This never submits.** `LinkedInService.fill_and_advance()` has no code path to submission; submission is
-`POST /api/applications/{id}/submit`, one application at a time, with its own confirmation.
+**Isto nunca envia.** `LinkedInService.fill_and_advance()` não tem caminho de código para o envio; o envio é
+`POST /api/applications/{id}/submit`, uma candidatura por vez, com a sua própria confirmação.
 
 ### `POST /api/automation/stop`
 
-**The kill switch.** Sets `stop_requested` on the active run. The engine checks the flag between steps and
-raises `StopRequestedError`, so it stops cleanly rather than mid-click — no half-submitted form, no torn
-database state.
+**O botão de parada.** Seta `stop_requested` na execução ativa. O engine verifica a flag entre etapas e
+levanta `StopRequestedError`, para que pare de forma limpa em vez de no meio de um clique — nenhum formulário meio-enviado, nenhum
+estado de banco rasgado.
 
-→ `Message`. The run's status becomes `stopped`.
+→ `Message`. O status da execução vira `stopped`.
 
-Stopping is not instantaneous: it takes effect at the next step boundary, which can be a few seconds into a
-randomized delay.
+Parar não é instantâneo: tem efeito na próxima fronteira de etapa, que pode estar a alguns segundos dentro de um
+atraso aleatório.
 
 ### `GET /api/automation/runs`
 
-| Query param | Type |
+| Query param | Tipo |
 |---|---|
 | `limit` | int |
 
-→ `AutomationRunRead[]`, newest first.
+→ `AutomationRunRead[]`, da mais recente primeiro.
 
 ### `GET /api/automation/runs/{id}`
 
-→ `AutomationRunRead`. Poll this if you would rather not hold a WebSocket open.
+→ `AutomationRunRead`. Consulte isto se preferir não manter um WebSocket aberto.
 
-Statuses: `pending`, `running`, `paused`, `completed`, `stopped` (kill switch), `failed`, `blocked`
-(security checkpoint).
+Status: `pending`, `running`, `paused`, `completed`, `stopped` (botão de parada), `failed`, `blocked`
+(verificação de segurança).
 
 ---
 
-## AI
+## IA
 
 ### `GET /api/ai/status`
 
@@ -593,27 +593,27 @@ Statuses: `pending`, `running`, `paused`, `completed`, `stopped` (kill switch), 
 { "configured": true, "model": "claude-opus-5" }
 ```
 
-`configured: false` means `ANTHROPIC_API_KEY` is unset. Search and form-filling still work; scoring, cover
-letters, and answer suggestions do not.
+`configured: false` significa que `ANTHROPIC_API_KEY` não está definida. A busca e o preenchimento de formulários ainda funcionam; pontuação, cartas de
+apresentação e sugestões de resposta não.
 
 ### `POST /api/ai/cover-letter/{job_id}`
 
-Generates (or regenerates) a cover letter for one job.
+Gera (ou regenera) uma carta de apresentação para uma vaga.
 
 ```json
 { "content": "Dear hiring team, ...", "language": "en" }
 ```
 
-`language` reflects `UserSettings.content_language`: `job` means the language detected from the posting,
-otherwise the tag you pinned. This call uses `high` effort — the letter is worth more than the tokens it
-costs, unlike bulk scoring.
+`language` reflete `UserSettings.content_language`: `job` significa o idioma detectado do anúncio,
+caso contrário a tag que você fixou. Esta chamada usa esforço `high` — a carta vale mais que os tokens que
+custa, diferente da pontuação em massa.
 
-The model may decline. That is recorded on `AIAnalysis.was_refusal` and the application falls back to manual
-entry; write the letter yourself.
+O modelo pode declinar. Isso é registrado em `AIAnalysis.was_refusal` e a candidatura recorre ao preenchimento
+manual; escreva a carta você mesmo.
 
 ---
 
-## Stats
+## Estatísticas
 
 ### `GET /api/stats`
 
@@ -637,15 +637,15 @@ entry; write the letter yourself.
 }
 ```
 
-The last three fields are your cost meter.
+Os três últimos campos são o seu medidor de custo.
 
 ---
 
-## Health
+## Saúde
 
 ### `GET /api/health`
 
-No auth required.
+Sem auth necessária.
 
 ```json
 { "status": "ok", "version": "0.1.0" }
@@ -657,8 +657,8 @@ No auth required.
 
 ### `GET /api/ws?token=<jwt>`
 
-The live activity feed. The token goes in the query string because browsers cannot set headers on a
-WebSocket handshake.
+O feed de atividade ao vivo. O token vai na query string porque navegadores não conseguem setar cabeçalhos num
+handshake de WebSocket.
 
 ```javascript
 const ws = new WebSocket(`ws://localhost:8000/api/ws?token=${token}`);
@@ -668,10 +668,10 @@ ws.onmessage = (e) => {
 };
 ```
 
-On connect, the last 200 events for your user are replayed, so a page reload rebuilds the feed instead of
-starting empty. Events are addressed per user — you never see another user's activity.
+Na conexão, os últimos 200 eventos do seu usuário são reproduzidos, para que um recarregamento de página reconstrua o feed em vez de
+começar vazio. Os eventos são endereçados por usuário — você nunca vê a atividade de outro usuário.
 
-Publishing never raises on the server side: a closed tab cannot break a run in progress.
+Publicar nunca levanta exceção no servidor: uma aba fechada não pode quebrar uma execução em andamento.
 
 ### Envelope
 
@@ -688,44 +688,44 @@ Publishing never raises on the server side: a closed tab cannot break a run in p
 }
 ```
 
-| Field | Type | Notes |
+| Campo | Tipo | Notas |
 |---|---|---|
-| `name` | `EventName` | See the catalogue below |
+| `name` | `EventName` | Veja o catálogo abaixo |
 | `timestamp` | ISO 8601 UTC | |
-| `run_id` | int \| null | Present for engine events |
+| `run_id` | int \| null | Presente em eventos do engine |
 | `job_id` | int \| null | |
 | `application_id` | int \| null | |
-| `message` | string \| null | Human-readable line |
+| `message` | string \| null | Linha legível por humanos |
 | `level` | string | `info`, `warning`, `error`, `success` |
-| `data` | object | Event-specific payload |
+| `data` | object | Payload específico do evento |
 
-The Python source of truth is
-[`app/observability/events.py`](../backend/app/observability/events.py); the frontend mirror is
-`frontend/src/types/events.ts`. Keep them in step.
+A fonte de verdade em Python é
+[`app/observability/events.py`](../backend/app/observability/events.py); o espelho no frontend é
+`frontend/src/types/events.ts`. Mantenha-os em sincronia.
 
-### Event catalogue
+### Catálogo de eventos
 
-| `name` | Typical `level` | When it fires | What is usually in `data` |
+| `name` | `level` típico | Quando dispara | O que geralmente está em `data` |
 |---|---|---|---|
-| `automation.started` | `info` | A run begins | `kind`, `dry_run` |
-| `automation.progress` | `info` | Step-level progress | counters — `jobs_found`, `jobs_analyzed` |
-| `automation.stopped` | `warning` | Kill switch took effect | `reason` |
-| `automation.error` | `error` | A run failed | `error`, `error_type` |
-| `automation.blocked` | `error` | **Security checkpoint detected — everything halted** | `blocked_reason` |
-| `job.found` | `info` | A posting was discovered | `title`, `company` |
-| `job.analyzed` | `info` | Scoring finished | `score`, `recommend_apply`, `missing_requirements` |
-| `application.started` | `info` | The Easy Apply modal opened | `total_steps` |
-| `application.awaiting_review` | `success` | **Filled and waiting for you** | `needs_human_input`, `questions_flagged` |
-| `application.completed` | `success` | Submitted after your approval | `was_dry_run` |
-| `session.status` | `info` | Browser opened/closed, LinkedIn login state changed | `browser_open`, `logged_in` |
-| `log` | any | A log line for the activity feed | free-form |
+| `automation.started` | `info` | Uma execução começa | `kind`, `dry_run` |
+| `automation.progress` | `info` | Progresso em nível de passo | contadores — `jobs_found`, `jobs_analyzed` |
+| `automation.stopped` | `warning` | O botão de parada teve efeito | `reason` |
+| `automation.error` | `error` | Uma execução falhou | `error`, `error_type` |
+| `automation.blocked` | `error` | **Verificação de segurança detectada — tudo parou** | `blocked_reason` |
+| `job.found` | `info` | Um anúncio foi descoberto | `title`, `company` |
+| `job.analyzed` | `info` | A pontuação terminou | `score`, `recommend_apply`, `missing_requirements` |
+| `application.started` | `info` | O modal de Candidatura Simplificada abriu | `total_steps` |
+| `application.awaiting_review` | `success` | **Preenchida e esperando por você** | `needs_human_input`, `questions_flagged` |
+| `application.completed` | `success` | Enviada após a sua aprovação | `was_dry_run` |
+| `session.status` | `info` | Navegador aberto/fechado, estado de login do LinkedIn mudou | `browser_open`, `logged_in` |
+| `log` | qualquer | Uma linha de log para o feed de atividade | livre |
 
-`application.awaiting_review` and `automation.blocked` are the two the UI should make impossible to miss:
-the first is the moment you are needed, the second the moment everything stopped.
+`application.awaiting_review` e `automation.blocked` são os dois que a UI deveria tornar impossíveis de perder:
+o primeiro é o momento em que você é necessário, o segundo o momento em que tudo parou.
 
 ---
 
-## A full session, start to finish
+## Uma sessão completa, do início ao fim
 
 ```bash
 BASE=http://localhost:8000/api
@@ -771,5 +771,5 @@ curl -s -X POST $BASE/applications/7/submit -H "$AUTH" -H 'Content-Type: applica
 curl -s -X POST $BASE/automation/stop -H "$AUTH" | jq
 ```
 
-Note that steps 5 through 8 cannot be collapsed. Preview precedes prepare, prepare stops at review, and
-submit takes one id and an explicit `confirm`. That separation is the product.
+Note que os passos 5 a 8 não podem ser colapsados. A pré-visualização precede a preparação, a preparação para na revisão, e o
+envio recebe um id e um `confirm` explícito. Essa separação é o produto.

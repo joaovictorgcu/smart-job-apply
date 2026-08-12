@@ -1,8 +1,8 @@
 # LinkedIn Auto Apply
 
-An assisted job-application agent for LinkedIn Easy Apply. It finds jobs, scores them against your CV with
-Claude, drafts the screening answers and the cover letter, fills the form — and then **stops and waits for
-you to read it and approve** before anything is sent.
+Um agente assistido de candidatura a vagas para o LinkedIn Easy Apply (Candidatura Simplificada). Ele encontra vagas, pontua cada uma em relação ao seu currículo com a
+Claude, redige as respostas de triagem e a carta de apresentação, preenche o formulário — e então **para e espera
+você ler e aprovar** antes de qualquer coisa ser enviada.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![React](https://img.shields.io/badge/react-vite-61DAFB?logo=react&logoColor=black)](https://react.dev/)
@@ -11,168 +11,167 @@ you to read it and approve** before anything is sent.
 
 ---
 
-> ## ⚠️ Read this before you install anything
+> ## ⚠️ Leia isto antes de instalar qualquer coisa
 >
-> **This tool automates the LinkedIn web interface by driving a real browser.**
+> **Esta ferramenta automatiza a interface web do LinkedIn dirigindo um navegador real.**
 >
-> **LinkedIn's User Agreement prohibits automated access.** Scrapers, bots, and browser automation are all
-> named. There is no reading of the Agreement under which this is permitted.
+> **O Contrato de Usuário do LinkedIn proíbe o acesso automatizado.** Scrapers, bots e automação de navegador estão
+> todos citados. Não existe leitura do Contrato sob a qual isto seja permitido.
 >
-> **Using it can get your account restricted or permanently banned.** At LinkedIn's discretion, with no
-> appeal you are entitled to. Your network, your messages, and your profile are in that account.
+> **Usá-la pode fazer a sua conta ser restringida ou banida permanentemente.** A critério do LinkedIn, sem
+> recurso a que você tenha direito. A sua rede, as suas mensagens e o seu perfil estão nessa conta.
 >
-> **LinkedIn offers no official API for searching or applying to jobs.** That is *why* this drives a
-> browser. It is not a justification — it is the reason the risk exists and cannot be engineered away.
+> **O LinkedIn não oferece nenhuma API oficial para buscar ou se candidatar a vagas.** É *por isso* que isto dirige um
+> navegador. Não é uma justificativa — é o motivo de o risco existir e não poder ser eliminado por engenharia.
 >
-> **The guard rails reduce that risk. They do not eliminate it.** Randomized delays, a daily cap, a
-> working-hours window, and mandatory human approval keep the tool operating conservatively — a modest
-> volume you can actually read, at an unhurried pace, with a person approving every submission. They do
-> nothing about browser fingerprinting, and there is no safe threshold — one unlucky session can trip a
-> check.
+> **As salvaguardas reduzem esse risco. Elas não o eliminam.** Atrasos aleatórios, um limite diário, uma
+> janela de horário e a aprovação humana obrigatória mantêm a ferramenta operando de forma conservadora — um volume
+> modesto que você consegue de fato ler, num ritmo sem pressa, com uma pessoa aprovando cada envio. Elas não
+> fazem nada quanto ao fingerprinting do navegador, e não há limiar seguro — uma sessão azarada pode disparar uma
+> verificação.
 >
-> **You are responsible for your own account.** Nobody here can get a restriction reversed for you. Weigh
-> the time saved against what losing the account would cost you. For plenty of people the honest answer is
-> to close this tab and apply by hand.
+> **Você é responsável pela sua própria conta.** Ninguém aqui consegue reverter uma restrição para você. Pese
+> o tempo economizado contra o que perder a conta custaria a você. Para muita gente a resposta honesta é
+> fechar esta aba e se candidatar à mão.
 >
-> **The project never asks for or stores your LinkedIn password.** There is no field for it in the schema,
-> no parameter for it in the API, and no prompt for it in the UI. You log in yourself, in a visible browser
-> window. Only session cookies are kept, encrypted at rest.
+> **O projeto nunca pede nem armazena a sua senha do LinkedIn.** Não há campo para ela no schema,
+> nem parâmetro para ela na API, nem prompt para ela na UI. Você faz login você mesmo, numa janela de navegador
+> visível. Apenas os cookies da sessão são guardados, criptografados em repouso.
 >
-> The full risk model is in **[docs/safety.md](docs/safety.md)**. Please actually read it.
+> O modelo de risco completo está em **[docs/safety.md](docs/safety.md)**. Por favor, leia de verdade.
 
 ---
 
-## Why it exists
+## Por que existe
 
-Applying to jobs on LinkedIn is a loop of tedium with a few minutes of real thought hidden inside it: read
-the posting, decide whether you fit, retype the same salary expectation and notice period, write a cover
-letter that says something specific about the company. The tedium is automatable. The judgment is not.
+Candidatar-se a vagas no LinkedIn é um ciclo de tédio com alguns minutos de reflexão real escondidos dentro: ler
+o anúncio, decidir se você combina, redigitar a mesma pretensão salarial e aviso prévio, escrever uma carta de
+apresentação que diga algo específico sobre a empresa. O tédio é automatizável. O julgamento não é.
 
-So this automates the tedium and hands you back the judgment, at the point where it matters:
+Então isto automatiza o tédio e devolve a você o julgamento, no ponto em que ele importa:
 
 ```text
    ┌──────────┐    ┌───────────┐    ┌───────────┐    ┌───────────┐    ┌───────────┐    ┌────────┐
-   │  Search  │──▶ │ AI scores │──▶ │ YOU review│──▶ │ Auto-fill │──▶ │ YOU       │──▶ │ Submit │
-   │ LinkedIn │    │  0–100    │    │ the jobs  │    │ the form  │    │ approve   │    │        │
+   │  Busca   │──▶ │ IA pontua │──▶ │VOCÊ revisa│──▶ │ Preenche  │──▶ │ VOCÊ      │──▶ │ Envia  │
+   │ LinkedIn │    │  0–100    │    │ as vagas  │    │formulário │    │ aprova    │    │        │
    └──────────┘    └───────────┘    └───────────┘    └───────────┘    └───────────┘    └────────┘
                           │                                │                 ▲
-                    below min score              stops at the review     nothing moves
-                      → skipped                  step. never submits.    past here on
-                                                                          its own
+                    abaixo da nota mín.          para na etapa de       nada passa
+                      → pulada                   revisão. nunca envia.  daqui sozinho
 ```
 
-**Submission is always a separate, human-confirmed step.** Searching, scoring, and filling are three
-different operations you invoke separately, and the endpoint that submits takes one application id and an
-explicit `confirm: true`. There is no bulk submit and no unattended mode. That is not a setting you can flip
-— it is enforced in four independent places, and a pull request that weakens it will not be merged.
+**O envio é sempre um passo separado e confirmado por um humano.** Buscar, pontuar e preencher são três
+operações diferentes que você invoca separadamente, e o endpoint que envia recebe um id de candidatura e um
+`confirm: true` explícito. Não há envio em massa nem modo autônomo. Isso não é uma opção que você pode ligar
+— é imposto em quatro lugares independentes, e um pull request que o enfraqueça não será aceito.
 
-Dry-run mode is on by default: the whole flow runs, right up to the final click, and sends nothing.
+O modo de teste (dry run) está ligado por padrão: o fluxo inteiro roda, até o clique final, e não envia nada.
 
-## Features
+## Funcionalidades
 
-**Finding and scoring**
+**Busca e pontuação**
 
-- Saved, reusable searches — keywords, location, remote/hybrid/onsite, date posted, seniority, Easy Apply
-  only, with a per-run result cap so sweeps stay short
-- AI fit scoring, 0–100, with the **reasons** for the score and an explicit list of **missing
-  requirements** — the second list is the useful one, because it tells you what a recruiter will ask about
-- A minimum-score threshold, so weak matches are skipped rather than applied to
-- Deduplication by `(user, external job id)`: re-running a search never re-processes a posting
+- Buscas salvas e reutilizáveis — palavras-chave, localização, remoto/híbrido/presencial, data de publicação, senioridade, apenas Candidatura
+  Simplificada, com um limite de resultados por execução para que as varreduras fiquem curtas
+- Pontuação de aderência por IA, 0–100, com os **motivos** da nota e uma lista explícita de **requisitos
+  faltantes** — a segunda lista é a mais útil, porque diz o que um recrutador vai perguntar
+- Um limiar de nota mínima, para que combinações fracas sejam puladas em vez de recebermos candidatura
+- Deduplicação por `(usuário, id externo da vaga)`: rodar uma busca de novo nunca reprocessa um anúncio
 
-**Drafting**
+**Geração de texto**
 
-- Cover letters written **in the language of the posting** — detected per job, or pinned to one language if
-  you prefer
-- Screening-answer suggestions drawn from your CV and a reusable answer bank (salary expectation, notice
-  period, work authorization), each with a confidence level
-- **Low-confidence answers are flagged for review**, never silently guessed. A `low` confidence value sets
-  `needs_review` automatically, so a shaky answer cannot reach you unmarked
-- Fields the AI cannot fill confidently mark the application as needing human input instead of being
-  invented
-- Model refusals are recorded and fall back to manual entry — which is the system working, not failing
+- Cartas de apresentação escritas **no idioma do anúncio** — detectado por vaga, ou fixado em um idioma se
+  você preferir
+- Sugestões de respostas de triagem tiradas do seu currículo e de um banco de respostas reutilizável (pretensão salarial, aviso
+  prévio, autorização de trabalho), cada uma com um nível de confiança
+- **Respostas de baixa confiança são sinalizadas para revisão**, nunca adivinhadas em silêncio. Um valor de confiança `low` marca
+  `needs_review` automaticamente, então uma resposta duvidosa não chega até você sem marcação
+- Campos que a IA não consegue preencher com confiança marcam a candidatura como precisando de intervenção humana em vez de serem
+  inventados
+- Recusas do modelo são registradas e recorrem ao preenchimento manual — o que é o sistema funcionando, não falhando
 
-**Review and control**
+**Revisão e controle**
 
-- Every application waits in `awaiting_review` with the letter and every answer editable before you approve
-- A **per-job audit timeline**: every form step, every question answered, every error, timestamped with a
-  JSON payload. It is what turns "the application failed" into a diagnosable event
-- **Live activity over WebSocket** — jobs found, scores as they land, the moment an application is ready for
-  you, with the last 200 events replayed on reconnect so a page reload rebuilds the feed
-- A **kill switch** that stops a run cleanly between steps rather than mid-click, so nothing is left
-  half-submitted
-- **Dry-run mode**, on by default, that rehearses everything and sends nothing
-- Conservative guard rails: randomized delays, a daily cap, a working-hours window, one browser session
+- Toda candidatura espera em `awaiting_review` com a carta e cada resposta editáveis antes de você aprovar
+- Uma **linha do tempo de auditoria por vaga**: cada passo do formulário, cada pergunta respondida, cada erro, com data e um
+  payload JSON. É o que transforma "a candidatura falhou" num evento diagnosticável
+- **Atividade ao vivo via WebSocket** — vagas encontradas, notas conforme chegam, o momento em que uma candidatura está pronta para
+  você, com os últimos 200 eventos reproduzidos na reconexão para que um recarregamento de página reconstrua o feed
+- Um **botão de parada** que interrompe uma execução de forma limpa entre passos, e não no meio de um clique, para que nada fique
+  parcialmente enviado
+- **Modo de teste (dry run)**, ligado por padrão, que ensaia tudo e não envia nada
+- Salvaguardas conservadoras: atrasos aleatórios, um limite diário, uma janela de horário, uma única sessão de navegador
 
-**Safety and operations**
+**Segurança e operação**
 
-- **A security checkpoint halts everything.** CAPTCHA or "unusual activity" moves the run to `blocked` and
-  stops. No retry, no workaround, no setting to skip it — you solve it yourself
-- **LinkedIn session encrypted at rest** with Fernet, keyed via HKDF-SHA256. No password is ever stored, and
-  no cookie is ever returned through the API
-- Structured JSON logging with per-run context, so a run's log lines are greppable
-- Token and cost accounting on every AI call
-- A **multi-user data model** — the isolation that keeps one person's cookies and event feed away from
-  another's, even when you are the only user
-- **SQLite by default**, no database server to install; **PostgreSQL** supported by changing one environment
-  variable
+- **Uma verificação de segurança para tudo.** CAPTCHA ou "atividade incomum" move a execução para `blocked` e
+  para. Sem repetição, sem contorno, sem opção para pular — você resolve você mesmo
+- **Sessão do LinkedIn criptografada em repouso** com Fernet, com chave derivada via HKDF-SHA256. Nenhuma senha é armazenada, e
+  nenhum cookie jamais é retornado pela API
+- Log estruturado em JSON com contexto por execução, para que as linhas de log de uma execução sejam pesquisáveis com grep
+- Contabilidade de tokens e custo em cada chamada de IA
+- Um **modelo de dados multiusuário** — o isolamento que mantém os cookies e o feed de eventos de uma pessoa longe dos de
+  outra, mesmo quando você é o único usuário
+- **SQLite por padrão**, nenhum servidor de banco para instalar; **PostgreSQL** suportado trocando uma variável de
+  ambiente
 
-## Screenshots
+## Capturas de tela
 
-**Tailored resume with an invention guard.** The AI reorganizes and re-emphasizes your CV for one posting —
-it never adds experience you do not have — and a guard flags any technology that appears in the tailored
-text but not in your profile, so a fabrication cannot slip past unseen.
+**Currículo adaptado com um guarda contra invenção.** A IA reorganiza e reenfatiza o seu currículo para um anúncio —
+nunca adiciona experiência que você não tem — e um guarda sinaliza qualquer tecnologia que apareça no texto adaptado
+mas não no seu perfil, para que uma invenção não passe despercebida.
 
-![CV tailoring panel — the change list, requirements the resume does not cover, and a warning flagging "Kubernetes" as present in the tailored CV but not in the profile](docs/images/cv-tailoring.png)
+![Painel de adaptação de currículo — a lista de mudanças, requisitos que o currículo não cobre e um alerta sinalizando "Kubernetes" como presente no CV adaptado mas não no perfil](docs/images/cv-tailoring.png)
 
-**Pipeline board — does a higher score actually lead to an interview?** Applications you have submitted move
-across outcome columns (Applied → Interview → Offer → Rejected → No response), and the board measures the
-interview rate for each match-score band, so the AI's score is checked against real results rather than
-taken on faith.
+**Funil — uma nota maior leva mesmo a uma entrevista?** As candidaturas que você enviou se movem
+por colunas de desfecho (Enviada → Entrevista → Proposta → Rejeitada → Sem resposta), e o quadro mede a
+taxa de entrevista para cada faixa de nota de aderência, para que a nota da IA seja confrontada com resultados reais em vez de
+aceita por fé.
 
-![Pipeline board — Kanban columns of submitted applications by outcome, and a chart of interview rate by match-score band showing higher bands interviewing more often](docs/images/pipeline.png)
+![Funil — colunas Kanban de candidaturas enviadas por desfecho e um gráfico da taxa de entrevista por faixa de nota de aderência, mostrando que faixas mais altas entrevistam com mais frequência](docs/images/pipeline.png)
 
 | | |
 |---|---|
-| ![Dashboard — submitted-today and awaiting-review counters, average score, live activity feed](docs/images/dashboard.png) | ![Job list — scores, reasons, missing requirements](docs/images/jobs.png) |
-| **Dashboard** — counters, average score, what is waiting on you | **Jobs** — scored, with reasons and gaps |
-| ![Application review — the approval gate: editable cover letter, screening answers with a low-confidence one flagged, and the full event timeline](docs/images/review.png) | ![Settings — guard rails and AI preferences](docs/images/settings.png) |
-| **Review** — the approval gate, a flagged answer, and the audit timeline | **Settings** — guard rails, dry-run toggle |
+| ![Painel — contadores de enviadas-hoje e aguardando-revisão, nota média, feed de atividade ao vivo](docs/images/dashboard.png) | ![Lista de vagas — notas, motivos, requisitos faltantes](docs/images/jobs.png) |
+| **Painel** — contadores, nota média, o que está esperando por você | **Vagas** — pontuadas, com motivos e lacunas |
+| ![Revisão de candidatura — o portão de aprovação: carta editável, respostas de triagem com uma de baixa confiança sinalizada e a linha do tempo de eventos completa](docs/images/review.png) | ![Configurações — salvaguardas e preferências de IA](docs/images/settings.png) |
+| **Revisão** — o portão de aprovação, uma resposta sinalizada e a linha do tempo de auditoria | **Configurações** — salvaguardas, chave do modo de teste |
 
-To capture your own: run the app, populate it with a dry-run search so the screens have real content, then
-take a viewport screenshot at 1440×900 (`Ctrl/Cmd+Shift+P` → "Capture screenshot" in Chrome DevTools) and
-save it to `docs/images/` with the filename above. **Blur or crop anything identifying** before committing —
-your email, your phone number, and the contents of your CV all appear on these screens.
+Para capturar as suas próprias: rode o app, popule-o com uma busca em modo de teste para que as telas tenham conteúdo real, então
+tire uma captura da viewport em 1440×900 (`Ctrl/Cmd+Shift+P` → "Capture screenshot" no Chrome DevTools) e
+salve em `docs/images/` com o nome de arquivo acima. **Borre ou recorte qualquer coisa identificável** antes de commitar —
+o seu e-mail, o seu telefone e o conteúdo do seu currículo aparecem nessas telas.
 
 ---
 
-## Quick start
+## Início rápido
 
-Two paths. Pick one.
+Dois caminhos. Escolha um.
 
-### Prerequisites, both paths
+### Pré-requisitos (ambos os caminhos)
 
-An **Anthropic API key** from [console.anthropic.com](https://console.anthropic.com/) → API keys. The app
-runs without one — you just fill the forms yourself, with no scoring and no drafted letters.
+Uma **chave de API da Anthropic** em [console.anthropic.com](https://console.anthropic.com/) → API keys. O app
+funciona sem uma — você só preenche os formulários você mesmo, sem pontuação e sem cartas geradas.
 
-Two secrets matter, and the Docker path generates them for you:
+Dois segredos importam, e o caminho do Docker os gera para você:
 
-- `SECRET_KEY` signs your login tokens. Left empty on a local install, a random one is generated per
-  process, which logs you out on every restart.
-- `ENCRYPTION_KEY` derives the key that encrypts your LinkedIn session. **Changing it later makes stored
-  sessions permanently unreadable** — recoverable by reconnecting, but a real annoyance.
+- `SECRET_KEY` assina os seus tokens de login. Deixado vazio numa instalação local, um aleatório é gerado por
+  processo, o que desloga você a cada reinício.
+- `ENCRYPTION_KEY` deriva a chave que criptografa a sua sessão do LinkedIn. **Mudá-la depois torna as sessões
+  armazenadas permanentemente ilegíveis** — recuperável reconectando, mas um baita incômodo.
 
-Generate one with either of these, twice, keeping the values distinct:
+Gere uma com qualquer um destes, duas vezes, mantendo os valores distintos:
 
 ```bash
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 openssl rand -base64 48
 ```
 
-### Path A — Docker (recommended)
+### Caminho A — Docker (recomendado)
 
-One container runs everything: the API, the built frontend, Chromium, and a noVNC bridge so you can see the
-browser. Docker also pins Chromium and its system libraries, which is the part of a local install most
-likely to break.
+Um contêiner roda tudo: a API, o frontend compilado, o Chromium e uma ponte noVNC para que você possa ver o
+navegador. O Docker também fixa o Chromium e as bibliotecas de sistema dele, que é a parte de uma instalação local mais
+propensa a quebrar.
 
 ```bash
 git clone https://github.com/joaovictorgcu/smart-job-apply.git
@@ -180,107 +179,107 @@ cd smart-job-apply
 cp .env.example .env
 ```
 
-Open `.env` and set your API key:
+Abra `.env` e defina a sua chave de API:
 
 ```dotenv
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-You can leave `SECRET_KEY` and `ENCRYPTION_KEY` empty here — the container's entrypoint generates them on
-first boot and stores them on the data volume, so your logins and your saved LinkedIn session survive
-restarts. Set them yourself if you would rather manage them.
+Você pode deixar `SECRET_KEY` e `ENCRYPTION_KEY` vazios aqui — o entrypoint do contêiner os gera no
+primeiro boot e os guarda no volume de dados, para que os seus logins e a sua sessão salva do LinkedIn sobrevivam a
+reinícios. Defina-os você mesmo se preferir gerenciá-los.
 
-Build and start:
+Compile e inicie:
 
 ```bash
-docker compose up -d --build      # or: make docker-up
-docker compose logs -f            # or: make docker-logs
+docker compose up -d --build      # ou: make docker-up
+docker compose logs -f            # ou: make docker-logs
 ```
 
-Then open **both** of these:
+Depois abra **ambos** estes:
 
-| URL | What it is |
+| URL | O que é |
 |---|---|
-| <http://localhost:8000> | The whole app — UI and API. Docs at [`/docs`](http://localhost:8000/docs), health at `/api/health` |
-| **<http://localhost:6080>** | **noVNC — the browser's screen. This is where you log into LinkedIn.** |
+| <http://localhost:8000> | O app inteiro — UI e API. Docs em [`/docs`](http://localhost:8000/docs), saúde em `/api/health` |
+| **<http://localhost:6080>** | **noVNC — a tela do navegador. É aqui que você faz login no LinkedIn.** |
 
-That second URL is not optional. Chromium runs on a virtual display inside the container, and noVNC is the
-only way to see it — to log in, to solve a security challenge, to watch a form being filled. Open it before
-you start a browser session. Raw VNC on 5900 is deliberately not published; it is bound to localhost inside
-the container and reachable only through that bridge.
+Essa segunda URL não é opcional. O Chromium roda num display virtual dentro do contêiner, e o noVNC é a
+única forma de vê-lo — para logar, para resolver um desafio de segurança, para acompanhar um formulário sendo preenchido. Abra-a antes
+de iniciar uma sessão de navegador. O VNC bruto na 5900 é deliberadamente não publicado; ele fica vinculado ao localhost dentro
+do contêiner e acessível somente por essa ponte.
 
-There is no port 5173 in Docker: the backend serves the built frontend on 8000, which is why `CORS_ORIGINS`
-is set to the app's own origin in `docker-compose.yml`.
+Não há porta 5173 no Docker: o backend serve o frontend compilado na 8000, e é por isso que `CORS_ORIGINS`
+é definido como a própria origem do app no `docker-compose.yml`.
 
-Create your account at <http://localhost:8000>, or from the command line:
+Crie a sua conta em <http://localhost:8000>, ou pela linha de comando:
 
 ```bash
 docker compose exec app python scripts/create_user.py --email you@example.com --name "Your Name"
 ```
 
-Passwords are 10–72 characters (72 bytes is a bcrypt limit). Omit `--password` and you are prompted for it,
-so it stays out of your shell history and the process list.
+As senhas têm 10–72 caracteres (72 bytes é um limite do bcrypt). Omita `--password` e você será solicitado por ela,
+para que fique fora do histórico do seu shell e da lista de processos.
 
-### Path B — Local
+### Caminho B — Local
 
-Needs **Python 3.11+**, **Node.js 20+**, and a desktop session — the browser has to be visible for you to
-log in.
+Precisa de **Python 3.11+**, **Node.js 20+** e uma sessão de desktop — o navegador precisa estar visível para você
+logar.
 
 ```bash
 git clone https://github.com/joaovictorgcu/smart-job-apply.git
 cd smart-job-apply
 ```
 
-With `make` available (Linux, macOS, or WSL), the whole thing is four commands:
+Com `make` disponível (Linux, macOS ou WSL), tudo são quatro comandos:
 
 ```bash
-make install      # venv + backend deps + frontend deps + Chromium + a starter .env
-make migrate      # create the database schema
-make user         # create your account (prompts for the password)
-make dev          # backend on :8000, frontend on :5173, Ctrl-C stops both
+make install      # venv + deps do backend + deps do frontend + Chromium + um .env inicial
+make migrate      # cria o schema do banco
+make user         # cria a sua conta (solicita a senha)
+make dev          # backend na :8000, frontend na :5173, Ctrl-C para ambos
 ```
 
-`make help` lists every target. On Windows without WSL, run the setup script directly and use the
-PowerShell equivalents printed in the Makefile header:
+`make help` lista todos os alvos. No Windows sem WSL, rode o script de setup diretamente e use os
+equivalentes em PowerShell impressos no cabeçalho do Makefile:
 
 ```powershell
 .\scripts\setup.ps1
 ```
 
 <details>
-<summary>If PowerShell blocks the script</summary>
+<summary>Se o PowerShell bloquear o script</summary>
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\scripts\setup.ps1
 ```
 
-This allows unsigned scripts for the current session only.
+Isto permite scripts não assinados apenas para a sessão atual.
 </details>
 
 <details>
-<summary>Or do the whole thing by hand</summary>
+<summary>Ou faça tudo à mão</summary>
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate                    # PowerShell: .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
-playwright install chromium                  # Debian/Ubuntu: add --with-deps
+playwright install chromium                  # Debian/Ubuntu: adicione --with-deps
 cd frontend && npm ci && cd ..
-cp .env.example .env                         # then set ANTHROPIC_API_KEY, SECRET_KEY, ENCRYPTION_KEY
+cp .env.example .env                         # depois defina ANTHROPIC_API_KEY, SECRET_KEY, ENCRYPTION_KEY
 cd backend && alembic upgrade head && cd ..
 python scripts/create_user.py --email you@example.com --name "Your Name"
 ```
 </details>
 
-Then edit `.env` to add your API key and the two secrets, and start the two processes. `make dev` runs both;
-the manual equivalent is two terminals:
+Depois edite `.env` para adicionar a sua chave de API e os dois segredos, e inicie os dois processos. `make dev` roda ambos;
+o equivalente manual são dois terminais:
 
 ```bash
 # Terminal 1 — API
 .venv/bin/python -m uvicorn app.main:app --reload --app-dir backend --port 8000
 
-# Terminal 2 — dashboard
+# Terminal 2 — painel
 cd frontend && npm run dev
 ```
 
@@ -292,154 +291,154 @@ PowerShell:
 ```
 
 ```powershell
-# Terminal 2 — dashboard
+# Terminal 2 — painel
 cd frontend
 npm run dev
 ```
 
-`--app-dir backend` is what puts the `app` package on the import path, so this works whether or not the
-editable install took.
+`--app-dir backend` é o que coloca o pacote `app` no caminho de import, então isto funciona com ou sem o
+install editável ter dado certo.
 
-| URL | What it is |
+| URL | O que é |
 |---|---|
-| <http://localhost:5173> | The dashboard (Vite dev server, hot reload) |
-| <http://localhost:8000/docs> | Live OpenAPI docs |
+| <http://localhost:5173> | O painel (servidor de dev do Vite, hot reload) |
+| <http://localhost:8000/docs> | Docs OpenAPI ao vivo |
 
-In local mode the browser opens as a real window on your desktop — no noVNC, no port 6080. Log in at
-<http://localhost:5173> with the account `make user` created.
+No modo local o navegador abre como uma janela real no seu desktop — sem noVNC, sem porta 6080. Faça login em
+<http://localhost:5173> com a conta que o `make user` criou.
 
-Exhaustive per-platform instructions, the PostgreSQL switch, upgrading, and backups:
+Instruções exaustivas por plataforma, a troca para PostgreSQL, atualização e backups:
 **[docs/installation.md](docs/installation.md)**.
 
 ---
 
-## First run walkthrough
+## Primeira execução, passo a passo
 
-Dry-run mode is **on by default**. Everything below happens without a single application being sent, until
-you deliberately turn it off. Do at least one full pass this way.
+O modo de teste (dry run) está **ligado por padrão**. Tudo abaixo acontece sem uma única candidatura ser enviada, até
+você deliberadamente desligá-lo. Faça pelo menos uma passagem completa desse jeito.
 
-1. **Create your account.** Register in the UI, or run `make user` / `python scripts/create_user.py`. This is
-   the app's own login and has nothing to do with LinkedIn. New accounts start in dry-run mode with manual
-   approval required, so a fresh install cannot submit anything before you configure it.
+1. **Crie a sua conta.** Registre-se na UI, ou rode `make user` / `python scripts/create_user.py`. Este é
+   o login do próprio app e não tem nada a ver com o LinkedIn. Contas novas começam em modo de teste com aprovação
+   manual obrigatória, então uma instalação nova não consegue enviar nada antes de você configurá-la.
 
-2. **Fill in your profile and upload your CV.** Headline, location, phone, years of experience, skills, and
-   a summary. Upload the PDF you actually want employers to receive — it gets attached to Easy Apply forms,
-   and its text is what the AI scores jobs against. A thin profile produces weak scores and vague letters.
+2. **Preencha o seu perfil e envie o seu currículo.** Título, localização, telefone, anos de experiência, habilidades e
+   um resumo. Envie o PDF que você realmente quer que os empregadores recebam — ele é anexado aos formulários de Candidatura Simplificada,
+   e o texto dele é o que a IA usa para pontuar as vagas. Um perfil raso produz notas fracas e cartas vagas.
 
-3. **Fill in the answer bank.** This is the highest-value five minutes you will spend here. Salary
-   expectation, notice period, work authorization, years with your main technologies. These are the
-   questions every Easy Apply form asks, and a populated bank is the difference between confident answers
-   and flagged guesses.
+3. **Preencha o banco de respostas.** Estes são os cinco minutos de maior valor que você vai gastar aqui. Pretensão
+   salarial, aviso prévio, autorização de trabalho, anos com as suas principais tecnologias. Estas são as
+   perguntas que todo formulário de Candidatura Simplificada faz, e um banco preenchido é a diferença entre respostas confiantes
+   e palpites sinalizados.
 
-4. **Connect LinkedIn.** Start a browser session from the dashboard, then **log in manually in the browser
-   window** — noVNC at <http://localhost:6080> under Docker, the desktop window locally. Complete two-factor
-   authentication as normal. The app watches for the login to succeed and then encrypts and stores the
-   session. It never sees your password.
+4. **Conecte o LinkedIn.** Inicie uma sessão de navegador pelo painel, então **faça login manualmente na janela do
+   navegador** — noVNC em <http://localhost:6080> no Docker, a janela do desktop localmente. Conclua a autenticação
+   de dois fatores normalmente. O app observa até o login ter sucesso e então criptografa e armazena a
+   sessão. Ele nunca vê a sua senha.
 
-5. **Save a search.** Keywords, location, remote preference, date posted. Leave "Easy Apply only" on — only
-   Easy Apply forms can be filled at all. Start with `max_results` at 25.
+5. **Salve uma busca.** Palavras-chave, localização, preferência de trabalho remoto, data de publicação. Deixe "Apenas Candidatura Simplificada" ligado — só
+   formulários de Candidatura Simplificada podem ser preenchidos. Comece com `max_results` em 25.
 
-6. **Run it.** The search finds jobs and scores them. Watch the activity feed: `job.found` as each posting
-   turns up, `job.analyzed` as each score lands. Nothing is applied to.
+6. **Rode.** A busca encontra vagas e as pontua. Acompanhe o feed de atividade: `job.found` conforme cada anúncio
+   aparece, `job.analyzed` conforme cada nota chega. Nada recebe candidatura.
 
-7. **Review the scored jobs.** Sort by score. Read the reasons and — more importantly — the missing
-   requirements. This is where you decide, not the model. Skip the ones you do not actually want.
+7. **Revise as vagas pontuadas.** Ordene por nota. Leia os motivos e — mais importante — os requisitos
+   faltantes. É aqui que você decide, não o modelo. Pule as que você não quer de verdade.
 
-8. **Preview, then prepare.** Preview reports how many jobs would be processed, how many are already
-   applied to, and how much of your daily cap is left. Confirm it, and the automation opens each Easy Apply
-   form, fills it, attaches your CV, and **stops at the review step**.
+8. **Pré-visualize, depois prepare.** A pré-visualização informa quantas vagas seriam processadas, quantas já foram
+   candidatadas e quanto do seu limite diário resta. Confirme, e a automação abre cada formulário de Candidatura
+   Simplificada, preenche, anexa o seu currículo e **para na etapa de revisão**.
 
-9. **Read the draft properly.** The cover letter and every screening answer, with low-confidence ones
-   highlighted. Fix what is wrong. **Do not skip this** — the letter goes out under your name, and the
-   answers are representations about you. If it says eight years of Python and you have four, change it
-   before approving.
+9. **Leia o rascunho direito.** A carta de apresentação e cada resposta de triagem, com as de baixa confiança
+   destacadas. Corrija o que estiver errado. **Não pule isto** — a carta sai em seu nome, e as
+   respostas são declarações sobre você. Se diz oito anos de Python e você tem quatro, mude
+   antes de aprovar.
 
-10. **Approve.** One application, one deliberate click. It submits, the audit trail records who approved
-    what and when, and the job moves to `applied`.
+10. **Aprove.** Uma candidatura, um clique deliberado. Ela é enviada, a trilha de auditoria registra quem aprovou
+    o quê e quando, e a vaga passa para `applied`.
 
-11. **When you are ready for real submissions**, turn `dry_run` off in Settings — deliberately, having
-    watched the flow at least once. Turn it back on when you are done for the day.
+11. **Quando estiver pronto para envios de verdade**, desligue `dry_run` em Configurações — deliberadamente, tendo
+    acompanhado o fluxo pelo menos uma vez. Ligue de novo quando terminar por hoje.
 
-If a security challenge appears at any point, the run stops and the dashboard says `blocked`. **Solve it
-yourself in the browser.** If it keeps happening, that is LinkedIn telling you the activity looks
-automated — stop, rather than tuning delays until the warnings go away.
+Se um desafio de segurança aparecer em qualquer ponto, a execução para e o painel diz `blocked`. **Resolva
+você mesmo no navegador.** Se continuar acontecendo, é o LinkedIn dizendo que a atividade parece
+automatizada — pare, em vez de ajustar atrasos até os avisos sumirem.
 
 ---
 
-## Configuration
+## Configuração
 
-Two layers: environment variables (deployment) and per-user settings (operation). The `DEFAULT_*` variables
-seed a new user's settings; after that the per-user values win.
+Duas camadas: variáveis de ambiente (implantação) e configurações por usuário (operação). As variáveis `DEFAULT_*`
+semeiam as configurações de um novo usuário; depois disso os valores por usuário vencem.
 
-### The environment variables that matter
+### As variáveis de ambiente que importam
 
-| Variable | Default | What it does |
+| Variável | Padrão | O que faz |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | — | Enables scoring, letters, and answer suggestions. Empty is valid; you fill forms yourself |
-| `SECRET_KEY` | random per process | Signs JWTs. **Set it**, or restarts log you out |
-| `ENCRYPTION_KEY` | falls back to `SECRET_KEY` | Encrypts the LinkedIn session. Changing it makes stored sessions unreadable |
-| `ANTHROPIC_MODEL` | `claude-opus-5` | Model used for scoring and drafting |
-| `SCORING_EFFORT` | `low` | Reasoning effort for bulk scoring. Letters always use `high` |
-| `DATABASE_URL` | *(empty → SQLite)* | `postgresql+asyncpg://…` to switch backends |
-| `HEADLESS` | `false` | Keep it false. You need to see the browser |
-| `ASSISTED_MODE_ONLY` | `true` | The no-submission-without-confirmation guarantee |
-| `CORS_ORIGINS` | `["http://localhost:5173", …]` | JSON array. Add your LAN address to use the dashboard from another machine |
-| `DATA_DIR` | `backend/data` | Where the database, browser profiles, and your CV live |
+| `ANTHROPIC_API_KEY` | — | Habilita pontuação, cartas e sugestões de respostas. Vazio é válido; você preenche os formulários |
+| `SECRET_KEY` | aleatório por processo | Assina os JWTs. **Defina**, ou reinícios deslogam você |
+| `ENCRYPTION_KEY` | recorre a `SECRET_KEY` | Criptografa a sessão do LinkedIn. Mudá-la torna as sessões armazenadas ilegíveis |
+| `ANTHROPIC_MODEL` | `claude-opus-5` | Modelo usado para pontuação e geração de texto |
+| `SCORING_EFFORT` | `low` | Esforço de raciocínio para pontuação em massa. Cartas sempre usam `high` |
+| `DATABASE_URL` | *(vazio → SQLite)* | `postgresql+asyncpg://…` para trocar de backend |
+| `HEADLESS` | `false` | Mantenha false. Você precisa ver o navegador |
+| `ASSISTED_MODE_ONLY` | `true` | A garantia de nenhum-envio-sem-confirmação |
+| `CORS_ORIGINS` | `["http://localhost:5173", …]` | Array JSON. Adicione o seu endereço de LAN para usar o painel de outra máquina |
+| `DATA_DIR` | `backend/data` | Onde ficam o banco, os perfis de navegador e o seu currículo |
 
-> List and tuple settings must be **JSON** in `.env`: `CORS_ORIGINS=["http://localhost:5173"]`,
-> `DEFAULT_ACTION_DELAY_RANGE=[2.5, 7.0]`. A bare comma-separated value raises `SettingsError` at startup.
+> Configurações de lista e tupla precisam ser **JSON** no `.env`: `CORS_ORIGINS=["http://localhost:5173"]`,
+> `DEFAULT_ACTION_DELAY_RANGE=[2.5, 7.0]`. Um valor separado por vírgulas puro dispara `SettingsError` na inicialização.
 
-### The guard rails
+### As salvaguardas
 
-Per user, editable in Settings. **Loosening these is the one part of configuration that carries real risk** —
-each row in [docs/configuration.md](docs/configuration.md#guard-rails) says exactly what you trade away.
+Por usuário, editáveis em Configurações. **Afrouxá-las é a única parte da configuração que carrega risco real** —
+cada linha em [docs/configuration.md](docs/configuration.md#guard-rails) diz exatamente o que você abre mão.
 
-| Setting | Default | Range |
+| Configuração | Padrão | Faixa |
 |---|---|---|
-| `dry_run` | `true` | Fill everything, submit nothing |
-| `require_manual_approval` | `true` | Explicit approval before any submission |
+| `dry_run` | `true` | Preenche tudo, não envia nada |
+| `require_manual_approval` | `true` | Aprovação explícita antes de qualquer envio |
 | `daily_cap` | 15 | 1–50 |
 | `min_score` | 70 | 0–100 |
-| `action_delay_min` / `max` | 2.5 / 7.0 s | randomized per action |
-| `apply_delay_min` / `max` | 45 / 120 s | randomized per application |
-| `working_hour_start` / `end` | 08:00–20:00 | local hours |
+| `action_delay_min` / `max` | 2.5 / 7.0 s | aleatório por ação |
+| `apply_delay_min` / `max` | 45 / 120 s | aleatório por candidatura |
+| `working_hour_start` / `end` | 08:00–20:00 | horas locais |
 | `generate_cover_letter` | `true` | — |
-| `content_language` | `job` | `job` follows the posting; or pin `en`, `pt-BR` |
+| `content_language` | `job` | `job` segue o anúncio; ou fixe `en`, `pt-BR` |
 
-Every setting, every field, every bound: **[docs/configuration.md](docs/configuration.md)**.
+Cada configuração, cada campo, cada limite: **[docs/configuration.md](docs/configuration.md)**.
 
 ---
 
-## Architecture
+## Arquitetura
 
 ```mermaid
 flowchart LR
     UI["React + Vite"] -->|"REST /api"| API["FastAPI"]
     UI <-->|"WebSocket"| API
-    API --> ENG["Engine<br/>guard rails"]
-    ENG --> SVC["LinkedInService<br/>(protocol)"]
-    ENG --> AI["Claude client"]
+    API --> ENG["Engine<br/>salvaguardas"]
+    ENG --> SVC["LinkedInService<br/>(protocolo)"]
+    ENG --> AI["Cliente Claude"]
     SVC --> PW["Playwright<br/>Chromium"]
     PW --> LI["linkedin.com"]
     API --> DB[("SQLite / PostgreSQL")]
     ENG --> DB
 ```
 
-**The layering rule:**
+**A regra de camadas:**
 
 ```
-Engine  ->  LinkedInService (protocol)  ->  Playwright
+Engine  ->  LinkedInService (protocolo)  ->  Playwright
 ```
 
-The engine never imports Playwright and never touches a `Page` or a `Locator`. It speaks only in plain
-dataclasses — `SearchFilters`, `JobPosting`, `FormQuestion`, `ApplicationDraft`. Every CSS selector lives in
-one file, `app/automation/selectors.py`.
+O engine nunca importa o Playwright e nunca toca num `Page` ou num `Locator`. Ele fala apenas em dataclasses
+simples — `SearchFilters`, `JobPosting`, `FormQuestion`, `ApplicationDraft`. Todo seletor CSS vive em
+um arquivo, `app/automation/selectors.py`.
 
-That buys two things. When LinkedIn ships a redesign, the fix is confined to one file. And the entire
-orchestration layer — guard rails, thresholds, state transitions, the approval gate — is covered by fast
-offline tests against a fake `LinkedInService`, with no browser and no account. The AI layer follows the same
-pattern: `JobScore`, `ScreeningAnswer`, and `CoverLetter` are the contract, so changing models does not leak
-into the API.
+Isso compra duas coisas. Quando o LinkedIn lança um redesign, a correção fica confinada a um arquivo. E toda a
+camada de orquestração — salvaguardas, limiares, transições de estado, o portão de aprovação — é coberta por testes
+offline rápidos contra um `LinkedInService` falso, sem navegador e sem conta. A camada de IA segue o mesmo
+padrão: `JobScore`, `ScreeningAnswer` e `CoverLetter` são o contrato, então trocar de modelo não vaza
+para a API.
 
 ```text
 backend/
@@ -471,96 +470,96 @@ docker/                     # Dockerfile, entrypoint.sh, supervisord.conf
 docs/  scripts/  Makefile  docker-compose.yml
 ```
 
-Layer boundaries, the full data model and why each table exists, the event flow from engine to browser tab,
-and the design trade-offs: **[docs/architecture.md](docs/architecture.md)**.
+As fronteiras de camadas, o modelo de dados completo e por que cada tabela existe, o fluxo de eventos do engine até a aba do navegador,
+e os trade-offs de projeto: **[docs/architecture.md](docs/architecture.md)**.
 
-**Stack** — Python 3.11+, FastAPI, SQLAlchemy 2 async, Alembic, Playwright, the Anthropic SDK, JWT + bcrypt +
+**Stack** — Python 3.11+, FastAPI, SQLAlchemy 2 async, Alembic, Playwright, o SDK da Anthropic, JWT + bcrypt +
 Fernet; React, Vite, Tailwind CSS.
 
 ---
 
-## Development
+## Desenvolvimento
 
 ```bash
-make test                       # pytest — offline, no account or API key needed
+make test                       # pytest — offline, sem conta ou chave de API
 make lint                       # ruff check .
-make format                     # ruff format + safe autofixes
-make typecheck                  # mypy backend/app (advisory)
+make format                     # ruff format + autofixes seguras
+make typecheck                  # mypy backend/app (consultivo)
 make migrate                    # alembic upgrade head
-make migration m="add x"        # autogenerate a migration
+make migration m="add x"        # gera uma migration automaticamente
 cd frontend && npm run typecheck && npm run lint && npm run build
 ```
 
-The test suite runs against `FakeLinkedInService` and `FakeAIClient`, with network access blocked and sleeps
-capped by autouse fixtures — so it is fast, deterministic, and needs no browser. The most important
-assertion in the repo is that preparing an application never reaches `submit()`.
+A suíte de testes roda contra `FakeLinkedInService` e `FakeAIClient`, com o acesso à rede bloqueado e sleeps
+limitados por fixtures autouse — então é rápida, determinística e não precisa de navegador. A asserção mais importante
+do repositório é que preparar uma candidatura nunca chega a `submit()`.
 
-House rules: English only, never `print()` (use `app.observability.get_logger`), comment the *why* rather
-than the *what*, and keep Playwright inside `app/automation/browser.py` and `app/automation/linkedin/`.
+Regras da casa: apenas inglês, nunca `print()` (use `app.observability.get_logger`), comente o *porquê* em vez
+do *o quê*, e mantenha o Playwright dentro de `app/automation/browser.py` e `app/automation/linkedin/`.
 
-Project layout, how to add a route or a service, how the fakes work, the migration workflow, and how to
-debug the automation with a headed browser and Playwright traces:
+Layout do projeto, como adicionar uma rota ou um serviço, como os fakes funcionam, o fluxo de migração e como
+depurar a automação com um navegador com interface e traces do Playwright:
 **[docs/development.md](docs/development.md)** · **[CONTRIBUTING.md](CONTRIBUTING.md)**
 
 ---
 
-## Troubleshooting
+## Solução de problemas
 
-| Symptom | What is going on |
+| Sintoma | O que está acontecendo |
 |---|---|
-| **`ElementNotFoundError`, or a step that used to work now fails** | LinkedIn changed its markup. Fix the selector in `backend/app/automation/selectors.py` — prefer `aria-label`, `data-*`, and `role` over generated class names. This is the most common failure mode and it is a one-file fix. |
-| **Run status is `blocked`, "security verification" on screen** | A security checkpoint was detected and everything halted, by design. **Solve it yourself in the browser window.** There is no bypass and there will not be one. If it recurs, stop using the tool on that account. |
-| **Chromium crashes or dies on startup (Docker)** | `/dev/shm` is too small — Chromium's default in a container is 64 MB. `docker-compose.yml` already sets `shm_size: 1gb`; raise it to `2gb` and rebuild if you still hit it. |
-| **The AI refused, or returned nothing** | Refusals are recorded on `AIAnalysis.was_refusal` and the application falls back to manual entry. Fill the field yourself. This is the system working. |
-| **"Sessions dropped" / "could not decrypt stored data"** | `ENCRYPTION_KEY` changed (or `SECRET_KEY` did, when the former is unset). Stored sessions are unreadable with a different key. Restore the old value, or reconnect LinkedIn and log in once more. |
-| **Logged out of the dashboard after every restart** | `SECRET_KEY` is unset, so a new random one is generated each start. Set it in `.env`. |
-| **`SettingsError: error parsing value for field ...`** | A list or tuple setting in `.env` is not JSON. Use `[2.5, 7.0]` and `["http://localhost:5173"]`. |
-| **`Executable doesn't exist at ...ms-playwright...`** | Run `playwright install chromium` inside the active virtual environment. |
-| **Frontend loads, every request fails with a CORS error** | Your dashboard origin is not in `CORS_ORIGINS`. Add it and restart. |
-| **An application failed and you want to know why** | `GET /api/applications/{id}/events` — the audit trail names the field, the options, and the step. Start there, not with the browser. |
+| **`ElementNotFoundError`, ou um passo que funcionava agora falha** | O LinkedIn mudou a marcação. Corrija o seletor em `backend/app/automation/selectors.py` — prefira `aria-label`, `data-*` e `role` a nomes de classe gerados. Este é o modo de falha mais comum e é uma correção de um arquivo. |
+| **O status da execução é `blocked`, "verificação de segurança" na tela** | Uma verificação de segurança foi detectada e tudo parou, por design. **Resolva você mesmo na janela do navegador.** Não há contorno e não haverá. Se recorrer, pare de usar a ferramenta nessa conta. |
+| **O Chromium trava ou morre na inicialização (Docker)** | `/dev/shm` é pequeno demais — o padrão do Chromium num contêiner é 64 MB. O `docker-compose.yml` já define `shm_size: 1gb`; aumente para `2gb` e recompile se ainda bater nisso. |
+| **A IA recusou, ou não retornou nada** | Recusas são registradas em `AIAnalysis.was_refusal` e a candidatura recorre ao preenchimento manual. Preencha o campo você mesmo. Isto é o sistema funcionando. |
+| **"Sessões perdidas" / "não foi possível descriptografar dados armazenados"** | `ENCRYPTION_KEY` mudou (ou `SECRET_KEY` mudou, quando a primeira não está definida). Sessões armazenadas são ilegíveis com uma chave diferente. Restaure o valor antigo, ou reconecte o LinkedIn e faça login mais uma vez. |
+| **Deslogado do painel a cada reinício** | `SECRET_KEY` não está definida, então uma nova aleatória é gerada a cada início. Defina-a no `.env`. |
+| **`SettingsError: error parsing value for field ...`** | Uma configuração de lista ou tupla no `.env` não é JSON. Use `[2.5, 7.0]` e `["http://localhost:5173"]`. |
+| **`Executable doesn't exist at ...ms-playwright...`** | Rode `playwright install chromium` dentro do ambiente virtual ativo. |
+| **O frontend carrega, toda requisição falha com erro de CORS** | A origem do seu painel não está em `CORS_ORIGINS`. Adicione-a e reinicie. |
+| **Uma candidatura falhou e você quer saber por quê** | `GET /api/applications/{id}/events` — a trilha de auditoria nomeia o campo, as opções e o passo. Comece por aí, não pelo navegador. |
 
-More, including per-platform issues: [docs/installation.md](docs/installation.md#troubleshooting).
+Mais, incluindo problemas por plataforma: [docs/installation.md](docs/installation.md#troubleshooting).
 
 ---
 
-## Roadmap
+## Roteiro
 
-Rough order, no dates. Anything that reduces human oversight is permanently out of scope.
+Ordem aproximada, sem datas. Qualquer coisa que reduza a supervisão humana está permanentemente fora de escopo.
 
-- Résumé tailoring suggestions per job — highlighting which of your existing experience to foreground, not
-  inventing any
-- Application follow-up reminders and outcome tracking (replied / interview / rejected), so the score model
-  has ground truth to check itself against
-- Better answer-bank matching, so recurring questions stop being re-asked of the model
-- Export your history to CSV
-- Resumable runs surfaced in the UI (the `checkpoint` field already exists)
-- A browser extension to save a job to the queue from LinkedIn directly
-- Tests against recorded LinkedIn DOM fixtures, so selector breakage is caught before you hit it
+- Sugestões de adaptação de currículo por vaga — destacando qual da sua experiência existente colocar em primeiro plano, sem
+  inventar nada
+- Lembretes de acompanhamento de candidatura e rastreamento de desfecho (respondeu / entrevista / rejeitado), para que o modelo de nota
+  tenha uma referência real para se conferir
+- Melhor correspondência do banco de respostas, para que perguntas recorrentes parem de ser reperguntadas ao modelo
+- Exportar o seu histórico para CSV
+- Execuções retomáveis expostas na UI (o campo `checkpoint` já existe)
+- Uma extensão de navegador para salvar uma vaga na fila direto do LinkedIn
+- Testes contra fixtures de DOM gravadas do LinkedIn, para que a quebra de seletor seja pega antes de você esbarrar nela
 
-**Explicitly not planned:** unattended or overnight runs, bulk submit, CAPTCHA solving, fingerprint evasion,
-storing LinkedIn credentials, or anything that removes the review step.
+**Explicitamente não planejado:** execuções autônomas ou noturnas, envio em massa, resolução de CAPTCHA, evasão de fingerprint,
+armazenamento de credenciais do LinkedIn, ou qualquer coisa que remova a etapa de revisão.
 
-## Contributing
+## Como contribuir
 
-Issues and pull requests welcome. Two rules are absolute: **no change may weaken the human-approval
-guarantee**, and **nothing may bypass a security challenge**. Details, plus setup, branch and commit
-conventions, and the pre-PR checklist, in [CONTRIBUTING.md](CONTRIBUTING.md). By participating you agree to
-the [Code of Conduct](CODE_OF_CONDUCT.md).
+Issues e pull requests são bem-vindos. Duas regras são absolutas: **nenhuma mudança pode enfraquecer a garantia de
+aprovação humana**, e **nada pode contornar um desafio de segurança**. Detalhes, além de setup, convenções de branch e commit,
+e o checklist pré-PR, em [CONTRIBUTING.md](CONTRIBUTING.md). Ao participar você concorda com o
+[Código de Conduta](CODE_OF_CONDUCT.md).
 
-Security issues: email **jvgcu@cesar.school** rather than opening a public issue.
+Questões de segurança: envie e-mail para **jvgcu@cesar.school** em vez de abrir uma issue pública.
 
-## License
+## Licença
 
 [MIT](LICENSE) © 2026 João Victor Uchôa
 
 ---
 
-## Disclaimer
+## Aviso legal
 
-This project is not affiliated with, endorsed by, or connected to LinkedIn in any way. It automates the
-LinkedIn web interface, which LinkedIn's User Agreement prohibits; using it may result in your account being
-restricted or permanently banned, and no guard rail in this codebase can prevent that outcome — the delays,
-caps, and approval gates reduce the risk without removing it. You are solely responsible for how you use
-this software and for anything that happens to your account, and the author accepts no liability for lost
-access, lost data, or applications sent on your behalf. Use it on your own account, at a human volume, and
-read every application before you approve it.
+Este projeto não é afiliado, endossado ou conectado ao LinkedIn de forma alguma. Ele automatiza a
+interface web do LinkedIn, o que o Contrato de Usuário do LinkedIn proíbe; usá-lo pode resultar na sua conta ser
+restringida ou banida permanentemente, e nenhuma salvaguarda neste código pode evitar esse desfecho — os atrasos,
+limites e portões de aprovação reduzem o risco sem removê-lo. Você é o único responsável por como usa
+este software e por qualquer coisa que aconteça à sua conta, e o autor não aceita nenhuma responsabilidade por acesso
+perdido, dados perdidos ou candidaturas enviadas em seu nome. Use na sua própria conta, num volume humano, e
+leia cada candidatura antes de aprovar.

@@ -1,253 +1,253 @@
-# Architecture
+# Arquitetura
 
-This document explains how the pieces fit together, what each table is for, and why the
-structure is the way it is. If you only read one section, read
-[Design decisions](#design-decisions) — the layering is the whole point of the codebase.
+Este documento explica como as peças se encaixam, para que serve cada tabela e por que a
+estrutura é do jeito que é. Se você ler apenas uma seção, leia
+[Decisões de projeto](#design-decisions) — o fatiamento em camadas é o ponto central do código.
 
-## The shape of the system
+## O formato do sistema
 
-There are three processes: a FastAPI backend, a React frontend, and a Chromium instance driven
-by Playwright. The browser is not headless by default, because the user has to be able to see it,
-log into LinkedIn by hand, and take over when something goes wrong.
+Há três processos: um backend FastAPI, um frontend React e uma instância do Chromium dirigida
+pelo Playwright. O navegador não é headless por padrão, porque o usuário precisa conseguir vê-lo,
+fazer login no LinkedIn à mão e assumir o controle quando algo dá errado.
 
 ```mermaid
 flowchart LR
-    UI["React + Vite<br/>dashboard"] -->|"REST /api"| API["FastAPI"]
+    UI["React + Vite<br/>painel"] -->|"REST /api"| API["FastAPI"]
     UI <-->|"WebSocket /api/ws"| API
-    API --> ENG["Automation engine<br/>guard rails, orchestration"]
-    ENG --> SVC["LinkedInService<br/>(protocol)"]
-    ENG --> AI["Claude client"]
+    API --> ENG["Engine de automação<br/>salvaguardas, orquestração"]
+    ENG --> SVC["LinkedInService<br/>(protocolo)"]
+    ENG --> AI["Cliente Claude"]
     SVC --> PW["Playwright + Chromium"]
     PW --> LI["linkedin.com"]
-    AI --> ANT["Anthropic API"]
+    AI --> ANT["API da Anthropic"]
     API --> DB[("SQLite / PostgreSQL")]
     ENG --> DB
 ```
 
-## Layers and dependency direction
+## Camadas e direção das dependências
 
-Dependencies point one way only: outer layers know about inner layers, never the reverse.
+As dependências apontam em um só sentido: camadas externas conhecem camadas internas, nunca o contrário.
 
-| Layer | Package | Knows about | Must never know about |
+| Camada | Pacote | Conhece | Nunca pode conhecer |
 |---|---|---|---|
-| HTTP / WS | `app.api`, `app.websocket` | schemas, services, models | Playwright, the Anthropic SDK |
-| Services | `app.services` | models, contracts, AI contracts | Playwright objects, FastAPI objects |
-| Orchestration | `app.automation.engine`, `app.automation.throttle` | contracts, AI contracts, models | Playwright objects, HTTP objects |
-| Browser adapter | `app.automation.browser`, `app.automation.linkedin`, `app.automation.selectors` | Playwright, `app.automation.contracts` | the ORM, FastAPI, the AI layer |
-| AI adapter | `app.ai` | the Anthropic SDK, `app.ai.schemas` | Playwright, the ORM |
-| Persistence | `app.models`, `app.database` | SQLAlchemy | everything above it |
-| Cross-cutting | `app.config`, `app.auth`, `app.observability` | — | — |
+| HTTP / WS | `app.api`, `app.websocket` | schemas, services, models | Playwright, o SDK da Anthropic |
+| Services | `app.services` | models, contracts, contratos de IA | objetos do Playwright, objetos do FastAPI |
+| Orquestração | `app.automation.engine`, `app.automation.throttle` | contracts, contratos de IA, models | objetos do Playwright, objetos HTTP |
+| Adaptador do navegador | `app.automation.browser`, `app.automation.linkedin`, `app.automation.selectors` | Playwright, `app.automation.contracts` | o ORM, FastAPI, a camada de IA |
+| Adaptador de IA | `app.ai` | o SDK da Anthropic, `app.ai.schemas` | Playwright, o ORM |
+| Persistência | `app.models`, `app.database` | SQLAlchemy | tudo acima dela |
+| Transversal | `app.config`, `app.auth`, `app.observability` | — | — |
 
-The rule that matters in practice:
+A regra que importa na prática:
 
 ```
-Engine  ->  LinkedInService (protocol)  ->  Playwright
+Engine  ->  LinkedInService (protocolo)  ->  Playwright
 ```
 
-The engine never imports Playwright and never sees a `Page`, `Locator`, or `ElementHandle`. It
-speaks in the plain dataclasses defined in
+O engine nunca importa o Playwright e nunca vê um `Page`, `Locator` ou `ElementHandle`. Ele
+fala nas dataclasses simples definidas em
 [`automation/contracts.py`](../backend/app/automation/contracts.py): `SearchFilters`,
 `JobPosting`, `FormQuestion`, `FormAnswer`, `ApplicationDraft`, `SessionState`, `ProfileContext`.
-Playwright itself is confined to `automation/browser.py` (launch and lifecycle) and
-`automation/linkedin/` (`service.py`, `search.py`, `job.py`, `apply.py`), and every CSS selector and
-piece of LinkedIn-specific DOM knowledge lives in
-[`automation/selectors.py`](../backend/app/automation/selectors.py). When LinkedIn ships a redesign,
-that one file should be the whole diff.
+O próprio Playwright fica confinado a `automation/browser.py` (launch e ciclo de vida) e
+`automation/linkedin/` (`service.py`, `search.py`, `job.py`, `apply.py`), e todo seletor CSS e
+todo pedaço de conhecimento de DOM específico do LinkedIn vive em
+[`automation/selectors.py`](../backend/app/automation/selectors.py). Quando o LinkedIn lança um redesign,
+esse único arquivo deveria ser o diff inteiro.
 
-The AI layer follows the same pattern. `JobScore`, `ScreeningAnswer`, `CoverLetter`, and
-`JobAnalysis` in [`ai/schemas.py`](../backend/app/ai/schemas.py) are the contract; swapping the
-model, or the provider entirely, does not leak into the API layer.
+A camada de IA segue o mesmo padrão. `JobScore`, `ScreeningAnswer`, `CoverLetter` e
+`JobAnalysis` em [`ai/schemas.py`](../backend/app/ai/schemas.py) são o contrato; trocar o
+modelo, ou o provedor inteiro, não vaza para a camada da API.
 
-## Data model
+## Modelo de dados
 
-Ten tables. Each one exists for a reason, and a few of them exist specifically to make failures
-survivable.
+Dez tabelas. Cada uma existe por um motivo, e algumas delas existem especificamente para tornar as falhas
+sobreviventes.
 
 ```mermaid
 erDiagram
-    User ||--o| Profile : has
-    User ||--o| UserSettings : has
-    User ||--o| LinkedInAccount : has
-    User ||--o{ Search : owns
-    User ||--o{ Job : owns
-    User ||--o{ Application : owns
-    User ||--o{ AutomationRun : owns
-    Search ||--o{ Job : produced
-    Job ||--o| Application : has
-    Job ||--o{ AIAnalysis : scored_by
-    Application ||--o{ ApplicationEvent : audited_by
-    AutomationRun ||--o{ ApplicationEvent : caused
+    User ||--o| Profile : tem
+    User ||--o| UserSettings : tem
+    User ||--o| LinkedInAccount : tem
+    User ||--o{ Search : possui
+    User ||--o{ Job : possui
+    User ||--o{ Application : possui
+    User ||--o{ AutomationRun : possui
+    Search ||--o{ Job : produziu
+    Job ||--o| Application : tem
+    Job ||--o{ AIAnalysis : pontuada_por
+    Application ||--o{ ApplicationEvent : auditada_por
+    AutomationRun ||--o{ ApplicationEvent : causou
 ```
 
-| Table | Why it exists |
+| Tabela | Por que existe |
 |---|---|
-| `users` | A local account with a bcrypt password hash. This is the *application's* login, never LinkedIn's. The multi-user shape is deliberate: it is the only thing that keeps one person's jobs, cookies, and event feed from reaching another's, even when you are the only user. |
-| `profiles` | Your CV as text plus an `answer_bank` of reusable answers (salary expectation, notice period, work authorization). The AI reads this; it is what makes screening answers yours rather than invented. |
-| `user_settings` | Per-user guard rails and AI preferences. Separate from `profiles` because these are operational knobs with safety implications, not identity. |
-| `linkedin_accounts` | The encrypted Playwright storage state (cookies) plus a browser-profile path. One row per user, and no password column anywhere in the schema. |
-| `searches` | A named, reusable filter set. Saved rather than ad-hoc so a run is reproducible and `max_results` caps the scan size. |
-| `jobs` | A discovered posting plus its score, score reasons, and missing requirements. `UNIQUE (user_id, external_id)` is the deduplication guarantee — re-running a search never re-processes or re-applies to the same posting. |
-| `applications` | One row per job, `UNIQUE (job_id)`. Holds the drafted cover letter, the screening answers, the form step counters, and the `was_dry_run` flag. Its `status` is where the human-approval invariant lives: `AWAITING_REVIEW` is a full stop. |
-| `application_events` | An append-only audit trail: every form step, every question answered, every error, with a timestamp and a JSON payload. |
-| `ai_analyses` | The raw output of every model call with token counts, latency, cost, and a `was_refusal` flag. Auditability and cost control. |
-| `automation_runs` | One row per engine invocation, with counters, a `checkpoint`, a `stop_requested` flag, and a `blocked_reason`. |
+| `users` | Uma conta local com um hash de senha bcrypt. Este é o login *do aplicativo*, nunca o do LinkedIn. O formato multiusuário é deliberado: é a única coisa que impede as vagas, cookies e feed de eventos de uma pessoa de alcançarem os de outra, mesmo quando você é o único usuário. |
+| `profiles` | O seu currículo como texto mais um `answer_bank` de respostas reutilizáveis (pretensão salarial, aviso prévio, autorização de trabalho). A IA lê isto; é o que faz as respostas de triagem serem suas em vez de inventadas. |
+| `user_settings` | Salvaguardas e preferências de IA por usuário. Separada de `profiles` porque são botões operacionais com implicações de segurança, não identidade. |
+| `linkedin_accounts` | O storage state criptografado do Playwright (cookies) mais um caminho de perfil de navegador. Uma linha por usuário, e nenhuma coluna de senha em lugar nenhum do schema. |
+| `searches` | Um conjunto de filtros nomeado e reutilizável. Salvo em vez de ad-hoc para que uma execução seja reproduzível e `max_results` limite o tamanho da varredura. |
+| `jobs` | Um anúncio descoberto mais a sua nota, motivos da nota e requisitos faltantes. `UNIQUE (user_id, external_id)` é a garantia de deduplicação — rodar uma busca de novo nunca reprocessa nem se recandidata ao mesmo anúncio. |
+| `applications` | Uma linha por vaga, `UNIQUE (job_id)`. Guarda a carta de apresentação gerada, as respostas de triagem, os contadores de etapas do formulário e a flag `was_dry_run`. O seu `status` é onde vive o invariante de aprovação humana: `AWAITING_REVIEW` é uma parada total. |
+| `application_events` | Uma trilha de auditoria só de inserção: cada etapa do formulário, cada pergunta respondida, cada erro, com um timestamp e um payload JSON. |
+| `ai_analyses` | A saída bruta de cada chamada ao modelo com contagens de tokens, latência, custo e uma flag `was_refusal`. Auditabilidade e controle de custo. |
+| `automation_runs` | Uma linha por invocação do engine, com contadores, um `checkpoint`, uma flag `stop_requested` e um `blocked_reason`. |
 
-### Why `application_events` earns its keep
+### Por que `application_events` se justifica
 
-Browser automation fails in ways that are almost impossible to reason about after the fact. The
-form gained a step. A dropdown's options changed. A question appeared that had never appeared
-before. Without a trail you get one useless line: "application failed."
+A automação de navegador falha de formas quase impossíveis de raciocinar depois do fato. O
+formulário ganhou uma etapa. As opções de um dropdown mudaram. Uma pergunta apareceu que nunca havia
+aparecido. Sem uma trilha você recebe uma linha inútil: "a candidatura falhou".
 
-`ApplicationEvent` is append-only and written at every meaningful transition —
+`ApplicationEvent` é só de inserção e escrito em toda transição significativa —
 `FORM_OPENED`, `FORM_STEP_COMPLETED`, `QUESTION_ANSWERED`, `RESUME_UPLOADED`,
-`AWAITING_REVIEW`, `USER_EDITED`, `USER_APPROVED`, `SUBMITTED`, `DISCARDED`, `ERROR`. Each row
-carries a JSON `payload`, so "which question broke it, and what were the options" is answerable
-from `GET /api/applications/{id}/events` without reproducing the failure. It is also the user's
-receipt: a record of exactly what was sent on their behalf and when they approved it.
+`AWAITING_REVIEW`, `USER_EDITED`, `USER_APPROVED`, `SUBMITTED`, `DISCARDED`, `ERROR`. Cada linha
+carrega um `payload` JSON, então "qual pergunta quebrou, e quais eram as opções" é respondível
+a partir de `GET /api/applications/{id}/events` sem reproduzir a falha. É também o recibo do usuário:
+um registro do exato que foi enviado em seu nome e quando ele aprovou.
 
-### Why `automation_runs.checkpoint` earns its keep
+### Por que `automation_runs.checkpoint` se justifica
 
-A search over five result pages that dies on page four should not start over from page one.
-Re-scanning costs time, burns requests against LinkedIn, and increases the risk of looking
-automated. `checkpoint` is a free-form JSON blob the engine writes as it goes — for example
-`{"page": 2, "processed_ids": ["3812...", "3813..."]}` — so a resumed run skips what is already
-done.
+Uma busca por cinco páginas de resultados que morre na página quatro não deveria recomeçar da página um.
+Reescanear custa tempo, gasta requisições contra o LinkedIn e aumenta o risco de parecer
+automatizado. `checkpoint` é um blob JSON livre que o engine escreve conforme avança — por exemplo
+`{"page": 2, "processed_ids": ["3812...", "3813..."]}` — para que uma execução retomada pule o que já está
+feito.
 
-The sibling field is `stop_requested`. The kill switch is *cooperative*: `POST /api/automation/stop`
-sets the flag, and the engine checks it between steps and raises `StopRequestedError`. Nothing is
-killed mid-click, so the browser and the database are never left in a torn state.
+O campo irmão é `stop_requested`. O botão de parada é *cooperativo*: `POST /api/automation/stop`
+seta a flag, e o engine a verifica entre etapas e levanta `StopRequestedError`. Nada é
+morto no meio de um clique, então o navegador e o banco nunca ficam num estado rasgado.
 
-## Event flow: engine to browser tab
+## Fluxo de eventos: do engine à aba do navegador
 
-Two things happen for every significant step, and they are kept in sync by a single function.
+Duas coisas acontecem a cada etapa significativa, e elas são mantidas em sincronia por uma única função.
 
 ```mermaid
 sequenceDiagram
     participant E as Engine
     participant A as observability.audit
-    participant DB as Database
+    participant DB as Banco de dados
     participant M as websocket.manager
-    participant UI as Dashboard
+    participant UI as Painel
 
     E->>A: record_event(application_id, QUESTION_ANSWERED, payload=...)
     A->>DB: INSERT application_events
-    A->>A: structured JSON log line
+    A->>A: linha de log JSON estruturado
     E->>A: to_live_event(event)
     A-->>E: Event | None
     E->>M: await manager.publish(user_id, event)
-    M->>UI: JSON over WebSocket
-    M->>M: append to per-user history (last 200)
+    M->>UI: JSON sobre WebSocket
+    M->>M: anexa ao histórico por usuário (últimos 200)
 ```
 
-`record_event()` persists the durable trail. `to_live_event()` maps the persisted event type onto
-one of the live [`EventName`](../backend/app/observability/events.py) values — only the subset the
-dashboard actually needs — and returns `None` for the rest. `manager.publish()` fans the envelope
-out to every open tab for that user.
+`record_event()` persiste a trilha durável. `to_live_event()` mapeia o tipo de evento persistido para
+um dos valores de [`EventName`](../backend/app/observability/events.py) ao vivo — apenas o subconjunto que o
+painel de fato precisa — e retorna `None` para o resto. `manager.publish()` distribui o envelope
+para cada aba aberta daquele usuário.
 
-Three properties of this design are load-bearing:
+Três propriedades deste design são de sustentação:
 
-- **Publishing never raises.** A closed browser tab must not be able to crash a run, so
-  `ConnectionManager.publish` swallows send failures and drops dead sockets.
-- **History is replayed on connect.** The manager keeps the last 200 events per user, so
-  reloading the page rebuilds the activity feed instead of showing an empty panel.
-- **Isolation is per user id.** Events are addressed to a user, never broadcast.
+- **Publicar nunca levanta exceção.** Uma aba de navegador fechada não pode derrubar uma execução, então
+  `ConnectionManager.publish` engole falhas de envio e descarta sockets mortos.
+- **O histórico é reproduzido na conexão.** O manager mantém os últimos 200 eventos por usuário, então
+  recarregar a página reconstrói o feed de atividade em vez de mostrar um painel vazio.
+- **O isolamento é por id de usuário.** Os eventos são endereçados a um usuário, nunca transmitidos a todos.
 
-The envelope is identical on both sides — `app/observability/events.py` mirrors
-`frontend/src/types/events.ts`. See the [event catalogue](api.md#websocket-events).
+O envelope é idêntico dos dois lados — `app/observability/events.py` espelha
+`frontend/src/types/events.ts`. Veja o [catálogo de eventos](api.md#websocket-events).
 
-## Design decisions
+## Decisões de projeto
 
-### Assisted mode first, not as a toggle
+### Modo assistido primeiro, não como uma chave
 
-The obvious design is a fully automatic applier with a "confirm before submitting" checkbox. That
-design fails badly: one bad default, one bug in a config reader, one refactor, and it submits
-dozens of applications to real employers under your name.
+O design óbvio é um candidatador totalmente automático com uma caixa de "confirmar antes de enviar". Esse
+design falha feio: um padrão ruim, um bug num leitor de config, um refactor, e ele envia
+dezenas de candidaturas a empregadores reais em seu nome.
 
-So the stop is structural instead. `LinkedInService.fill_and_advance()` is typed and documented to
-advance the form and halt at the review step; it has no code path to submission.
-`submit()` is a separate method, exposed as a separate endpoint
-(`POST /api/applications/{id}/submit` with `confirm: true`) that acts on a single application.
-`ASSISTED_MODE_ONLY` defaults to `true`, `dry_run` defaults to `true`, and
-`require_manual_approval` defaults to `true`.
+Então a parada é estrutural. `LinkedInService.fill_and_advance()` é tipado e documentado para
+avançar o formulário e parar na etapa de revisão; ele não tem caminho de código para o envio.
+`submit()` é um método separado, exposto como um endpoint separado
+(`POST /api/applications/{id}/submit` com `confirm: true`) que age sobre uma única candidatura.
+`ASSISTED_MODE_ONLY` tem padrão `true`, `dry_run` tem padrão `true`, e
+`require_manual_approval` tem padrão `true`.
 
-**Trade-off:** you cannot leave it running unattended, which is exactly the feature some people
-want from a tool like this. That is a deliberate refusal, not an unfinished feature.
+**Trade-off:** você não pode deixá-lo rodando sozinho, que é exatamente o recurso que algumas pessoas
+querem de uma ferramenta assim. Isso é uma recusa deliberada, não um recurso inacabado.
 
-### A service boundary around the browser
+### Uma fronteira de serviço em volta do navegador
 
-LinkedIn's markup changes without notice, and Playwright code is the least testable code in the
-project — it needs a real browser, a real session, and a real job posting.
+A marcação do LinkedIn muda sem aviso, e o código do Playwright é o menos testável do
+projeto — precisa de um navegador real, uma sessão real e um anúncio de vaga real.
 
-Putting a `Protocol` between the engine and Playwright buys two things. Tests get a fake
-`LinkedInService` that returns canned `JobPosting` and `ApplicationDraft` values, so the entire
-orchestration layer — guard rails, scoring thresholds, state transitions, the approval gate — is
-covered by fast offline tests. And breakage is localized: an `ElementNotFoundError` points at
-`selectors.py`, not at business logic.
+Colocar um `Protocol` entre o engine e o Playwright compra duas coisas. Os testes ganham um
+`LinkedInService` falso que retorna valores prontos de `JobPosting` e `ApplicationDraft`, então toda a
+camada de orquestração — salvaguardas, limiares de pontuação, transições de estado, o portão de aprovação — é
+coberta por testes offline rápidos. E a quebra é localizada: um `ElementNotFoundError` aponta para
+`selectors.py`, não para a lógica de negócio.
 
-**Trade-off:** an extra indirection, and the dataclasses have to be maintained alongside the
-implementation. Worth it the first time LinkedIn moves a button.
+**Trade-off:** uma indireção a mais, e as dataclasses precisam ser mantidas ao lado da
+implementação. Vale a pena na primeira vez que o LinkedIn move um botão.
 
-### SQLite by default
+### SQLite por padrão
 
-This is a single-user, self-hosted tool. Requiring a database server to try it out would cost
-more users than it would ever gain in throughput.
+Esta é uma ferramenta de um único usuário, auto-hospedada. Exigir um servidor de banco para experimentá-la custaria
+mais usuários do que jamais ganharia em throughput.
 
-`Base.type_annotation_map` maps every `datetime` to a `UtcDateTime` decorator that normalizes in
-both directions, because SQLite returns naive datetimes and PostgreSQL returns aware ones —
-without it, `utcnow() - row.created_at` raises `TypeError` on one backend and works on the other.
-SQLite is opened in WAL mode so the API and the automation engine can write concurrently.
-Switching to PostgreSQL is one environment variable (`DATABASE_URL`) and no code change.
+`Base.type_annotation_map` mapeia todo `datetime` para um decorador `UtcDateTime` que normaliza em
+ambas as direções, porque o SQLite retorna datetimes naive e o PostgreSQL retorna aware —
+sem ele, `utcnow() - row.created_at` levanta `TypeError` em um backend e funciona no outro.
+O SQLite é aberto em modo WAL para que a API e o engine de automação possam escrever concorrentemente.
+Trocar para PostgreSQL é uma variável de ambiente (`DATABASE_URL`) e nenhuma mudança de código.
 
-**Trade-off:** SQLite's single-writer model would be a real constraint with many concurrent users.
-For one person and one browser session it is not.
+**Trade-off:** o modelo de escritor único do SQLite seria uma restrição real com muitos usuários concorrentes.
+Para uma pessoa e uma sessão de navegador não é.
 
-### Encrypted cookies rather than a stored password
+### Cookies criptografados em vez de uma senha armazenada
 
-Storing a LinkedIn password would mean the app could log in on its own, which is convenient and
-indefensible: a self-hosted app on a laptop is a poor place for a credential that unlocks your
-professional identity, and automated logins are far more likely to trip a security challenge than
-an existing session is.
+Armazenar uma senha do LinkedIn significaria que o app poderia fazer login sozinho, o que é conveniente e
+indefensável: um app auto-hospedado num laptop é um lugar ruim para uma credencial que destrava a sua
+identidade profissional, e logins automatizados são muito mais propensos a disparar um desafio de segurança que
+uma sessão existente.
 
-So the user logs in manually in the visible browser, and only the resulting session state is
-persisted, Fernet-encrypted with a key derived via HKDF-SHA256 from `ENCRYPTION_KEY` (falling back
-to `SECRET_KEY`). There is no password column in the schema for LinkedIn, and
-`LinkedInAccountRead` exposes only a display name and a connection flag — no cookie ever leaves
-through the API.
+Então o usuário faz login manualmente no navegador visível, e apenas o estado de sessão resultante é
+persistido, criptografado com Fernet e uma chave derivada via HKDF-SHA256 de `ENCRYPTION_KEY` (recorrendo
+a `SECRET_KEY`). Não há coluna de senha no schema para o LinkedIn, e
+`LinkedInAccountRead` expõe apenas um nome de exibição e uma flag de conexão — nenhum cookie jamais sai
+pela API.
 
-**Trade-off:** sessions expire, and the user has to log in again by hand. Also, changing
-`ENCRYPTION_KEY` renders stored sessions unreadable — recoverable by reconnecting, but a real
-paper cut. Both are accepted costs.
+**Trade-off:** as sessões expiram, e o usuário tem que fazer login de novo à mão. Além disso, mudar
+`ENCRYPTION_KEY` torna as sessões armazenadas ilegíveis — recuperável reconectando, mas um baita
+incômodo. Ambos são custos aceitos.
 
-### A cooperative kill switch instead of process termination
+### Um botão de parada cooperativo em vez de terminação de processo
 
-Killing the browser process mid-application can leave a half-filled form submitted or a database
-row in a nonsense state. A flag checked between steps stops cleanly, closes the modal, records the
-reason, and marks the run `STOPPED`.
+Matar o processo do navegador no meio de uma candidatura pode deixar um formulário preenchido pela metade enviado ou uma linha do banco
+num estado sem sentido. Uma flag verificada entre etapas para de forma limpa, fecha o modal, registra o
+motivo e marca a execução como `STOPPED`.
 
-**Trade-off:** stopping is not instantaneous — it takes effect at the next step boundary, which
-can be a few seconds into a randomized delay.
+**Trade-off:** parar não é instantâneo — tem efeito na próxima fronteira de etapa, que
+pode estar a alguns segundos dentro de um atraso aleatório.
 
-## Failure model
+## Modelo de falha
 
-The [error hierarchy](../backend/app/automation/errors.py) separates "retry" from "stop now".
+A [hierarquia de erros](../backend/app/automation/errors.py) separa "repetir" de "parar agora".
 
-| Error | `recoverable` | What the engine does |
+| Erro | `recoverable` | O que o engine faz |
 |---|---|---|
-| `BrowserNotReadyError` | yes | Restart the browser session |
-| `UnexpectedPageError` | yes | Retry the step, then fail the job and move on |
-| `ElementNotFoundError` | yes | Same, but the message points at `selectors.py` |
-| `NotLoggedInError` | no | Halt; the user must log in manually |
-| `SecurityCheckpointError` | no | **Halt everything.** Run → `BLOCKED`, `automation.blocked` published |
-| `EasyApplyUnavailableError` | no | Skip the job |
-| `AlreadyAppliedError` | no | Mark the job as applied, skip |
-| `ThrottleLimitError` | no | Stop the run; a guard rail refused the action |
-| `ManualInputRequiredError` | no | Leave the application in `AWAITING_REVIEW` with `needs_human_input` |
-| `StopRequestedError` | no | Kill switch; run → `STOPPED` |
+| `BrowserNotReadyError` | sim | Reinicia a sessão do navegador |
+| `UnexpectedPageError` | sim | Repete a etapa, depois falha a vaga e segue |
+| `ElementNotFoundError` | sim | O mesmo, mas a mensagem aponta para `selectors.py` |
+| `NotLoggedInError` | não | Para; o usuário precisa fazer login manualmente |
+| `SecurityCheckpointError` | não | **Para tudo.** Execução → `BLOCKED`, `automation.blocked` publicado |
+| `EasyApplyUnavailableError` | não | Pula a vaga |
+| `AlreadyAppliedError` | não | Marca a vaga como candidatada, pula |
+| `ThrottleLimitError` | não | Para a execução; uma salvaguarda recusou a ação |
+| `ManualInputRequiredError` | não | Deixa a candidatura em `AWAITING_REVIEW` com `needs_human_input` |
+| `StopRequestedError` | não | Botão de parada; execução → `STOPPED` |
 
-`SecurityCheckpointError` is never caught and worked around. There is no retry loop, no
-alternative selector, no attempt to solve anything. See [safety.md](safety.md#security-checkpoints).
+`SecurityCheckpointError` nunca é capturado e contornado. Não há loop de repetição, nenhum
+seletor alternativo, nenhuma tentativa de resolver nada. Veja [safety.md](safety.md#security-checkpoints).
 
-## Lifecycles
+## Ciclos de vida
 
 ```
 JobStatus:          discovered -> analyzed -> queued -> applied
@@ -264,5 +264,5 @@ AutomationRunStatus: pending -> running -> completed
                                   \-> failed
 ```
 
-`awaiting_review` is the only state a prepared application can be in before a human acts. Nothing
-transitions out of it automatically.
+`awaiting_review` é o único estado em que uma candidatura preparada pode estar antes de um humano agir. Nada
+transiciona para fora dele automaticamente.

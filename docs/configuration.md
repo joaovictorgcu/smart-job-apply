@@ -1,100 +1,100 @@
-# Configuration
+# Configuração
 
-There are two layers of configuration, and they answer different questions.
+Há duas camadas de configuração, e elas respondem perguntas diferentes.
 
-| Layer | Where it lives | Scope | Changed by |
+| Camada | Onde vive | Escopo | Alterada por |
 |---|---|---|---|
-| **Settings** | `.env` file or environment variables | Process-wide | Editing `.env` and restarting |
-| **UserSettings** | `user_settings` table in the database | Per user | The Settings page, or `PUT /api/settings` |
+| **Settings** | arquivo `.env` ou variáveis de ambiente | Por processo | Editando `.env` e reiniciando |
+| **UserSettings** | tabela `user_settings` no banco de dados | Por usuário | A página de Configurações, ou `PUT /api/settings` |
 
-Settings are deployment concerns: keys, database URL, whether the browser is visible. UserSettings are
-operating concerns: how many applications a day, how long to wait between actions, whether dry-run is on.
-Several `DEFAULT_*` settings seed a new user's UserSettings row; after that, the per-user values win.
+Settings são preocupações de implantação: chaves, URL do banco, se o navegador é visível. UserSettings são
+preocupações de operação: quantas candidaturas por dia, quanto esperar entre ações, se o modo de teste está ligado.
+Várias configurações `DEFAULT_*` semeiam a linha de UserSettings de um novo usuário; depois disso, os valores por usuário vencem.
 
 ---
 
-## Environment variables (`Settings`)
+## Variáveis de ambiente (`Settings`)
 
-Defined in [`backend/app/config.py`](../backend/app/config.py). The env var name is the field name in
-upper case — there is no prefix. Both `<repo root>/.env` and `backend/.env` are read, and real
-environment variables take precedence over both.
+Definidas em [`backend/app/config.py`](../backend/app/config.py). O nome da variável de ambiente é o nome do campo em
+maiúsculas — não há prefixo. Tanto `<raiz do repo>/.env` quanto `backend/.env` são lidos, e variáveis de
+ambiente reais têm precedência sobre ambos.
 
-### Application
+### Aplicação
 
-| Variable | Type | Default | What it does |
+| Variável | Tipo | Padrão | O que faz |
 |---|---|---|---|
-| `APP_NAME` | string | `LinkedIn Auto Apply` | Display name used in the API title. |
-| `ENVIRONMENT` | string | `development` | Free-form label for the deployment (`development`, `production`). |
-| `DEBUG` | bool | `false` | Turns on SQLAlchemy statement echoing. Leave off outside local debugging — statements can contain your data. |
+| `APP_NAME` | string | `LinkedIn Auto Apply` | Nome de exibição usado no título da API. |
+| `ENVIRONMENT` | string | `development` | Rótulo livre para a implantação (`development`, `production`). |
+| `DEBUG` | bool | `false` | Liga o echo de statements do SQLAlchemy. Deixe desligado fora de depuração local — statements podem conter os seus dados. |
 
-### Security
+### Segurança
 
-| Variable | Type | Default | What it does |
+| Variável | Tipo | Padrão | O que faz |
 |---|---|---|---|
-| `SECRET_KEY` | string | random per process | Signs JWTs. **Set this explicitly.** With the default, a new random key is generated on every start, so every login is invalidated by a restart. |
-| `ENCRYPTION_KEY` | string | falls back to `SECRET_KEY` | Source material for the HKDF-derived Fernet key that encrypts LinkedIn session cookies at rest. **Changing it makes already-stored sessions permanently unreadable** — the fix is to reconnect LinkedIn, but you will have to. |
-| `JWT_ALGORITHM` | string | `HS256` | JWT signing algorithm. No reason to change it. |
-| `ACCESS_TOKEN_TTL_MINUTES` | int | `720` (12 h) | Access-token lifetime. Shorter means more re-logins; longer means a stolen token is useful for longer. |
+| `SECRET_KEY` | string | aleatório por processo | Assina os JWTs. **Defina isto explicitamente.** Com o padrão, uma nova chave aleatória é gerada a cada início, então todo login é invalidado por um reinício. |
+| `ENCRYPTION_KEY` | string | recorre a `SECRET_KEY` | Material de origem para a chave Fernet derivada por HKDF que criptografa os cookies de sessão do LinkedIn em repouso. **Mudá-la torna as sessões já armazenadas permanentemente ilegíveis** — a correção é reconectar o LinkedIn, mas você terá que fazer. |
+| `JWT_ALGORITHM` | string | `HS256` | Algoritmo de assinatura dos JWTs. Não há motivo para mudar. |
+| `ACCESS_TOKEN_TTL_MINUTES` | int | `720` (12 h) | Tempo de vida do access token. Mais curto significa mais relogins; mais longo significa que um token roubado é útil por mais tempo. |
 
-Generate both keys with:
+Gere ambas as chaves com:
 
 ```bash
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-### AI
+### IA
 
-| Variable | Type | Default | What it does |
+| Variável | Tipo | Padrão | O que faz |
 |---|---|---|---|
-| `ANTHROPIC_API_KEY` | string | `""` | Your Anthropic API key. Empty means `Settings.ai_enabled` is `false`: scoring, cover letters, and screening suggestions are unavailable and `GET /api/ai/status` reports `configured: false`. Everything else still works; you fill the forms yourself. |
-| `ANTHROPIC_MODEL` | string | `claude-opus-5` | The model used for scoring, cover letters, and screening answers. |
-| `SCORING_EFFORT` | string | `low` | Reasoning effort for bulk scoring, where many jobs are graded and cost dominates. Cover-letter generation uses `high` regardless. Valid values are `low`, `medium`, `high`, `xhigh`, `max`. |
+| `ANTHROPIC_API_KEY` | string | `""` | A sua chave de API da Anthropic. Vazia significa que `Settings.ai_enabled` é `false`: pontuação, cartas de apresentação e sugestões de triagem ficam indisponíveis e `GET /api/ai/status` reporta `configured: false`. Todo o resto ainda funciona; você preenche os formulários você mesmo. |
+| `ANTHROPIC_MODEL` | string | `claude-opus-5` | O modelo usado para pontuação, cartas de apresentação e respostas de triagem. |
+| `SCORING_EFFORT` | string | `low` | Esforço de raciocínio para pontuação em massa, em que muitas vagas são avaliadas e o custo domina. A geração de cartas de apresentação usa `high` de qualquer forma. Valores válidos são `low`, `medium`, `high`, `xhigh`, `max`. |
 
-A user can override the model for their own account with `UserSettings.ai_model`; when that is null, `ANTHROPIC_MODEL` applies.
+Um usuário pode sobrescrever o modelo para a própria conta com `UserSettings.ai_model`; quando isso é nulo, `ANTHROPIC_MODEL` se aplica.
 
-### Database
+### Banco de dados
 
-| Variable | Type | Default | What it does |
+| Variável | Tipo | Padrão | O que faz |
 |---|---|---|---|
-| `DATABASE_URL` | string | `""` | Empty means SQLite at `<DATA_DIR>/app.db` (WAL mode). Set to a full async URL to switch backends — for PostgreSQL, `postgresql+asyncpg://user:pass@host:5432/dbname`, which needs the `postgres` extra installed. |
+| `DATABASE_URL` | string | `""` | Vazio significa SQLite em `<DATA_DIR>/app.db` (modo WAL). Defina como uma URL async completa para trocar de backend — para PostgreSQL, `postgresql+asyncpg://user:pass@host:5432/dbname`, que precisa do extra `postgres` instalado. |
 
-The driver must be async: `sqlite+aiosqlite://…` or `postgresql+asyncpg://…`. A synchronous URL such as
-`postgresql://…` will fail at engine creation.
+O driver precisa ser async: `sqlite+aiosqlite://…` ou `postgresql+asyncpg://…`. Uma URL síncrona como
+`postgresql://…` vai falhar na criação do engine.
 
-### Automation
+### Automação
 
-| Variable | Type | Default | What it does |
+| Variável | Tipo | Padrão | O que faz |
 |---|---|---|---|
-| `HEADLESS` | bool | `false` | Whether Chromium runs without a window. Keep it `false`: you need to see the browser to log into LinkedIn, and a visible browser is how you notice something going wrong. In Docker the browser runs inside a virtual display you reach over noVNC, so `false` is still correct there. |
-| `MAX_CONCURRENT_SESSIONS` | int | `1` | Browser sessions allowed at once. |
-| `ASSISTED_MODE_ONLY` | bool | `true` | The hard guarantee that nothing is submitted without an explicit, separate, user-confirmed action. |
-| `DEFAULT_DAILY_CAP` | int | `15` | Seeds `UserSettings.daily_cap`. |
-| `DEFAULT_MIN_SCORE` | int | `70` | Seeds `UserSettings.min_score`. |
-| `DEFAULT_ACTION_DELAY_RANGE` | JSON `[float, float]` | `[2.5, 7.0]` | Seeds the per-action delay range, in seconds. |
-| `DEFAULT_APPLY_DELAY_RANGE` | JSON `[float, float]` | `[45.0, 120.0]` | Seeds the between-applications delay range, in seconds. |
-| `DEFAULT_WORKING_HOURS` | JSON `[int, int]` | `[8, 20]` | Seeds the working-hours window, as local hours. |
+| `HEADLESS` | bool | `false` | Se o Chromium roda sem janela. Mantenha `false`: você precisa ver o navegador para fazer login no LinkedIn, e um navegador visível é como você percebe que algo está dando errado. No Docker o navegador roda dentro de um display virtual que você acessa por noVNC, então `false` ainda é o correto lá. |
+| `MAX_CONCURRENT_SESSIONS` | int | `1` | Sessões de navegador permitidas ao mesmo tempo. |
+| `ASSISTED_MODE_ONLY` | bool | `true` | A garantia rígida de que nada é enviado sem uma ação explícita, separada e confirmada pelo usuário. |
+| `DEFAULT_DAILY_CAP` | int | `15` | Semeia `UserSettings.daily_cap`. |
+| `DEFAULT_MIN_SCORE` | int | `70` | Semeia `UserSettings.min_score`. |
+| `DEFAULT_ACTION_DELAY_RANGE` | JSON `[float, float]` | `[2.5, 7.0]` | Semeia a faixa de atraso por ação, em segundos. |
+| `DEFAULT_APPLY_DELAY_RANGE` | JSON `[float, float]` | `[45.0, 120.0]` | Semeia a faixa de atraso entre candidaturas, em segundos. |
+| `DEFAULT_WORKING_HOURS` | JSON `[int, int]` | `[8, 20]` | Semeia a janela de horário, como horas locais. |
 
-> **The three range settings must be written as JSON arrays in `.env`.** `DEFAULT_ACTION_DELAY_RANGE=[3, 9]`
-> works; `DEFAULT_ACTION_DELAY_RANGE=3,9` raises `SettingsError: error parsing value for field
-> "default_action_delay_range"` at import time. Pydantic-settings JSON-decodes complex fields before any
-> validator runs, so the comma-splitting helper in `config.py` only applies to values passed in code and
-> tests. The same is true of `CORS_ORIGINS`.
+> **As três configurações de faixa precisam ser escritas como arrays JSON no `.env`.** `DEFAULT_ACTION_DELAY_RANGE=[3, 9]`
+> funciona; `DEFAULT_ACTION_DELAY_RANGE=3,9` dispara `SettingsError: error parsing value for field
+> "default_action_delay_range"` em tempo de import. O pydantic-settings decodifica campos complexos por JSON antes de qualquer
+> validator rodar, então o helper de split por vírgula em `config.py` só se aplica a valores passados em código e
+> testes. O mesmo vale para `CORS_ORIGINS`.
 
-### Network
+### Rede
 
-| Variable | Type | Default | What it does |
+| Variável | Tipo | Padrão | O que faz |
 |---|---|---|---|
-| `CORS_ORIGINS` | JSON `[string]` | `["http://localhost:5173", "http://127.0.0.1:5173"]` | Origins allowed to call the API. Must be a JSON array in `.env` — for example `CORS_ORIGINS=["http://localhost:5173"]`. Add your LAN address here if you open the dashboard from another machine. |
-| `RATE_LIMIT_DEFAULT` | string | `120/minute` | slowapi rate limit for general endpoints. |
-| `RATE_LIMIT_AUTH` | string | `10/minute` | Tighter limit on the auth endpoints, so `/api/auth/login` cannot be brute-forced. |
+| `CORS_ORIGINS` | JSON `[string]` | `["http://localhost:5173", "http://127.0.0.1:5173"]` | Origens permitidas a chamar a API. Precisa ser um array JSON no `.env` — por exemplo `CORS_ORIGINS=["http://localhost:5173"]`. Adicione o seu endereço de LAN aqui se você abrir o painel de outra máquina. |
+| `RATE_LIMIT_DEFAULT` | string | `120/minute` | Limite de taxa do slowapi para endpoints gerais. |
+| `RATE_LIMIT_AUTH` | string | `10/minute` | Limite mais apertado nos endpoints de autenticação, para que `/api/auth/login` não possa sofrer força bruta. |
 
-### Paths
+### Caminhos
 
-| Variable | Type | Default | What it does |
+| Variável | Tipo | Padrão | O que faz |
 |---|---|---|---|
-| `DATA_DIR` | path | `backend/data` | Root for everything the app writes: `app.db`, `browser_profiles/`, `resumes/`, screenshots. Gitignored, and it contains live session cookies plus your CV — treat it as secret and back it up. |
+| `DATA_DIR` | path | `backend/data` | Raiz de tudo que o app escreve: `app.db`, `browser_profiles/`, `resumes/`, capturas de tela. Está no gitignore, e contém cookies de sessão vivos mais o seu currículo — trate como secreto e faça backup. |
 
-### A working `.env`
+### Um `.env` funcional
 
 ```dotenv
 # --- Required ---
@@ -119,43 +119,43 @@ DEFAULT_WORKING_HOURS=[8, 20]
 
 ---
 
-## Per-user settings (`UserSettings`)
+## Configurações por usuário (`UserSettings`)
 
-Read with `GET /api/settings`, changed with `PUT /api/settings`. Bounds below are enforced by
-[`UserSettingsUpdate`](../backend/app/schemas/user.py); a value outside them is a `422`, not a silent clamp.
+Lidas com `GET /api/settings`, alteradas com `PUT /api/settings`. Os limites abaixo são impostos por
+[`UserSettingsUpdate`](../backend/app/schemas/user.py); um valor fora deles é um `422`, não um recorte silencioso.
 
-### Guard rails
+### Salvaguardas
 
-Loosening these is the one part of configuration that carries real risk, so each row says what you are
-trading away.
+Afrouxar estas é a única parte da configuração que carrega risco real, então cada linha diz o que você está
+abrindo mão.
 
-| Field | Type | Default | Range | What it does — and the risk of loosening it |
+| Campo | Tipo | Padrão | Faixa | O que faz — e o risco de afrouxar |
 |---|---|---|---|---|
-| `daily_cap` | int | `15` | 1–50 | Maximum applications submitted per day. The hard ceiling is 50 because above that the volume stops resembling a person job-hunting and starts resembling a script. Raising it is the single change most likely to draw attention to your account. |
-| `min_score` | int | `70` | 0–100 | Minimum AI fit score before a job is eligible for an application. Lowering it means applying to jobs you are a weaker match for: more employer-side noise, more screening questions the AI cannot answer confidently, and a worse response rate. |
-| `action_delay_min` | float | `2.5` | 0.5–60 | Lower bound of the randomized pause between individual page actions. Below roughly two seconds, click-to-click timing is faster than a human reading the page. |
-| `action_delay_max` | float | `7.0` | 0.5–120 | Upper bound of that pause. Must be ≥ `action_delay_min`. The *range* matters as much as the values: a fixed delay is a fingerprint, a randomized one is not. |
-| `apply_delay_min` | float | `45.0` | 5–600 | Lower bound of the pause between whole applications. Set to 5 s and fifteen applications land inside two minutes — the clearest possible automated pattern. |
-| `apply_delay_max` | float | `120.0` | 5–1800 | Upper bound of that pause. Must be ≥ `apply_delay_min`. |
-| `working_hour_start` | int | `8` | 0–23 | First local hour in which the automation will act. |
-| `working_hour_end` | int | `20` | 1–24 | Last local hour. Must be greater than `working_hour_start`. Opening the window to 0–24 produces 3 a.m. activity every day, which no real job search looks like. |
-| `require_manual_approval` | bool | `true` | — | Requires explicit approval before submission. Along with `ASSISTED_MODE_ONLY`, this is the human-in-the-loop guarantee. Do not turn it off; nothing in the project needs it off. |
-| `dry_run` | bool | `true` | — | While true, the engine performs the whole flow — search, score, open the form, fill it, stop at review — and **never submits**. The only reason to turn it off is that you have watched a few dry runs and are ready to submit real applications. Turn it off deliberately, and turn it back on when you are done. |
+| `daily_cap` | int | `15` | 1–50 | Máximo de candidaturas enviadas por dia. O teto rígido é 50 porque acima disso o volume deixa de parecer uma pessoa procurando emprego e passa a parecer um script. Aumentá-lo é a mudança mais propensa a chamar atenção para a sua conta. |
+| `min_score` | int | `70` | 0–100 | Nota mínima de aderência da IA antes de uma vaga ficar elegível para candidatura. Baixá-la significa se candidatar a vagas com que você combina menos: mais ruído do lado do empregador, mais perguntas de triagem que a IA não consegue responder com confiança, e uma taxa de resposta pior. |
+| `action_delay_min` | float | `2.5` | 0.5–60 | Limite inferior da pausa aleatória entre ações individuais de página. Abaixo de cerca de dois segundos, a temporização clique-a-clique é mais rápida que um humano lendo a página. |
+| `action_delay_max` | float | `7.0` | 0.5–120 | Limite superior dessa pausa. Precisa ser ≥ `action_delay_min`. A *faixa* importa tanto quanto os valores: um atraso fixo é um fingerprint, um aleatório não é. |
+| `apply_delay_min` | float | `45.0` | 5–600 | Limite inferior da pausa entre candidaturas inteiras. Defina como 5 s e quinze candidaturas caem em dois minutos — o padrão automatizado mais claro possível. |
+| `apply_delay_max` | float | `120.0` | 5–1800 | Limite superior dessa pausa. Precisa ser ≥ `apply_delay_min`. |
+| `working_hour_start` | int | `8` | 0–23 | Primeira hora local em que a automação vai agir. |
+| `working_hour_end` | int | `20` | 1–24 | Última hora local. Precisa ser maior que `working_hour_start`. Abrir a janela para 0–24 produz atividade às 3 da manhã todo dia, o que nenhuma busca real de emprego parece. |
+| `require_manual_approval` | bool | `true` | — | Exige aprovação explícita antes do envio. Junto com `ASSISTED_MODE_ONLY`, esta é a garantia de humano-no-circuito. Não desligue; nada no projeto precisa dela desligada. |
+| `dry_run` | bool | `true` | — | Enquanto true, o engine executa o fluxo inteiro — buscar, pontuar, abrir o formulário, preencher, parar na revisão — e **nunca envia**. O único motivo para desligar é que você acompanhou alguns dry runs e está pronto para enviar candidaturas reais. Desligue deliberadamente, e ligue de novo quando terminar. |
 
-### AI preferences
+### Preferências de IA
 
-| Field | Type | Default | What it does |
+| Campo | Tipo | Padrão | O que faz |
 |---|---|---|---|
-| `ai_model` | string \| null | `null` | Overrides `ANTHROPIC_MODEL` for this user. Null uses the environment value. Max 100 chars. |
-| `cover_letter_tone` | string | `profissional` | Tone hint passed to the cover-letter prompt. Any short descriptor works — `professional`, `direct`, `warm`. Max 50 chars. |
-| `content_language` | string | `job` | `job` writes the letter and answers in the language detected from the posting. Pin it to a tag such as `en` or `pt-BR` to always use that language. Max 20 chars. |
-| `generate_cover_letter` | bool | `true` | Whether to draft a cover letter during preparation. Turn it off if you would rather write your own, or to save tokens. |
+| `ai_model` | string \| null | `null` | Sobrescreve `ANTHROPIC_MODEL` para este usuário. Nulo usa o valor do ambiente. Máx. 100 caracteres. |
+| `cover_letter_tone` | string | `profissional` | Dica de tom passada ao prompt da carta de apresentação. Qualquer descritor curto funciona — `professional`, `direct`, `warm`. Máx. 50 caracteres. |
+| `content_language` | string | `job` | `job` escreve a carta e as respostas no idioma detectado do anúncio. Fixe numa tag como `en` ou `pt-BR` para sempre usar aquele idioma. Máx. 20 caracteres. |
+| `generate_cover_letter` | bool | `true` | Se deve gerar uma carta de apresentação durante a preparação. Desligue se preferir escrever a sua, ou para economizar tokens. |
 
-> `cover_letter_tone` and `content_language` default to values that read as Portuguese
-> (`profissional`, `pt-BR` inside `CoverLetter`). They are free-form strings passed to the model, not
-> enumerations — set them to whatever you want.
+> `cover_letter_tone` e `content_language` têm padrões que se leem como português
+> (`profissional`, `pt-BR` dentro de `CoverLetter`). São strings livres passadas ao modelo, não
+> enumerações — defina-os como quiser.
 
-### Example
+### Exemplo
 
 ```bash
 curl -X PUT http://localhost:8000/api/settings \
@@ -166,15 +166,15 @@ curl -X PUT http://localhost:8000/api/settings \
 
 ---
 
-## Which knob do I actually want?
+## Qual botão eu realmente quero?
 
-| Goal | Change |
+| Objetivo | Mudança |
 |---|---|
-| Watch the whole flow without sending anything | `dry_run: true` (the default) |
-| Actually submit applications | `dry_run: false`, then approve each one individually |
-| Fewer, better-matched applications | Raise `min_score`, lower `daily_cap` |
-| Look less like a script | Widen `action_delay_*` and `apply_delay_*`; narrow the working-hours window |
-| Spend less on the API | `SCORING_EFFORT=low`, `generate_cover_letter: false`, lower `Search.max_results` |
-| Write applications in English regardless of the posting | `content_language: "en"` |
-| Move off SQLite | `DATABASE_URL=postgresql+asyncpg://…` plus `pip install -e ".[postgres]"` |
-| Stop losing logins on restart | Set `SECRET_KEY` explicitly |
+| Acompanhar o fluxo inteiro sem enviar nada | `dry_run: true` (o padrão) |
+| Enviar candidaturas de verdade | `dry_run: false`, depois aprovar cada uma individualmente |
+| Menos candidaturas, mais bem combinadas | Aumente `min_score`, baixe `daily_cap` |
+| Parecer menos com um script | Alargue `action_delay_*` e `apply_delay_*`; estreite a janela de horário |
+| Gastar menos com a API | `SCORING_EFFORT=low`, `generate_cover_letter: false`, baixe `Search.max_results` |
+| Escrever candidaturas em inglês independentemente do anúncio | `content_language: "en"` |
+| Sair do SQLite | `DATABASE_URL=postgresql+asyncpg://…` mais `pip install -e ".[postgres]"` |
+| Parar de perder logins no reinício | Defina `SECRET_KEY` explicitamente |

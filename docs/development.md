@@ -1,9 +1,9 @@
-# Development
+# Desenvolvimento
 
-How to work on this codebase. For getting it running at all, see [installation.md](installation.md); for the
-reasoning behind the structure, [architecture.md](architecture.md).
+Como trabalhar neste código. Para colocá-lo para rodar, veja [installation.md](installation.md); para o
+raciocínio por trás da estrutura, [architecture.md](architecture.md).
 
-## Project layout
+## Layout do projeto
 
 ```text
 .
@@ -63,31 +63,31 @@ reasoning behind the structure, [architecture.md](architecture.md).
 └── pyproject.toml
 ```
 
-## Commands
+## Comandos
 
-`make help` lists every target, and the Makefile header gives the PowerShell equivalent of each one for
-Windows without WSL. The raw command is in the third column when you need it.
+`make help` lista todos os alvos, e o cabeçalho do Makefile dá o equivalente em PowerShell de cada um para
+Windows sem WSL. O comando bruto está na terceira coluna quando você precisar.
 
-| Task | Target | Raw command |
+| Tarefa | Alvo | Comando bruto |
 |---|---|---|
-| First-time setup | `make install` | `bash scripts/setup.sh` |
-| Run both processes | `make dev` | `bash scripts/dev.sh` |
-| Backend only | `make dev-backend` | `.venv/bin/python -m uvicorn app.main:app --reload --app-dir backend --port 8000` |
-| Frontend only | `make dev-frontend` | `cd frontend && npm run dev` |
-| Tests | `make test` | `pytest` |
+| Setup inicial | `make install` | `bash scripts/setup.sh` |
+| Rodar os dois processos | `make dev` | `bash scripts/dev.sh` |
+| Só o backend | `make dev-backend` | `.venv/bin/python -m uvicorn app.main:app --reload --app-dir backend --port 8000` |
+| Só o frontend | `make dev-frontend` | `cd frontend && npm run dev` |
+| Testes | `make test` | `pytest` |
 | Lint | `make lint` | `ruff check .` |
-| Format + safe fixes | `make format` | `ruff format . && ruff check . --fix` |
-| Types (backend) | `make typecheck` | `mypy backend/app` |
-| Types (frontend) | — | `cd frontend && npm run typecheck` |
-| Frontend lint | — | `cd frontend && npm run lint` |
-| Production build | `make build` | `cd frontend && npm run build` |
-| Apply migrations | `make migrate` | `cd backend && alembic upgrade head` |
-| New migration | `make migration m="add x"` | `cd backend && alembic revision --autogenerate -m "add x"` |
-| Create an account | `make user` | `python scripts/create_user.py` |
-| Docker up / down / logs | `make docker-up` / `-down` / `-logs` | the same `docker compose` commands |
-| Clean caches and venv | `make clean` | — |
+| Format + correções seguras | `make format` | `ruff format . && ruff check . --fix` |
+| Tipos (backend) | `make typecheck` | `mypy backend/app` |
+| Tipos (frontend) | — | `cd frontend && npm run typecheck` |
+| Lint do frontend | — | `cd frontend && npm run lint` |
+| Build de produção | `make build` | `cd frontend && npm run build` |
+| Aplicar migrations | `make migrate` | `cd backend && alembic upgrade head` |
+| Nova migration | `make migration m="add x"` | `cd backend && alembic revision --autogenerate -m "add x"` |
+| Criar uma conta | `make user` | `python scripts/create_user.py` |
+| Docker up / down / logs | `make docker-up` / `-down` / `-logs` | os mesmos comandos `docker compose` |
+| Limpar caches e venv | `make clean` | — |
 
-Narrower test selections:
+Seleções de teste mais estreitas:
 
 ```bash
 pytest backend/tests/automation/test_kill_switch.py -v
@@ -95,22 +95,22 @@ pytest backend/tests/automation/test_engine_dry_run.py::test_dry_run_never_submi
 pytest -k "checkpoint or kill_switch"
 ```
 
-`make dev` honors `BACKEND_PORT` and `FRONTEND_PORT`, and stops both processes if either one dies — so a
-crashed backend is not hidden behind a still-running Vite server.
+`make dev` respeita `BACKEND_PORT` e `FRONTEND_PORT`, e para os dois processos se qualquer um morrer — então um
+backend que travou não fica escondido atrás de um servidor Vite ainda rodando.
 
-## Code style
+## Estilo de código
 
-Configured in [`pyproject.toml`](../pyproject.toml) — read it rather than guessing.
+Configurado em [`pyproject.toml`](../pyproject.toml) — leia em vez de adivinhar.
 
-- **Ruff**, line length 100, target `py311`, rules `E, F, I, UP, B, SIM, ASYNC`. `B008` is ignored because
-  `Depends()` in a default argument is idiomatic FastAPI. `src = ["backend"]` is what lets isort recognize
-  `app` as first-party; without it every `from app...` import gets sorted into the third-party block.
-- **mypy** with the Pydantic plugin, `ignore_missing_imports = true`. Non-blocking in CI, because Playwright
-  and SQLAlchemy typing produce noise that is not worth failing a build over. Do not let that become an
-  excuse for untyped code.
-- **English only** — identifiers, comments, docstrings, log messages, error messages, UI copy, docs. No
-  exceptions.
-- **Never `print()`.** Use the structured logger:
+- **Ruff**, comprimento de linha 100, alvo `py311`, regras `E, F, I, UP, B, SIM, ASYNC`. `B008` é ignorada porque
+  `Depends()` num argumento padrão é FastAPI idiomático. `src = ["backend"]` é o que faz o isort reconhecer
+  `app` como first-party; sem isso todo import `from app...` é ordenado para o bloco third-party.
+- **mypy** com o plugin do Pydantic, `ignore_missing_imports = true`. Não bloqueante na CI, porque a tipagem do Playwright
+  e do SQLAlchemy produz ruído que não vale falhar um build. Não deixe isso virar uma
+  desculpa para código sem tipos.
+- **Código em inglês** — identificadores, comentários, docstrings, mensagens de log e mensagens de erro ficam em inglês. A
+  **interface (UI) e a documentação são em português.** Não misture idiomas dentro de uma mesma camada.
+- **Nunca `print()`.** Use o logger estruturado:
 
   ```python
   from app.observability import get_logger
@@ -119,21 +119,21 @@ Configured in [`pyproject.toml`](../pyproject.toml) — read it rather than gues
   logger.info("Job scored", extra={"job_id": job.id, "action": "score", "status": "ok"})
   ```
 
-  `extra` keys become top-level JSON fields. `bind_context(user_id=..., run_id=...)` attaches fields to every
-  line emitted by the current task, which is what makes a run's logs greppable.
-- **Comment the "why", not the "what".** A comment that restates the next line is noise; a comment
-  explaining why `check_same_thread=False` is needed, or why a validator is a model validator rather than a
-  field validator, earns its place. The existing code is the reference for the register.
-- **Type everything at boundaries.** Route handlers, service functions, and the dataclasses in
-  `contracts.py` are typed fully. Internal helpers can be looser.
+  As chaves de `extra` viram campos JSON de nível superior. `bind_context(user_id=..., run_id=...)` anexa campos a cada
+  linha emitida pela task atual, que é o que torna os logs de uma execução pesquisáveis com grep.
+- **Comente o "porquê", não o "o quê".** Um comentário que reafirma a próxima linha é ruído; um comentário
+  explicando por que `check_same_thread=False` é necessário, ou por que um validator é um model validator em vez de um
+  field validator, ganha o seu lugar. O código existente é a referência para o registro.
+- **Tipe tudo nas fronteiras.** Handlers de rota, funções de serviço e as dataclasses em
+  `contracts.py` são totalmente tipadas. Helpers internos podem ser mais soltos.
 
-## Adding a route
+## Adicionando uma rota
 
-1. **Schema first**, in `app/schemas/`. Request and response models are the contract; write them before the
-   handler. Reuse `ORMModel` for anything read from the ORM and `Page[T]` for lists.
+1. **Schema primeiro**, em `app/schemas/`. Os modelos de requisição e resposta são o contrato; escreva-os antes do
+   handler. Reutilize `ORMModel` para qualquer coisa lida do ORM e `Page[T]` para listas.
 
-2. **The handler**, in `app/api/routes/<resource>.py`. Use the annotated aliases from `app.api.deps` rather
-   than spelling out `Depends(...)`; every existing route does:
+2. **O handler**, em `app/api/routes/<resource>.py`. Use os aliases anotados de `app.api.deps` em vez
+   de escrever `Depends(...)`; toda rota existente faz assim:
 
    ```python
    from app.api.deps import CurrentUser, LimitDep, OffsetDep, SessionDep
@@ -163,26 +163,26 @@ Configured in [`pyproject.toml`](../pyproject.toml) — read it rather than gues
        )
    ```
 
-   `LimitDep` and `OffsetDep` carry the pagination bounds (1–200 and ≥ 0), so every list endpoint validates
-   them the same way. Rate-limited routes take `request: Request` and the `@limiter.limit(...)` decorator —
-   see `routes/auth.py`.
+   `LimitDep` e `OffsetDep` carregam os limites de paginação (1–200 e ≥ 0), então todo endpoint de lista os valida
+   da mesma forma. Rotas com limite de taxa recebem `request: Request` e o decorador `@limiter.limit(...)` —
+   veja `routes/auth.py`.
 
-3. **Scope every query to the user.** Filter on `user_id` in the query itself, and return `404` — not `403` —
-   when a row exists but belongs to someone else, so ids stay unenumerable.
+3. **Escope toda query ao usuário.** Filtre por `user_id` na própria query, e retorne `404` — não `403` —
+   quando uma linha existe mas pertence a outra pessoa, para que os ids fiquem não enumeráveis.
 
-4. **Register the router** in `app/main.py` under the `/api` prefix.
+4. **Registre o router** em `app/main.py` sob o prefixo `/api`.
 
-5. **Document it** in [api.md](api.md) and, if the frontend calls it, add the client function and its types.
+5. **Documente** em [api.md](api.md) e, se o frontend a chamar, adicione a função do client e os tipos dela.
 
-6. **Test it** — the happy path, the unauthenticated case, and the wrong-user case.
+6. **Teste** — o caminho feliz, o caso não autenticado e o caso de usuário errado.
 
-Business logic does not belong in handlers. A handler validates input, calls a service, and shapes the
-response.
+Lógica de negócio não pertence a handlers. Um handler valida a entrada, chama um serviço e molda a
+resposta.
 
-## Adding a service
+## Adicionando um serviço
 
-Services own the orchestration. They take a session and typed inputs, and they never touch FastAPI or
-Playwright types.
+Os serviços são donos da orquestração. Eles recebem uma sessão e entradas tipadas, e nunca tocam em tipos do FastAPI ou
+do Playwright.
 
 ```python
 async def prepare_application(
@@ -195,10 +195,10 @@ async def prepare_application(
 ) -> Application: ...
 ```
 
-Passing `LinkedInService` and `AIClient` in as parameters — rather than constructing them inside — is what
-makes the function testable with fakes. Keep it that way.
+Passar `LinkedInService` e `AIClient` como parâmetros — em vez de construí-los dentro — é o que
+torna a função testável com fakes. Mantenha assim.
 
-Every meaningful step calls `record_event()` and publishes the live event:
+Todo passo significativo chama `record_event()` e publica o evento ao vivo:
 
 ```python
 from app.observability.audit import record_event, to_live_event
@@ -218,168 +218,168 @@ if (live := to_live_event(event, job_id=job.id)) is not None:
     await manager.publish(user.id, live)
 ```
 
-The durable trail and the live feed come from one place, so they cannot drift.
+A trilha durável e o feed ao vivo vêm de um só lugar, então não podem divergir.
 
-## Adding a frontend page
+## Adicionando uma página no frontend
 
-1. Types in `src/types/api.ts`, mirroring the backend schema. `src/types/events.ts` must stay identical to
-   `app/observability/events.py` — a mismatch there breaks the activity feed silently.
-2. A service function in `src/services/<resource>.ts`, built on the shared `client.ts`, returning the typed
-   response.
-3. A hook in `src/hooks/` for the fetching and mutations (React Query is already wired up).
-4. The page component in `src/pages/`, plus a route entry in `App.tsx` behind `ProtectedRoute`.
-5. Handle the states that actually happen: loading (`Spinner`), empty (`EmptyState`), error (`Toast`), and —
-   for anything touching automation — `blocked` (`CheckpointBanner`).
+1. Tipos em `src/types/api.ts`, espelhando o schema do backend. `src/types/events.ts` precisa ficar idêntico a
+   `app/observability/events.py` — uma divergência ali quebra o feed de atividade silenciosamente.
+2. Uma função de serviço em `src/services/<resource>.ts`, construída sobre o `client.ts` compartilhado, retornando a resposta
+   tipada.
+3. Um hook em `src/hooks/` para o fetching e as mutações (o React Query já está conectado).
+4. O componente da página em `src/pages/`, mais uma entrada de rota em `App.tsx` atrás de `ProtectedRoute`.
+5. Trate os estados que de fato acontecem: carregando (`Spinner`), vazio (`EmptyState`), erro (`Toast`) e —
+   para qualquer coisa que toque a automação — `blocked` (`CheckpointBanner`).
 
-**Any UI that can submit an application must require a distinct, deliberate click**, with the letter and the
-answers visible on screen at that moment. Do not add a "submit all" button, and do not make submit the
-default action of a form.
+**Qualquer UI que possa enviar uma candidatura precisa exigir um clique distinto e deliberado**, com a carta e as
+respostas visíveis na tela naquele momento. Não adicione um botão de "enviar tudo", e não faça o envio ser a
+ação padrão de um formulário.
 
-## Touching the LinkedIn layer
+## Mexendo na camada do LinkedIn
 
-Playwright lives in exactly two places: `app/automation/browser.py` (launch and lifecycle) and
-`app/automation/linkedin/` (`service.py` implements the protocol; `search.py`, `job.py`, and `apply.py` do
-the work). Every selector lives in `app/automation/selectors.py`. Nothing else imports Playwright.
+O Playwright vive em exatamente dois lugares: `app/automation/browser.py` (launch e ciclo de vida) e
+`app/automation/linkedin/` (`service.py` implementa o protocolo; `search.py`, `job.py` e `apply.py` fazem
+o trabalho). Todo seletor vive em `app/automation/selectors.py`. Mais nada importa o Playwright.
 
-When LinkedIn changes its markup:
+Quando o LinkedIn muda a marcação:
 
-1. Reproduce with a headed browser (below) and find what moved.
-2. Fix the selector in `app/automation/selectors.py`. Prefer stable attributes — `aria-label`, `data-*`,
-   `role` — over generated class names, which change constantly.
-3. If a *step* changed rather than a selector, the fix belongs in the `LinkedInService` implementation.
-   `contracts.py` should not need to change; if it does, that is an interface change and needs a look at
-   every caller.
-4. Add or update the fake so the tests cover the new shape.
+1. Reproduza com um navegador com interface (abaixo) e descubra o que mudou.
+2. Corrija o seletor em `app/automation/selectors.py`. Prefira atributos estáveis — `aria-label`, `data-*`,
+   `role` — a nomes de classe gerados, que mudam constantemente.
+3. Se um *passo* mudou em vez de um seletor, a correção pertence à implementação do `LinkedInService`.
+   `contracts.py` não deveria precisar mudar; se precisar, isso é uma mudança de interface e requer uma olhada em
+   cada chamador.
+4. Adicione ou atualize o fake para que os testes cubram o novo formato.
 
-Two rules that are not negotiable:
+Duas regras que não são negociáveis:
 
-- **`fill_and_advance()` must never submit.** It advances the form and stops at review. Submission lives
-  only in `submit()`.
-- **`SecurityCheckpointError` must never be caught and worked around.** Detect, raise, stop. No retry loop,
-  no alternative selector, no attempt to read or solve a challenge.
+- **`fill_and_advance()` nunca pode enviar.** Ela avança o formulário e para na revisão. O envio vive
+  só em `submit()`.
+- **`SecurityCheckpointError` nunca pode ser capturado e contornado.** Detecte, levante, pare. Sem loop de repetição,
+  sem seletor alternativo, sem tentativa de ler ou resolver um desafio.
 
-## Testing
+## Testes
 
-The whole suite runs offline and enforces it: an autouse fixture blocks socket access, so a test that
-reaches for the network fails rather than quietly depending on it. No LinkedIn account, no Anthropic key, no
-browser.
+A suíte inteira roda offline e impõe isso: uma fixture autouse bloqueia o acesso a sockets, então um teste que
+alcança a rede falha em vez de depender silenciosamente dela. Nenhuma conta do LinkedIn, nenhuma chave da Anthropic, nenhum
+navegador.
 
 ```bash
-pytest                     # everything
-pytest -x                  # stop at the first failure
-pytest --lf                # rerun last failures
-pytest -k "checkpoint"     # by name
+pytest                     # tudo
+pytest -x                  # para na primeira falha
+pytest --lf                # reroda as últimas falhas
+pytest -k "checkpoint"     # por nome
 ```
 
-Tests are grouped by what they exercise: `tests/unit/` (schemas, crypto, security, throttle, scoring),
-`tests/api/` (routes, auth, cross-user isolation), `tests/automation/` (dry run, kill switch, checkpoint
-detection), and `tests/integration/` (the whole application flow, dedup, stats).
+Os testes são agrupados pelo que exercitam: `tests/unit/` (schemas, crypto, security, throttle, scoring),
+`tests/api/` (rotas, auth, isolamento entre usuários), `tests/automation/` (dry run, botão de parada, detecção de
+verificação) e `tests/integration/` (o fluxo inteiro da aplicação, dedup, stats).
 
 ### Fixtures
 
-`backend/tests/conftest.py` does the heavy lifting, and several fixtures are `autouse` — you get them
-whether you ask or not:
+`backend/tests/conftest.py` faz o trabalho pesado, e várias fixtures são `autouse` — você as recebe
+querendo ou não:
 
-| Fixture | Scope | What it does |
+| Fixture | Escopo | O que faz |
 |---|---|---|
-| `test_settings` | session, autouse | Points `Settings` at a temp `DATA_DIR` and deterministic keys, and clears the `get_settings` cache. `get_settings` is `lru_cache`d, so anything that changes the environment must invalidate it |
-| `block_network` | autouse | Fails the test if it tries to open a socket. This is what keeps the suite honest about being offline |
-| `cap_sleep` | autouse | Caps `asyncio.sleep`, so the randomized 45–120 s apply delays do not make the suite take an hour |
-| `sleep_spy` | — | Records the durations that *would* have been slept, so guard-rail timing is assertable |
-| `wire_fakes` | autouse | Injects `FakeLinkedInService` and `FakeAIClient` in place of the real adapters |
-| `fake_linkedin` / `fake_ai` | — | The fake instances, for configuring and asserting against |
-| `engine` / `sessionmaker` / `session` | — | In-memory SQLite with the schema created, disposed at teardown so the module-level engine does not leak |
-| `user` / `other_user` | — | Two accounts — `other_user` is how cross-user isolation gets tested |
-| `auth_headers` / `other_auth_headers` | — | Ready-made `Authorization` headers for each |
-| `app` / `client` | — | The FastAPI app with the test sessionmaker wired in, and an `httpx.AsyncClient` against it |
+| `test_settings` | session, autouse | Aponta `Settings` para um `DATA_DIR` temporário e chaves determinísticas, e limpa o cache de `get_settings`. `get_settings` tem `lru_cache`, então qualquer coisa que mude o ambiente precisa invalidá-lo |
+| `block_network` | autouse | Falha o teste se ele tentar abrir um socket. É o que mantém a suíte honesta sobre ser offline |
+| `cap_sleep` | autouse | Limita `asyncio.sleep`, para que os atrasos aleatórios de 45–120 s de candidatura não façam a suíte levar uma hora |
+| `sleep_spy` | — | Registra as durações que *teriam* sido dormidas, para que a temporização das salvaguardas seja assertável |
+| `wire_fakes` | autouse | Injeta `FakeLinkedInService` e `FakeAIClient` no lugar dos adaptadores reais |
+| `fake_linkedin` / `fake_ai` | — | As instâncias falsas, para configurar e fazer asserts |
+| `engine` / `sessionmaker` / `session` | — | SQLite em memória com o schema criado, descartado no teardown para que o engine de nível de módulo não vaze |
+| `user` / `other_user` | — | Duas contas — `other_user` é como o isolamento entre usuários é testado |
+| `auth_headers` / `other_auth_headers` | — | Cabeçalhos `Authorization` prontos para cada uma |
+| `app` / `client` | — | O app FastAPI com o sessionmaker de teste conectado, e um `httpx.AsyncClient` contra ele |
 
-`pyproject.toml` sets `asyncio_mode = "auto"`, so `async def test_...` needs no decorator, and
-`pythonpath = ["backend"]`, so `from app...` resolves.
+`pyproject.toml` define `asyncio_mode = "auto"`, então `async def test_...` não precisa de decorador, e
+`pythonpath = ["backend"]`, então `from app...` resolve.
 
-Build rows with the factories in `backend/tests/fixtures/factories.py` — `create_user`, `create_search`,
-`create_job`, `create_application`, `create_run`, `create_analysis`, plus `make_job_posting`,
-`make_form_question`, `make_profile_context`, and `days_ago` for time-relative data.
+Construa linhas com as factories em `backend/tests/fixtures/factories.py` — `create_user`, `create_search`,
+`create_job`, `create_application`, `create_run`, `create_analysis`, mais `make_job_posting`,
+`make_form_question`, `make_profile_context` e `days_ago` para dados relativos ao tempo.
 
-### The LinkedIn fake
+### O fake do LinkedIn
 
-`LinkedInService` is a `runtime_checkable` `Protocol`, so
-[`FakeLinkedInService`](../backend/tests/fixtures/fake_linkedin.py) just satisfies the signatures — no
-inheritance, no mocking library, no browser. It is a dataclass you configure by field and then assert
-against.
+`LinkedInService` é um `Protocol` `runtime_checkable`, então
+[`FakeLinkedInService`](../backend/tests/fixtures/fake_linkedin.py) apenas satisfaz as assinaturas — sem
+herança, sem biblioteca de mocking, sem navegador. É uma dataclass que você configura por campo e depois faz assert
+contra.
 
-Configure the scenario:
+Configure o cenário:
 
-| Field | Effect |
+| Campo | Efeito |
 |---|---|
-| `postings` / `job_count` | The postings `search_jobs()` returns |
-| `questions` / `unanswered` / `total_steps` | The shape of the Easy Apply form |
-| `checkpoint_on` / `checkpoint_after` / `checkpoint_reason` | Raise `SecurityCheckpointError` from a chosen call, optionally after N successes |
-| `error_on` / `error` | Raise any other error from a chosen call |
-| `logged_in` / `browser_open` | Session state |
-| `already_applied_ids` / `no_easy_apply_ids` | Trigger `AlreadyAppliedError` / `EasyApplyUnavailableError` |
+| `postings` / `job_count` | Os anúncios que `search_jobs()` retorna |
+| `questions` / `unanswered` / `total_steps` | O formato do formulário de Candidatura Simplificada |
+| `checkpoint_on` / `checkpoint_after` / `checkpoint_reason` | Levantar `SecurityCheckpointError` de uma chamada escolhida, opcionalmente após N sucessos |
+| `error_on` / `error` | Levantar qualquer outro erro de uma chamada escolhida |
+| `logged_in` / `browser_open` | Estado da sessão |
+| `already_applied_ids` / `no_easy_apply_ids` | Disparar `AlreadyAppliedError` / `EasyApplyUnavailableError` |
 
-Then assert on what happened:
+Depois faça assert sobre o que aconteceu:
 
-| Field | Records |
+| Campo | Registra |
 |---|---|
-| **`submitted`** | **Job ids that reached `submit()`. This is the assertion that guards assisted mode** |
-| `calls` | Every method called, in order |
-| `opened` | Jobs whose Easy Apply modal was opened |
-| `filled` / `cover_letters` | The answers and letters passed to `fill_and_advance()` |
-| `screenshots` | Capture requests |
+| **`submitted`** | **Ids de vaga que chegaram a `submit()`. Este é o assert que guarda o modo assistido** |
+| `calls` | Todo método chamado, em ordem |
+| `opened` | Vagas cujo modal de Candidatura Simplificada foi aberto |
+| `filled` / `cover_letters` | As respostas e cartas passadas a `fill_and_advance()` |
+| `screenshots` | Requisições de captura |
 
-The module also ships `FakePage`, `FakeLocator`, and `FakeBrowser` — including a `checkpoint()` helper that
-serves the real challenge text in both English and Portuguese — so the *detector* itself can be tested
-without a browser. `make_postings(count)` generates postings in bulk.
+O módulo também traz `FakePage`, `FakeLocator` e `FakeBrowser` — incluindo um helper `checkpoint()` que
+serve o texto real do desafio em inglês e em português — para que o próprio *detector* possa ser testado
+sem um navegador. `make_postings(count)` gera anúncios em massa.
 
-A useful guard, in case the fake drifts from the protocol:
+Uma guarda útil, caso o fake divirja do protocolo:
 
 ```python
 assert isinstance(FakeLinkedInService(), LinkedInService)
 ```
 
-### The AI fake
+### O fake de IA
 
-[`FakeAIClient`](../backend/tests/fixtures/fake_ai.py) returns the real Pydantic models from
-`app/ai/schemas.py` — `JobScore`, `CoverLetter`, `ScreeningAnswer`, `AIUsage` — deterministically. It
-exposes `score_job()`, `write_cover_letter()`, and `answer_questions()`, plus `is_configured()`,
-`call_count(name)` and `usage()` for asserting how often the model was called and what it reported. It can
-be configured to return a chosen score, a chosen `AnswerConfidence`, or to raise `FakeAIError` so the
-refusal-to-manual-entry path gets exercised.
+[`FakeAIClient`](../backend/tests/fixtures/fake_ai.py) retorna os modelos Pydantic reais de
+`app/ai/schemas.py` — `JobScore`, `CoverLetter`, `ScreeningAnswer`, `AIUsage` — deterministicamente. Ele
+expõe `score_job()`, `write_cover_letter()` e `answer_questions()`, mais `is_configured()`,
+`call_count(name)` e `usage()` para verificar com que frequência o modelo foi chamado e o que ele reportou. Pode
+ser configurado para retornar uma nota escolhida, uma `AnswerConfidence` escolhida, ou levantar `FakeAIError` para que o
+caminho de recusa-para-preenchimento-manual seja exercitado.
 
-Setting the confidence to `LOW` is how you test the flagging invariant: `ScreeningAnswer`'s model validator
-sets `needs_review = True` for a low-confidence answer even when the field was left at its default.
+Definir a confiança como `LOW` é como você testa o invariante de sinalização: o model validator de `ScreeningAnswer`
+seta `needs_review = True` para uma resposta de baixa confiança mesmo quando o campo foi deixado no padrão.
 
-### What to test
+### O que testar
 
-| Layer | Cover |
+| Camada | Cobrir |
 |---|---|
-| Schemas | Boundary values, cross-field validators, the `needs_review` auto-flag |
-| Models | Enum round-trips, timezone-aware datetimes on both backends |
-| Auth | Hash/verify, token issue/decode, expiry, the 72-byte bcrypt limit |
-| Crypto | Round-trip, and that a changed key raises `DecryptionError` |
-| Throttle | Daily cap, working hours, delay ranges (assert via `sleep_spy`) |
-| Engine | Checkpoint halt, kill switch, resume from `checkpoint`, dedup |
-| **Approval invariant** | **That preparing never submits, and that submit requires `confirm: true`** |
-| Routes | Happy path, `401`, and cross-user `404` (that is what `other_auth_headers` is for) |
-| WebSocket | Per-user isolation, history replay, that a dead socket does not raise |
+| Schemas | Valores de fronteira, validators entre campos, o auto-flag de `needs_review` |
+| Models | Round-trips de enum, datetimes com timezone em ambos os backends |
+| Auth | Hash/verificação, emissão/decodificação de token, expiração, o limite de 72 bytes do bcrypt |
+| Crypto | Round-trip, e que uma chave alterada levanta `DecryptionError` |
+| Throttle | Limite diário, horário, faixas de atraso (verifique via `sleep_spy`) |
+| Engine | Parada por verificação, botão de parada, retomada a partir de `checkpoint`, dedup |
+| **Invariante de aprovação** | **Que preparar nunca envia, e que enviar exige `confirm: true`** |
+| Rotas | Caminho feliz, `401`, e `404` entre usuários (é para isso que `other_auth_headers` existe) |
+| WebSocket | Isolamento por usuário, replay de histórico, que um socket morto não levanta exceção |
 
-The approval-invariant tests matter most, and they are the reason `FakeLinkedInService.submitted` exists.
-`backend/tests/automation/test_engine_dry_run.py` and
-`backend/tests/integration/test_application_flow.py` are the ones to read first — and if either ever fails,
-stop and fix it before anything else.
+Os testes do invariante de aprovação são os que mais importam, e são o motivo de `FakeLinkedInService.submitted` existir.
+`backend/tests/automation/test_engine_dry_run.py` e
+`backend/tests/integration/test_application_flow.py` são os primeiros a ler — e se qualquer um falhar,
+pare e corrija antes de qualquer outra coisa.
 
-## Debugging the automation with a headed browser
+## Depurando a automação com um navegador com interface
 
-The default is already a visible browser (`HEADLESS=false`), which is most of the battle. Beyond that:
+O padrão já é um navegador visível (`HEADLESS=false`), que é a maior parte da batalha. Além disso:
 
-**Slow it down** so you can watch what happens. Playwright's `slow_mo` adds a delay to every action:
+**Desacelere** para conseguir ver o que acontece. O `slow_mo` do Playwright adiciona um atraso a cada ação:
 
 ```python
 browser = await playwright.chromium.launch(headless=False, slow_mo=500)
 ```
 
-**Use Playwright Inspector** to step through actions and try selectors live:
+**Use o Playwright Inspector** para passar pelas ações e testar seletores ao vivo:
 
 ```bash
 PWDEBUG=1 pytest backend/tests/test_linkedin.py -k easy_apply -s
@@ -389,9 +389,9 @@ PWDEBUG=1 pytest backend/tests/test_linkedin.py -k easy_apply -s
 $env:PWDEBUG=1; pytest backend/tests/test_linkedin.py -k easy_apply -s
 ```
 
-The Inspector's selector playground is the fastest way to find a replacement for a broken selector.
+O playground de seletores do Inspector é a forma mais rápida de encontrar um substituto para um seletor quebrado.
 
-**Capture a trace** and inspect it after the fact — DOM snapshots, network, screenshots per action:
+**Capture um trace** e inspecione-o depois do fato — snapshots de DOM, rede, capturas de tela por ação:
 
 ```python
 await context.tracing.start(screenshots=True, snapshots=True, sources=True)
@@ -403,24 +403,24 @@ await context.tracing.stop(path="trace.zip")
 playwright show-trace trace.zip
 ```
 
-**Read the audit trail first.** Before reaching for the browser, check
-`GET /api/applications/{id}/events` — the `payload` on each event usually names the field, the options, and
-the step where things went wrong. `application_events` exists to make this the first step rather than the
-last.
+**Leia a trilha de auditoria primeiro.** Antes de recorrer ao navegador, verifique
+`GET /api/applications/{id}/events` — o `payload` de cada evento geralmente nomeia o campo, as opções e
+o passo em que as coisas deram errado. `application_events` existe para tornar isto o primeiro passo em vez do
+último.
 
-**Turn off JSON logs** while debugging locally; the human formatter is easier to scan:
+**Desligue os logs JSON** enquanto depura localmente; o formatador humano é mais fácil de ler:
 
 ```python
 configure_logging(level="DEBUG", as_json=False)
 ```
 
-**Under Docker**, the browser is on the virtual display: open <http://localhost:6080> and watch it there.
-`docker compose logs -f` gives you the structured log alongside it.
+**No Docker**, o navegador está no display virtual: abra <http://localhost:6080> e acompanhe por lá.
+`docker compose logs -f` dá o log estruturado ao lado.
 
 ## Migrations
 
-`alembic.ini` lives in `backend/`, so run these from that directory — or use `make migrate` and
-`make migration m="..."` from the repository root, which `cd` for you.
+`alembic.ini` vive em `backend/`, então rode estes a partir desse diretório — ou use `make migrate` e
+`make migration m="..."` a partir da raiz do repositório, que fazem o `cd` por você.
 
 ```bash
 cd backend
@@ -432,43 +432,43 @@ alembic current                                          # where am I
 alembic history --verbose                                # what exists
 ```
 
-In Docker there is nothing to run: the entrypoint applies `alembic upgrade head` on every boot.
+No Docker não há nada a rodar: o entrypoint aplica `alembic upgrade head` em todo boot.
 
-**Always read the generated migration before committing it.** Autogenerate is good at added tables and
-columns and bad at renames — it will happily emit a drop-and-create that destroys data. Rewrite those as
-`op.alter_column(..., new_column_name=...)` by hand.
+**Sempre leia a migration gerada antes de commitá-la.** O autogenerate é bom com tabelas e colunas
+adicionadas e ruim com renomeações — ele vai alegremente emitir um drop-and-create que destrói dados. Reescreva essas como
+`op.alter_column(..., new_column_name=...)` à mão.
 
-`backend/migrations/versions` is excluded from ruff, so generated files are not reformatted into
-inconsistency.
+`backend/migrations/versions` é excluído do ruff, então arquivos gerados não são reformatados para uma
+inconsistência.
 
-The workflow for a schema change:
+O fluxo para uma mudança de schema:
 
-1. Edit the model in `app/models/`.
+1. Edite o model em `app/models/`.
 2. `make migration m="..."`.
-3. Read the file. Fix the renames. Check that the downgrade actually reverses the upgrade.
-4. `alembic upgrade head`, then `alembic downgrade -1`, then `alembic upgrade head` again — a migration that
-   cannot round-trip is a migration you cannot back out of.
-5. Update the schema section of [architecture.md](architecture.md) if a table's purpose changed.
-6. Commit the model change and the migration together.
+3. Leia o arquivo. Corrija as renomeações. Verifique que o downgrade de fato reverte o upgrade.
+4. `alembic upgrade head`, depois `alembic downgrade -1`, depois `alembic upgrade head` de novo — uma migration que
+   não consegue fazer round-trip é uma migration da qual você não consegue voltar atrás.
+5. Atualize a seção de schema de [architecture.md](architecture.md) se o propósito de uma tabela mudou.
+6. Commite a mudança do model e a migration juntas.
 
-`init_models()` creates missing tables on startup as a convenience for people running without Alembic. It
-does not alter existing tables, so it is not a substitute for a migration.
+`init_models()` cria tabelas faltantes na inicialização como conveniência para quem roda sem o Alembic. Ele
+não altera tabelas existentes, então não é substituto de uma migration.
 
 ## CI
 
-[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on push and pull request:
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) roda no push e no pull request:
 
-- **backend**, matrixed over Python 3.11 and 3.12 — `ruff check`, `mypy` (`continue-on-error`), `pytest`.
+- **backend**, em matriz sobre Python 3.11 e 3.12 — `ruff check`, `mypy` (`continue-on-error`), `pytest`.
 - **frontend** — `npm ci`, `npm run typecheck`, `npm run build`.
 
-pip and npm caches are keyed on the lockfiles, and `concurrency` cancels superseded runs on a branch.
-Chromium is deliberately **not** installed in CI: the suite runs against the fakes, so downloading a browser
-would add minutes for nothing.
+Os caches de pip e npm são chaveados nos lockfiles, e `concurrency` cancela execuções substituídas numa branch.
+O Chromium deliberadamente **não** é instalado na CI: a suíte roda contra os fakes, então baixar um navegador
+adicionaria minutos por nada.
 
-No secrets are configured and none are needed, because the tests are offline. If a test of yours needs a
-network call or an API key, it belongs behind a marker and outside CI.
+Nenhum segredo é configurado e nenhum é necessário, porque os testes são offline. Se um teste seu precisar de uma
+chamada de rede ou uma chave de API, ele pertence atrás de um marker e fora da CI.
 
-Run the same checks locally before pushing:
+Rode as mesmas verificações localmente antes de fazer push:
 
 ```bash
 make lint && make typecheck && make test

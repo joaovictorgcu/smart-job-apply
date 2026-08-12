@@ -1,208 +1,208 @@
-# Safety, risk, and ethics
+# Segurança, risco e ética
 
-Read this before you run the tool, not after. It is the honest version.
+Leia isto antes de rodar a ferramenta, não depois. É a versão honesta.
 
-## The core conflict
+## O conflito central
 
-LinkedIn's User Agreement prohibits accessing the service with automated means — scrapers, bots, and
-browser automation are all named. This project automates the LinkedIn web interface. There is no reading
-of the Agreement under which that is permitted.
+O Contrato de Usuário do LinkedIn proíbe acessar o serviço por meios automatizados — scrapers, bots e
+automação de navegador estão todos citados. Este projeto automatiza a interface web do LinkedIn. Não existe leitura
+do Contrato sob a qual isso seja permitido.
 
-LinkedIn does not offer a public API for searching jobs or submitting applications. There is no compliant
-path to the same outcome. That is *why* this project drives a browser, and it is not a justification —
-it is the reason the risk exists and cannot be engineered away.
+O LinkedIn não oferece uma API pública para buscar vagas ou enviar candidaturas. Não há caminho em conformidade
+para o mesmo resultado. É *por isso* que este projeto dirige um navegador, e não é uma justificativa —
+é o motivo de o risco existir e não poder ser eliminado por engenharia.
 
-**What that means for you concretely:** LinkedIn may restrict your account, require identity
-verification, or ban it permanently, at their discretion, with no appeal you are entitled to. Your
-professional network, your message history, your job-application history, and your profile are all in that
-account. Weigh that against the time this tool saves you. For some people that trade is clearly not worth
-it, and the right answer is to close this repository and apply by hand.
+**O que isso significa para você concretamente:** o LinkedIn pode restringir a sua conta, exigir verificação
+de identidade ou bani-la permanentemente, a critério dele, sem recurso a que você tenha direito. A sua rede
+profissional, o seu histórico de mensagens, o seu histórico de candidaturas e o seu perfil estão todos nessa
+conta. Pese isso contra o tempo que esta ferramenta economiza. Para algumas pessoas essa troca claramente não vale
+a pena, e a resposta certa é fechar este repositório e se candidatar à mão.
 
-## What the guard rails do
+## O que as salvaguardas fazem
 
-| Guard rail | What it actually protects against |
+| Salvaguarda | Contra o que ela realmente protege |
 |---|---|
-| Randomized action delays (2.5–7 s) | Machine-timed clicks firing back-to-back, hammering the service with no room for you to step in |
-| Randomized apply delays (45–120 s) | Bursts of applications inside a few seconds |
-| Daily cap (15, hard max 50) | Volume that no human job search produces |
-| Working-hours window (08:00–20:00) | Activity at 4 a.m. every day |
-| One browser session | Parallel sessions from one account |
-| Per-run result cap (`max_results`, ≤ 100) | Long scraping sweeps across dozens of result pages |
-| Visible (non-headless) browser | Silent failure — you can see what is happening and take over |
-| Human approval before every submission | Sending applications you did not read |
+| Atrasos de ação aleatórios (2,5–7 s) | Cliques cronometrados por máquina disparando um atrás do outro, martelando o serviço sem espaço para você intervir |
+| Atrasos de candidatura aleatórios (45–120 s) | Rajadas de candidaturas em poucos segundos |
+| Limite diário (15, máximo rígido 50) | Volume que nenhuma busca humana de emprego produz |
+| Janela de horário (08:00–20:00) | Atividade às 4 da manhã todo dia |
+| Uma única sessão de navegador | Sessões paralelas de uma mesma conta |
+| Limite de resultados por execução (`max_results`, ≤ 100) | Longas varreduras de coleta por dezenas de páginas de resultados |
+| Navegador visível (não headless) | Falha silenciosa — você vê o que está acontecendo e assume o controle |
+| Aprovação humana antes de cada envio | Enviar candidaturas que você não leu |
 
-Together these keep the tool operating conservatively — modest volume, unhurried pacing, one session at a
-time, and a human approving every submission rather than a script running unattended. That is a meaningful
-reduction in risk, and it is also simply the responsible way to drive someone else's service.
+Juntas, elas mantêm a ferramenta operando de forma conservadora — volume modesto, ritmo sem pressa, uma sessão por
+vez e um humano aprovando cada envio em vez de um script rodando sozinho. Isso é uma redução significativa
+de risco, e é também simplesmente a forma responsável de dirigir o serviço de outra pessoa.
 
-## What the guard rails do not do
+## O que as salvaguardas não fazem
 
-They do not make automation acceptable to LinkedIn, and they cannot hide that it is automation — it would be
-dishonest to imply otherwise.
+Elas não tornam a automação aceitável para o LinkedIn, e não conseguem esconder que é automação — seria
+desonesto sugerir o contrário.
 
-- **Browser fingerprinting still applies.** Playwright-driven Chromium is distinguishable from a
-  hand-driven browser through automation flags, rendering and timing characteristics, and behavioral
-  telemetry. This project makes no attempt to defeat fingerprinting.
-- **Behavior in aggregate is still unusual.** Even at a human pace, a session that visits job pages and
-  opens Easy Apply modals in a consistent sequence, day after day, has a shape.
-- **Server-side signals are invisible to us.** LinkedIn's anti-automation systems are not documented and
-  change without notice. Nothing here can be tuned against them.
-- **The risk is not proportional to volume alone.** A single unlucky session can trip a check. A cautious
-  configuration lowers the odds; it does not create a safe threshold.
-- **No guard rail protects you from a bad application.** Delays and caps govern pace and volume, not
-  correctness. Whether the cover letter is accurate and the screening answers are true is entirely on the
-  human review step.
+- **O fingerprinting de navegador ainda se aplica.** O Chromium dirigido pelo Playwright é distinguível de um
+  navegador dirigido à mão por flags de automação, características de renderização e temporização, e telemetria
+  comportamental. Este projeto não faz nenhuma tentativa de derrotar o fingerprinting.
+- **O comportamento no agregado ainda é incomum.** Mesmo num ritmo humano, uma sessão que visita páginas de vaga e
+  abre modais de Candidatura Simplificada numa sequência consistente, dia após dia, tem um formato.
+- **Sinais do lado do servidor são invisíveis para nós.** Os sistemas anti-automação do LinkedIn não são documentados e
+  mudam sem aviso. Nada aqui pode ser ajustado contra eles.
+- **O risco não é proporcional só ao volume.** Uma única sessão azarada pode disparar uma verificação. Uma configuração
+  cautelosa reduz as chances; ela não cria um limiar seguro.
+- **Nenhuma salvaguarda protege você de uma candidatura ruim.** Atrasos e limites governam ritmo e volume, não
+  correção. Se a carta de apresentação é precisa e as respostas de triagem são verdadeiras depende inteiramente da
+  etapa de revisão humana.
 
-**Do not loosen the guard rails to go faster.** Every knob in
-[configuration.md](configuration.md#guard-rails) says what you are trading. The defaults are conservative
-on purpose.
+**Não afrouxe as salvaguardas para ir mais rápido.** Cada botão em
+[configuration.md](configuration.md#guard-rails) diz o que você está trocando. Os padrões são conservadores
+de propósito.
 
-## The human-approval invariant
+## O invariante da aprovação humana
 
-This is the one property the project treats as non-negotiable: **nothing submits a LinkedIn application
-without an explicit, separate, user-confirmed action.**
+Esta é a única propriedade que o projeto trata como inegociável: **nada envia uma candidatura do LinkedIn
+sem uma ação explícita, separada e confirmada pelo usuário.**
 
-It is enforced structurally rather than by a setting, in four independent places:
+Ela é imposta estruturalmente, e não por uma configuração, em quatro lugares independentes:
 
-1. **The service contract.** `LinkedInService.fill_and_advance()` is specified to advance the Easy Apply
-   form and halt at the review step. It has no code path to submission. `submit()` is a separate method.
-2. **The API shape.** Preparing applications (`POST /api/automation/prepare`) and submitting one
-   (`POST /api/applications/{id}/submit`) are different endpoints. Prepare requires `confirmed: true` and
-   acts on a batch; submit requires `confirm: true` and acts on exactly one application, by id. There is
-   no bulk-submit endpoint.
-3. **The state machine.** A prepared application sits in `awaiting_review`. Nothing moves it out of that
-   state automatically.
-4. **The defaults.** `ASSISTED_MODE_ONLY=true`, `require_manual_approval=true`, `dry_run=true`.
+1. **O contrato do serviço.** `LinkedInService.fill_and_advance()` é especificado para avançar o formulário de
+   Candidatura Simplificada e parar na etapa de revisão. Ele não tem caminho de código para o envio. `submit()` é um método separado.
+2. **O formato da API.** Preparar candidaturas (`POST /api/automation/prepare`) e enviar uma
+   (`POST /api/applications/{id}/submit`) são endpoints diferentes. Preparar exige `confirmed: true` e
+   age sobre um lote; enviar exige `confirm: true` e age sobre exatamente uma candidatura, por id. Não há
+   endpoint de envio em massa.
+3. **A máquina de estados.** Uma candidatura preparada fica em `awaiting_review`. Nada a tira desse
+   estado automaticamente.
+4. **Os padrões.** `ASSISTED_MODE_ONLY=true`, `require_manual_approval=true`, `dry_run=true`.
 
-A fully-automatic mode is not an unfinished feature. It is a deliberate refusal, and a pull request that
-weakens any of the four points above will not be merged — see [CONTRIBUTING.md](../CONTRIBUTING.md).
+Um modo totalmente automático não é um recurso inacabado. É uma recusa deliberada, e um pull request que
+enfraqueça qualquer um dos quatro pontos acima não será aceito — veja [CONTRIBUTING.md](../CONTRIBUTING.md).
 
-### Dry-run mode
+### Modo de teste (dry run)
 
-`dry_run` defaults to `true`. In that state the engine does everything except the final click: it searches,
-scores, opens the form, fills the fields, attaches the résumé, and stops at review. Applications created
-during a dry run are marked `was_dry_run = true`, so your history distinguishes rehearsals from real
-submissions.
+`dry_run` tem padrão `true`. Nesse estado o engine faz tudo, exceto o clique final: ele busca,
+pontua, abre o formulário, preenche os campos, anexa o currículo e para na revisão. Candidaturas criadas
+durante um dry run são marcadas com `was_dry_run = true`, para que o seu histórico distinga ensaios de envios
+reais.
 
-Run in dry-run mode until you have watched the whole flow at least once and read a couple of drafted
-applications end to end. Then turn it off deliberately.
+Rode em modo de teste até ter acompanhado o fluxo inteiro pelo menos uma vez e lido algumas candidaturas
+geradas de ponta a ponta. Depois desligue deliberadamente.
 
-## Security checkpoints
+## Verificações de segurança
 
-If a CAPTCHA, a "security verification" screen, an "unusual activity" notice, or any equivalent challenge
-appears, the automation raises `SecurityCheckpointError` and stops.
+Se um CAPTCHA, uma tela de "verificação de segurança", um aviso de "atividade incomum" ou qualquer desafio
+equivalente aparecer, a automação levanta `SecurityCheckpointError` e para.
 
-What happens on that path:
+O que acontece nesse caminho:
 
-1. The run's status becomes `BLOCKED` and `blocked_reason` is recorded.
-2. An `automation.blocked` event is published to the dashboard.
-3. No retry. No alternative selector. No attempt to read, guess, or route around the challenge.
+1. O status da execução vira `BLOCKED` e `blocked_reason` é registrado.
+2. Um evento `automation.blocked` é publicado no painel.
+3. Sem repetição. Sem seletor alternativo. Sem tentativa de ler, adivinhar ou contornar o desafio.
 
-**Solve it yourself, in the browser window, as yourself.** Then decide whether to continue. If checkpoints
-appear repeatedly, that is LinkedIn telling you the activity looks automated — stop using the tool on that
-account rather than tuning delays until the warnings go away.
+**Resolva você mesmo, na janela do navegador, como você mesmo.** Depois decida se continua. Se as verificações
+aparecerem repetidamente, é o LinkedIn dizendo que a atividade parece automatizada — pare de usar a ferramenta nessa
+conta em vez de ajustar atrasos até os avisos sumirem.
 
-There is no configuration option to bypass a checkpoint, and adding one is out of scope for this project.
+Não há opção de configuração para contornar uma verificação, e adicionar uma está fora de escopo para este projeto.
 
-## Passwords and session data
+## Senhas e dados de sessão
 
-**The project never asks for, receives, or stores your LinkedIn password.** There is no field for it in
-the schema, no parameter for it in the API, and no prompt for it in the UI.
+**O projeto nunca pede, recebe ou armazena a sua senha do LinkedIn.** Não há campo para ela no
+schema, nem parâmetro para ela na API, nem prompt para ela na UI.
 
-The flow is: the automation opens a visible Chromium window, you log in by hand exactly as you would
-normally — including two-factor authentication — and only the resulting session state is persisted.
+O fluxo é: a automação abre uma janela visível do Chromium, você faz login à mão exatamente como faria
+normalmente — incluindo a autenticação de dois fatores — e apenas o estado de sessão resultante é persistido.
 
-That state is encrypted at rest with Fernet (AES-128-CBC + HMAC), using a key derived via HKDF-SHA256 from
-`ENCRYPTION_KEY` (falling back to `SECRET_KEY`). `LinkedInAccountRead`, the only schema that exposes the
-account over the API, carries a display name, a connected flag, and a timestamp — no cookie ever leaves
-through an endpoint.
+Esse estado é criptografado em repouso com Fernet (AES-128-CBC + HMAC), usando uma chave derivada via HKDF-SHA256 de
+`ENCRYPTION_KEY` (recorrendo a `SECRET_KEY`). `LinkedInAccountRead`, o único schema que expõe a
+conta pela API, carrega um nome de exibição, uma flag de conectado e um timestamp — nenhum cookie jamais sai
+por um endpoint.
 
-Changing `ENCRYPTION_KEY` makes stored sessions unreadable. That is recoverable: reconnect LinkedIn and log
-in again.
+Mudar `ENCRYPTION_KEY` torna as sessões armazenadas ilegíveis. Isso é recuperável: reconecte o LinkedIn e faça
+login de novo.
 
-## What is stored, and where
+## O que é armazenado, e onde
 
-| Data | Location | Sensitivity |
+| Dado | Local | Sensibilidade |
 |---|---|---|
-| Your app account password | `users.hashed_password` | bcrypt hash, not reversible |
-| LinkedIn session cookies | `linkedin_accounts.encrypted_storage_state` | **Live credentials.** Encrypted at rest; anyone who has both this row and your `ENCRYPTION_KEY` can act as you on LinkedIn |
-| The encryption key itself (Docker) | `backend/data/.secrets.env`, mode `600` | **The key to the row above.** Generated on first boot and kept on the data volume so restarts do not invalidate your session — which also means a copy of that volume contains both the lock and the key |
-| Browser profile directory | `backend/data/browser_profiles/` | May contain further session artifacts written by Chromium |
-| Your CV, as uploaded | `backend/data/resumes/` | Personal data — name, address, phone, work history |
-| Your CV, as text | `profiles.resume_text` | Same, in the database |
-| Answer bank | `profiles.answer_bank` | Salary expectations, notice period, work authorization |
-| Job descriptions and scores | `jobs` | Low |
-| Drafted letters and answers | `applications` | Personal, and sent to employers once approved |
-| AI call records | `ai_analyses` | Raw model output, token counts, cost |
-| Audit trail | `application_events` | What was sent on your behalf, and when |
-| Screenshots | `backend/data/` | May contain your filled-in form data |
+| A senha da sua conta do app | `users.hashed_password` | hash bcrypt, não reversível |
+| Cookies de sessão do LinkedIn | `linkedin_accounts.encrypted_storage_state` | **Credenciais vivas.** Criptografadas em repouso; quem tiver esta linha e a sua `ENCRYPTION_KEY` pode agir como você no LinkedIn |
+| A própria chave de criptografia (Docker) | `backend/data/.secrets.env`, modo `600` | **A chave da linha acima.** Gerada no primeiro boot e mantida no volume de dados para que reinícios não invalidem a sua sessão — o que também significa que uma cópia desse volume contém tanto a fechadura quanto a chave |
+| Diretório de perfil do navegador | `backend/data/browser_profiles/` | Pode conter mais artefatos de sessão escritos pelo Chromium |
+| O seu currículo, como enviado | `backend/data/resumes/` | Dados pessoais — nome, endereço, telefone, histórico de trabalho |
+| O seu currículo, como texto | `profiles.resume_text` | O mesmo, no banco de dados |
+| Banco de respostas | `profiles.answer_bank` | Pretensões salariais, aviso prévio, autorização de trabalho |
+| Descrições de vagas e notas | `jobs` | Baixa |
+| Cartas e respostas geradas | `applications` | Pessoal, e enviado a empregadores uma vez aprovado |
+| Registros de chamadas de IA | `ai_analyses` | Saída bruta do modelo, contagens de tokens, custo |
+| Trilha de auditoria | `application_events` | O que foi enviado em seu nome, e quando |
+| Capturas de tela | `backend/data/` | Podem conter os dados que você preencheu no formulário |
 
-Everything above lives on your own machine or server. Nothing is sent to a service the project operates —
-there is no such service.
+Tudo acima vive na sua própria máquina ou servidor. Nada é enviado a um serviço que o projeto opera —
+não existe tal serviço.
 
-Two external parties do receive data, and you should know exactly what:
+Duas partes externas de fato recebem dados, e você deve saber exatamente o quê:
 
-- **Anthropic** receives the job description plus the parts of your profile needed to score it and draft
-  the letter, whenever AI features are used. Leave `ANTHROPIC_API_KEY` unset and no data is sent at all;
-  you fill the forms yourself.
-- **LinkedIn** receives your applications — which is the point.
+- **A Anthropic** recebe a descrição da vaga mais as partes do seu perfil necessárias para pontuá-la e redigir
+  a carta, sempre que os recursos de IA são usados. Deixe `ANTHROPIC_API_KEY` sem definir e nenhum dado é enviado;
+  você preenche os formulários você mesmo.
+- **O LinkedIn** recebe as suas candidaturas — que é o objetivo.
 
-### `backend/data/` is gitignored for a reason
+### `backend/data/` está no gitignore por um motivo
 
-That directory holds live session cookies, your CV, and your answer bank. It is in
-[`.gitignore`](../.gitignore) and must stay there. Before pushing this repository anywhere public, verify:
+Esse diretório guarda cookies de sessão vivos, o seu currículo e o seu banco de respostas. Ele está no
+[`.gitignore`](../.gitignore) e deve continuar lá. Antes de enviar este repositório para qualquer lugar público, verifique:
 
 ```bash
-git check-ignore -v backend/data/app.db   # should print the ignoring rule
-git ls-files backend/data                 # should print nothing
+git check-ignore -v backend/data/app.db   # deve imprimir a regra que o ignora
+git ls-files backend/data                 # não deve imprimir nada
 ```
 
-The same applies to `.env`, which holds your API key and your encryption key.
+O mesmo vale para o `.env`, que guarda a sua chave de API e a sua chave de criptografia.
 
-When you back the directory up — and you should, since it is the only copy of your job-search history —
-back it up somewhere you would be comfortable storing your CV and a set of live credentials.
+Quando você fizer backup do diretório — e você deve, já que é a única cópia do seu histórico de busca de emprego —
+guarde-o em algum lugar onde você se sentiria confortável armazenando o seu currículo e um conjunto de credenciais vivas.
 
-## Ethics
+## Ética
 
-The technical risk is yours to accept. These are about other people.
+O risco técnico é seu para aceitar. Estes pontos são sobre outras pessoas.
 
-**Use it on your own account only.** Not a client's, not a friend's, not a shared one. The person whose
-account is at risk must be the person who chose to take the risk.
+**Use apenas na sua própria conta.** Não na de um cliente, não na de um amigo, não numa compartilhada. A pessoa cuja
+conta está em risco deve ser a pessoa que escolheu correr o risco.
 
-**Do not spam employers.** On the other side of each application is a human who reads it. The daily cap and
-the score threshold exist as much for their sake as for yours: fifteen considered applications to jobs you
-plausibly fit is a job search, and two hundred scattershot ones is a denial-of-service attack on someone's
-inbox. Raising the cap and lowering the threshold at the same time is exactly the wrong direction.
+**Não faça spam com empregadores.** Do outro lado de cada candidatura há um humano que a lê. O limite diário e
+o limiar de nota existem tanto pelo bem deles quanto pelo seu: quinze candidaturas ponderadas a vagas que você
+plausivelmente combina são uma busca de emprego, e duzentas atiradas ao acaso são um ataque de negação de serviço à
+caixa de entrada de alguém. Aumentar o limite e baixar o limiar ao mesmo tempo é exatamente a direção errada.
 
-**Review every application before it goes out.** This is the ethical core of assisted mode, not just a
-safety feature. The letter goes out under your name and the screening answers are representations about
-you. An AI-drafted answer that is wrong is *your* false statement to an employer once you approve it. Read
-the letter. Check every answer, and check the low-confidence ones twice —
-[`ScreeningAnswer`](../backend/app/ai/schemas.py) flags them with `needs_review` precisely so the UI can
-put them in front of you.
+**Revise cada candidatura antes de ela sair.** Este é o núcleo ético do modo assistido, não apenas um
+recurso de segurança. A carta sai em seu nome e as respostas de triagem são declarações sobre
+você. Uma resposta gerada por IA que está errada é a *sua* declaração falsa a um empregador uma vez que você a aprova. Leia
+a carta. Confira cada resposta, e confira as de baixa confiança duas vezes —
+[`ScreeningAnswer`](../backend/app/ai/schemas.py) as sinaliza com `needs_review` justamente para que a UI possa
+colocá-las na sua frente.
 
-**Never overstate your experience.** If the AI drafts "8 years of Python" and you have four, fix it before
-approving. The tool makes it easy to send a lot of applications quickly; that makes it easy to send a small
-lie a lot of times.
+**Nunca exagere a sua experiência.** Se a IA redigir "8 anos de Python" e você tem quatro, corrija antes de
+aprovar. A ferramenta facilita enviar muitas candidaturas rapidamente; isso facilita enviar uma pequena
+mentira muitas vezes.
 
-**The AI will sometimes refuse.** Refusals are recorded (`AIAnalysis.was_refusal`) and the application
-falls back to manual entry. That is the system working: fill the field yourself.
+**A IA às vezes vai recusar.** Recusas são registradas (`AIAnalysis.was_refusal`) e a candidatura
+recorre ao preenchimento manual. Isso é o sistema funcionando: preencha o campo você mesmo.
 
-## If your account gets restricted
+## Se a sua conta for restringida
 
-Nothing in this project can appeal a restriction for you, and neither can the author. Follow LinkedIn's own
-recovery process, as yourself. Then reconsider whether to keep using browser automation on the account —
-a second restriction on the same account is generally worse than the first.
+Nada neste projeto pode recorrer de uma restrição por você, e nem o autor pode. Siga o processo de
+recuperação do próprio LinkedIn, como você mesmo. Depois reconsidere se vale continuar usando automação de navegador na conta —
+uma segunda restrição na mesma conta é geralmente pior que a primeira.
 
-## Summary
+## Resumo
 
-- Automating LinkedIn violates their User Agreement and can cost you your account, permanently.
-- There is no official API for applying to jobs, which is why this exists and why the risk cannot be
-  removed.
-- The guard rails lower the odds. They do not make you safe, and loosening them raises the odds sharply.
-- Submission always requires a separate human confirmation, by design and in four independent places.
-- Security challenges stop everything. Solve them yourself; never bypass them.
-- Your LinkedIn password is never stored. Session cookies are, encrypted.
-- `backend/data/` and `.env` hold live credentials and personal data. Keep them out of git and back them up
-  carefully.
-- Use it on your own account, at a human volume, and read every application before you approve it.
+- Automatizar o LinkedIn viola o Contrato de Usuário dele e pode custar a sua conta, permanentemente.
+- Não há API oficial para se candidatar a vagas, e é por isso que isto existe e por que o risco não pode ser
+  removido.
+- As salvaguardas reduzem as chances. Elas não deixam você seguro, e afrouxá-las eleva as chances bruscamente.
+- O envio sempre exige uma confirmação humana separada, por design e em quatro lugares independentes.
+- Desafios de segurança param tudo. Resolva-os você mesmo; nunca os contorne.
+- A sua senha do LinkedIn nunca é armazenada. Os cookies de sessão são, criptografados.
+- `backend/data/` e `.env` guardam credenciais vivas e dados pessoais. Mantenha-os fora do git e faça backup deles
+  com cuidado.
+- Use na sua própria conta, num volume humano, e leia cada candidatura antes de aprovar.
