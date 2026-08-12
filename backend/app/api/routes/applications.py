@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Query
+from fastapi import APIRouter, BackgroundTasks, Query, Response
 
 from app.api.deps import CurrentUser, LimitDep, OffsetDep, SessionDep
 from app.models import ApplicationStatus
@@ -52,6 +52,20 @@ async def read_board(user: CurrentUser, session: SessionDep) -> list[Application
     """
     applications = await application_service.list_board(session, user)
     return [application_service.to_application_card(item) for item in applications]
+
+
+@router.get("/export")
+async def export_applications(user: CurrentUser, session: SessionDep) -> Response:
+    """The full application history as a CSV download.
+
+    Registered before the dynamic route so "export" is never captured as an id.
+    """
+    content = await application_service.export_csv(session, user)
+    return Response(
+        content=content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="applications.csv"'},
+    )
 
 
 @router.get("/{application_id}", response_model=ApplicationDetail)

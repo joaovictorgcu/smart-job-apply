@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import Select, func, select
@@ -292,6 +294,67 @@ async def discard(
         user_id=user.id,
     )
     return application
+
+
+async def export_csv(session: AsyncSession, user: User) -> str:
+    """The user's application history as CSV, newest first.
+
+    Job columns are denormalised into each row so the file stands on its own
+    outside the app. Nothing leaves through here that the list endpoints do not
+    already expose.
+    """
+    result = await session.execute(
+        select(Application)
+        .options(selectinload(Application.job))
+        .where(Application.user_id == user.id)
+        .order_by(Application.created_at.desc(), Application.id.desc())
+    )
+    applications = list(result.scalars().all())
+
+    def stamp(moment: datetime | None) -> str:
+        return moment.isoformat() if moment else ""
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\n")
+    writer.writerow(
+        [
+            "application_id",
+            "job_title",
+            "company",
+            "location",
+            "job_url",
+            "score",
+            "status",
+            "outcome",
+            "outcome_note",
+            "was_dry_run",
+            "created_at",
+            "approved_at",
+            "submitted_at",
+            "outcome_updated_at",
+        ]
+    )
+    for application in applications:
+        job = application.job
+        writer.writerow(
+            [
+                application.id,
+                job.title if job else "",
+                job.company if job else "",
+                (job.location if job else None) or "",
+                (job.url if job else None) or "",
+                job.score if job and job.score is not None else "",
+                str(application.status),
+                str(application.outcome) if application.outcome else "",
+                application.outcome_note or "",
+                "true" if application.was_dry_run else "false",
+                stamp(application.created_at),
+                stamp(application.approved_at),
+                stamp(application.submitted_at),
+                stamp(application.outcome_updated_at),
+            ]
+        )
+    return buffer.getvalue()
 
 
 async def list_events(
