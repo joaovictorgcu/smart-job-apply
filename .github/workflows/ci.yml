@@ -79,6 +79,22 @@ jobs:
         working-directory: frontend
         run: npm run typecheck
 
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
       - name: Build
         working-directory: frontend
         run: npm run build
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Build-only: no container is started and nothing is pushed. This catches
+      # a Dockerfile broken by a dependency or layout change before a user does.
+      - name: Build the image
+        run: docker build -t linkedin-auto-apply:ci -f docker/Dockerfile .
