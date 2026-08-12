@@ -141,7 +141,7 @@ export function Settings() {
       <Card>
         <CardHeader
           title="Salvaguardas da automação"
-          description="Limites que mantêm a execução pequena, lenta e com cara de humano."
+          description="Limites que mantêm o volume baixo e o ritmo lento. Eles reduzem o risco de detecção — não o eliminam."
         />
         <div className="card-body space-y-5">
           <div className="grid gap-4 sm:grid-cols-2">
