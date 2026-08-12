@@ -94,6 +94,13 @@ type MutationOpts<TData, TVars> = Omit<
   "mutationFn"
 >;
 
+/*
+ * Mutation hooks own their cache maintenance. Caller options are spread FIRST
+ * and `options?.onSuccess` is invoked from the hook's own handler, so a caller
+ * adding a toast can never accidentally replace the setQueryData/invalidate
+ * calls — spreading the options after the handler did exactly that.
+ */
+
 /* -------------------------------------------------------------------------- */
 /* Profile, settings, AI                                                      */
 /* -------------------------------------------------------------------------- */
@@ -112,8 +119,11 @@ export function useUpdateProfile(
   const client = useQueryClient();
   return useMutation<Profile, ApiError, ProfileUpdate>({
     mutationFn: (payload) => profileService.updateProfile(payload),
-    onSuccess: (data) => client.setQueryData(queryKeys.profile(), data),
     ...options,
+    onSuccess: (data, vars, context) => {
+      client.setQueryData(queryKeys.profile(), data);
+      options?.onSuccess?.(data, vars, context);
+    },
   });
 }
 
@@ -123,8 +133,11 @@ export function useUploadResume(
   const client = useQueryClient();
   return useMutation<Profile, ApiError, File>({
     mutationFn: (file) => profileService.uploadResume(file),
-    onSuccess: (data) => client.setQueryData(queryKeys.profile(), data),
     ...options,
+    onSuccess: (data, vars, context) => {
+      client.setQueryData(queryKeys.profile(), data);
+      options?.onSuccess?.(data, vars, context);
+    },
   });
 }
 
@@ -144,13 +157,14 @@ export function useUpdateSettings(
   const client = useQueryClient();
   return useMutation<UserSettings, ApiError, UserSettingsUpdate>({
     mutationFn: (payload) => profileService.updateSettings(payload),
-    onSuccess: (data) => {
+    ...options,
+    onSuccess: (data, vars, context) => {
       client.setQueryData(queryKeys.settings(), data);
       // Caps and dry-run live in the session banner too.
       void client.invalidateQueries({ queryKey: queryKeys.session() });
       void client.invalidateQueries({ queryKey: queryKeys.stats() });
+      options?.onSuccess?.(data, vars, context);
     },
-    ...options,
   });
 }
 
@@ -203,8 +217,11 @@ export function useTailorResume(
   const client = useQueryClient();
   return useMutation<TailoredResume, ApiError, void>({
     mutationFn: () => tailoringService.createTailoredResume(jobId),
-    onSuccess: (data) => client.setQueryData(queryKeys.tailoredResume(jobId), data),
     ...options,
+    onSuccess: (data, vars, context) => {
+      client.setQueryData(queryKeys.tailoredResume(jobId), data);
+      options?.onSuccess?.(data, vars, context);
+    },
   });
 }
 
@@ -215,8 +232,11 @@ export function useUpdateTailoredResume(
   const client = useQueryClient();
   return useMutation<TailoredResume, ApiError, string>({
     mutationFn: (content) => tailoringService.updateTailoredResume(jobId, content),
-    onSuccess: (data) => client.setQueryData(queryKeys.tailoredResume(jobId), data),
     ...options,
+    onSuccess: (data, vars, context) => {
+      client.setQueryData(queryKeys.tailoredResume(jobId), data);
+      options?.onSuccess?.(data, vars, context);
+    },
   });
 }
 
@@ -240,8 +260,11 @@ export function useCreateSearch(
   const client = useQueryClient();
   return useMutation<Search, ApiError, SearchCreate>({
     mutationFn: (payload) => searchesService.createSearch(payload),
-    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.searches() }),
     ...options,
+    onSuccess: (data, vars, context) => {
+      void client.invalidateQueries({ queryKey: queryKeys.searches() });
+      options?.onSuccess?.(data, vars, context);
+    },
   });
 }
 
@@ -251,8 +274,11 @@ export function useUpdateSearch(
   const client = useQueryClient();
   return useMutation<Search, ApiError, { id: number; payload: SearchUpdate }>({
     mutationFn: ({ id, payload }) => searchesService.updateSearch(id, payload),
-    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.searches() }),
     ...options,
+    onSuccess: (data, vars, context) => {
+      void client.invalidateQueries({ queryKey: queryKeys.searches() });
+      options?.onSuccess?.(data, vars, context);
+    },
   });
 }
 
@@ -262,8 +288,11 @@ export function useDeleteSearch(
   const client = useQueryClient();
   return useMutation<void, ApiError, number>({
     mutationFn: (id) => searchesService.deleteSearch(id),
-    onSuccess: () => client.invalidateQueries({ queryKey: queryKeys.searches() }),
     ...options,
+    onSuccess: (data, vars, context) => {
+      void client.invalidateQueries({ queryKey: queryKeys.searches() });
+      options?.onSuccess?.(data, vars, context);
+    },
   });
 }
 
@@ -300,14 +329,15 @@ export function useSkipJob(
   const client = useQueryClient();
   return useMutation<Job, ApiError, number>({
     mutationFn: (id) => jobsService.skipJob(id),
-    onSuccess: (data) => {
+    ...options,
+    onSuccess: (data, vars, context) => {
       client.setQueryData<JobDetail | undefined>(queryKeys.job(data.id), (previous) =>
         previous ? { ...previous, ...data } : undefined,
       );
       void client.invalidateQueries({ queryKey: queryKeys.jobs() });
       void client.invalidateQueries({ queryKey: queryKeys.stats() });
+      options?.onSuccess?.(data, vars, context);
     },
-    ...options,
   });
 }
 
@@ -317,14 +347,15 @@ export function useAnalyzeJob(
   const client = useQueryClient();
   return useMutation<Job, ApiError, number>({
     mutationFn: (id) => jobsService.analyzeJob(id),
-    onSuccess: (data) => {
+    ...options,
+    onSuccess: (data, vars, context) => {
       client.setQueryData<JobDetail | undefined>(queryKeys.job(data.id), (previous) =>
         previous ? { ...previous, ...data } : undefined,
       );
       void client.invalidateQueries({ queryKey: queryKeys.jobs() });
       void client.invalidateQueries({ queryKey: queryKeys.stats() });
+      options?.onSuccess?.(data, vars, context);
     },
-    ...options,
   });
 }
 
@@ -377,12 +408,13 @@ export function useUpdateApplication(
   const client = useQueryClient();
   return useMutation<ApplicationDetail, ApiError, { id: number; payload: ApplicationUpdate }>({
     mutationFn: ({ id, payload }) => applicationsService.updateApplication(id, payload),
-    onSuccess: (data) => {
+    ...options,
+    onSuccess: (data, vars, context) => {
       client.setQueryData(queryKeys.application(data.id), data);
       void client.invalidateQueries({ queryKey: queryKeys.applicationEvents(data.id) });
       void client.invalidateQueries({ queryKey: queryKeys.applications() });
+      options?.onSuccess?.(data, vars, context);
     },
-    ...options,
   });
 }
 
@@ -396,14 +428,15 @@ export function useSubmitApplication(
   const client = useQueryClient();
   return useMutation<ApplicationDetail, ApiError, number>({
     mutationFn: (id) => applicationsService.submitApplication(id),
-    onSuccess: (data) => {
+    ...options,
+    onSuccess: (data, vars, context) => {
       client.setQueryData(queryKeys.application(data.id), data);
       void client.invalidateQueries({ queryKey: queryKeys.applications() });
       void client.invalidateQueries({ queryKey: queryKeys.jobs() });
       void client.invalidateQueries({ queryKey: queryKeys.session() });
       void client.invalidateQueries({ queryKey: queryKeys.stats() });
+      options?.onSuccess?.(data, vars, context);
     },
-    ...options,
   });
 }
 
@@ -413,13 +446,14 @@ export function useDiscardApplication(
   const client = useQueryClient();
   return useMutation<ApplicationDetail, ApiError, number>({
     mutationFn: (id) => applicationsService.discardApplication(id),
-    onSuccess: (data) => {
+    ...options,
+    onSuccess: (data, vars, context) => {
       client.setQueryData(queryKeys.application(data.id), data);
       void client.invalidateQueries({ queryKey: queryKeys.applications() });
       void client.invalidateQueries({ queryKey: queryKeys.jobs() });
       void client.invalidateQueries({ queryKey: queryKeys.stats() });
+      options?.onSuccess?.(data, vars, context);
     },
-    ...options,
   });
 }
 
@@ -526,8 +560,11 @@ export function useStartSession(
   const client = useQueryClient();
   return useMutation<SessionStatus, ApiError, void>({
     mutationFn: () => automationService.startSession(),
-    onSuccess: (data) => client.setQueryData(queryKeys.session(), data),
     ...options,
+    onSuccess: (data, vars, context) => {
+      client.setQueryData(queryKeys.session(), data);
+      options?.onSuccess?.(data, vars, context);
+    },
   });
 }
 
@@ -537,8 +574,11 @@ export function useStopSession(
   const client = useQueryClient();
   return useMutation<SessionStatus, ApiError, void>({
     mutationFn: () => automationService.stopSession(),
-    onSuccess: (data) => client.setQueryData(queryKeys.session(), data),
     ...options,
+    onSuccess: (data, vars, context) => {
+      client.setQueryData(queryKeys.session(), data);
+      options?.onSuccess?.(data, vars, context);
+    },
   });
 }
 
@@ -548,11 +588,12 @@ export function useRunSearch(
   const client = useQueryClient();
   return useMutation<AutomationRun, ApiError, SearchRunRequest>({
     mutationFn: (payload) => automationService.runSearch(payload),
-    onSuccess: () => {
+    ...options,
+    onSuccess: (data, vars, context) => {
       void client.invalidateQueries({ queryKey: queryKeys.automation() });
       void client.invalidateQueries({ queryKey: queryKeys.searches() });
+      options?.onSuccess?.(data, vars, context);
     },
-    ...options,
   });
 }
 
@@ -573,12 +614,13 @@ export function usePrepareApplications(
   const client = useQueryClient();
   return useMutation<AutomationRun, ApiError, PrepareRequest>({
     mutationFn: (payload) => automationService.prepareApplications(payload),
-    onSuccess: () => {
+    ...options,
+    onSuccess: (data, vars, context) => {
       void client.invalidateQueries({ queryKey: queryKeys.automation() });
       void client.invalidateQueries({ queryKey: queryKeys.applications() });
       void client.invalidateQueries({ queryKey: queryKeys.jobs() });
+      options?.onSuccess?.(data, vars, context);
     },
-    ...options,
   });
 }
 
@@ -589,11 +631,12 @@ export function useStopAutomation(
   const client = useQueryClient();
   return useMutation<Message, ApiError, void>({
     mutationFn: () => automationService.stopAutomation(),
-    onSuccess: () => {
+    ...options,
+    onSuccess: (data, vars, context) => {
       void client.invalidateQueries({ queryKey: queryKeys.automation() });
       void client.invalidateQueries({ queryKey: queryKeys.applications() });
+      options?.onSuccess?.(data, vars, context);
     },
-    ...options,
   });
 }
 
