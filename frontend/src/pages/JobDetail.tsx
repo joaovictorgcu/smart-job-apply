@@ -161,13 +161,16 @@ export function JobDetail() {
                   className="inline-flex items-center gap-1.5 text-accent-400 hover:underline"
                 >
                   <ExternalLink aria-hidden className="h-4 w-4" />
-                  Abrir no LinkedIn
+                  {job.source === 'linkedin' ? 'Abrir no LinkedIn' : 'Abrir o anúncio'}
                 </a>
               ) : null}
             </p>
 
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
               <StatusBadge kind="job" status={job.status} />
+              {job.source !== 'linkedin' ? (
+                <span className={badgeClass('info')}>{job.source}</span>
+              ) : null}
               {job.easy_apply ? (
                 <span className={badgeClass('accent')}>Candidatura Simplificada</span>
               ) : (
@@ -374,6 +377,13 @@ export function JobDetail() {
           </Card>
         </div>
       </div>
+
+      {job.source !== 'linkedin' ? (
+        <Note tone="neutral">
+          Vaga de portal externo ({job.source}): a automação não preenche este formulário. Use a
+          análise, a carta e o currículo adaptado daqui — e envie você mesmo na página da empresa.
+        </Note>
+      ) : null}
 
       <CVTailorPanel jobId={job.id} aiConfigured={Boolean(session?.ai_configured)} />
 

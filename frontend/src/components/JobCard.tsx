@@ -92,6 +92,9 @@ export function JobCard({
 
         <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
           <StatusBadge kind="job" status={job.status} />
+          {job.source !== 'linkedin' ? (
+            <span className={badgeClass('info')}>{job.source}</span>
+          ) : null}
           {job.easy_apply ? (
             <span className={badgeClass('accent')}>
               <Zap aria-hidden className="h-3 w-3" />

@@ -261,6 +261,8 @@ export interface SearchUpdate {
 export interface Job {
   id: number;
   external_id: string;
+  /** Which portal the job came from ("linkedin", "gupy", ...). */
+  source: string;
   title: string;
   company: string;
   location: string | null;
@@ -476,6 +478,12 @@ export interface OutcomeCount {
   outcome: ApplicationOutcome;
   count: number;
   avg_score: number | null;
+}
+
+export interface PortalSearchResult {
+  portal: string;
+  jobs_found: number;
+  jobs_new: number;
 }
 
 export interface SegmentRate {

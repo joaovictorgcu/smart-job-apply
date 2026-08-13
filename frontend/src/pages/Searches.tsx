@@ -1,15 +1,17 @@
-import { Clock, MapPin, Pencil, Play, Plus, Search as SearchIcon, Trash2 } from 'lucide-react';
+import { Clock, Globe, MapPin, Pencil, Play, Plus, Search as SearchIcon, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { EmptyState } from '@/components/EmptyState';
 import { Modal } from '@/components/Modal';
-import { Button, Card, Note, PageHeader, Skeleton } from '@/components/primitives';
+import { Button, Card, CardHeader, Field, Input, Note, PageHeader, Skeleton } from '@/components/primitives';
 import { SearchFormDialog } from '@/components/SearchFormDialog';
 import { useToast } from '@/components/ToastProvider';
-import { useDeleteSearch, useRunSearch, useSearches, useSessionStatus } from '@/hooks/useApi';
+import { queryKeys, useDeleteSearch, useRunSearch, useSearches, useSessionStatus } from '@/hooks/useApi';
 import { badgeClass, enumLabel, formatRelativeTime } from '@/lib/format';
 import { errorMessage } from '@/services/client';
-import type { Search } from '@/types/api';
+import { searchPortal } from '@/services/portals';
+import type { PortalSearchResult, Search } from '@/types/api';
 
 export function Searches() {
   const toast = useToast();
@@ -46,6 +48,21 @@ export function Searches() {
   const sessionReady = Boolean(session?.browser_open && session.logged_in);
   const items = searches ?? [];
 
+  const client = useQueryClient();
+  const [portalKeywords, setPortalKeywords] = useState('');
+  const portalSearch = useMutation<PortalSearchResult, Error, void>({
+    mutationFn: () => searchPortal('gupy', portalKeywords.trim()),
+    onSuccess: (result) => {
+      void client.invalidateQueries({ queryKey: queryKeys.jobs() });
+      void client.invalidateQueries({ queryKey: queryKeys.stats() });
+      toast.success(
+        'Busca na Gupy concluída',
+        `${result.jobs_found} vagas encontradas, ${result.jobs_new} novas na sua lista.`,
+      );
+    },
+    onError: (error) => toast.error('A busca na Gupy falhou', errorMessage(error)),
+  });
+
   const openCreate = () => {
     setEditing(null);
     setFormOpen(true);
@@ -71,9 +88,35 @@ export function Searches() {
       {!sessionReady ? (
         <Note tone="warning">
           Ainda não há uma sessão do navegador autenticada. Inicie uma no painel e faça login no
-          LinkedIn você mesmo — as buscas precisam dessa janela aberta.
+          LinkedIn você mesmo — as buscas do LinkedIn precisam dessa janela aberta.
         </Note>
       ) : null}
+
+      <Card>
+        <CardHeader
+          title="Portais externos"
+          description="Busca por HTTP puro, sem navegador e sem login — as vagas entram na mesma lista e passam pela mesma análise. O envio nessas vagas é manual, na página da empresa."
+        />
+        <div className="card-body flex flex-wrap items-end gap-3">
+          <Field label="Palavras-chave" htmlFor="portal-keywords" className="min-w-[16rem] flex-1">
+            <Input
+              id="portal-keywords"
+              value={portalKeywords}
+              placeholder="engenheiro de dados"
+              onChange={(event) => setPortalKeywords(event.target.value)}
+            />
+          </Field>
+          <Button
+            variant="primary"
+            loading={portalSearch.isPending}
+            disabled={!portalKeywords.trim()}
+            onClick={() => portalSearch.mutate()}
+            icon={<Globe aria-hidden className="h-4 w-4" />}
+          >
+            Buscar na Gupy
+          </Button>
+        </div>
+      </Card>
 
       {isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-busy="true">
