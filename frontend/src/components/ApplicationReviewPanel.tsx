@@ -1,5 +1,16 @@
-import { CheckCircle2, Info, Save, Send, Sparkles, Trash2, TriangleAlert, XCircle } from 'lucide-react';
+import {
+  CheckCircle2,
+  Info,
+  Save,
+  ScanSearch,
+  Send,
+  Sparkles,
+  Trash2,
+  TriangleAlert,
+  XCircle,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
 
 import {
   useDiscardApplication,
@@ -10,8 +21,15 @@ import {
 } from '@/hooks/useApi';
 import { applicationStatusLabel, badgeClass } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { reviewApplication } from '@/services/applications';
 import { errorMessage } from '@/services/client';
-import type { ApplicationDetail, ScreeningAnswer } from '@/types/api';
+import type {
+  ApplicationDetail,
+  CoverageStatus,
+  DraftReview,
+  ReviewCategory,
+  ScreeningAnswer,
+} from '@/types/api';
 
 import { Modal } from './Modal';
 import { Button, Card, CardHeader, Note, Textarea } from './primitives';
@@ -52,6 +70,27 @@ const CHECK_SR_PREFIX: Record<ReadinessCheck['state'], string> = {
   ok: 'ok:',
   warn: 'atenção:',
   fail: 'pendente:',
+};
+
+const REVIEW_CATEGORY_LABELS: Record<ReviewCategory, string> = {
+  missed_keywords: 'Palavras-chave ausentes',
+  company_angle: 'Ângulo da empresa',
+  reframing: 'Reenquadramento',
+  tone: 'Tom',
+};
+
+const COVERAGE_LABELS: Record<CoverageStatus, string> = {
+  covered: 'coberto',
+  synonym_only: 'só como sinônimo',
+  missing_have_it: 'você tem, mas não disse',
+  missing_gap: 'lacuna real',
+};
+
+const COVERAGE_TONES: Record<CoverageStatus, 'success' | 'info' | 'warning' | 'neutral'> = {
+  covered: 'success',
+  synonym_only: 'info',
+  missing_have_it: 'warning',
+  missing_gap: 'neutral',
 };
 
 function draftFrom(application: ApplicationDetail): Draft {
@@ -120,6 +159,24 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
     },
     onError: (error) => toast.error('Não foi possível gerar a carta de apresentação', errorMessage(error)),
   });
+
+  const review = useMutation<DraftReview, Error, void>({
+    mutationFn: () => reviewApplication(application.id),
+    onError: (error) => toast.error('Não foi possível revisar', errorMessage(error)),
+  });
+
+  const applyEdit = (oldString: string, newString: string) => {
+    setDraft((current) => {
+      if (!current.coverLetter.includes(oldString)) {
+        toast.warning(
+          'Trecho não encontrado',
+          'A carta mudou desde a revisão — aplique a sugestão manualmente.',
+        );
+        return current;
+      }
+      return { ...current, coverLetter: current.coverLetter.replace(oldString, newString) };
+    });
+  };
 
   const dryRun = settings?.dry_run ?? true;
   const isDirty = useMemo(() => {
@@ -257,6 +314,106 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
             onChange={(answers) => setDraft((current) => ({ ...current, answers }))}
           />
         </div>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Revisão da IA"
+          description="Uma segunda passada, de contexto limpo, sobre a carta e as respostas — nada é aplicado sem você mandar."
+          actions={
+            <Button
+              size="sm"
+              loading={review.isPending}
+              disabled={isBusy}
+              onClick={() => review.mutate()}
+              icon={<ScanSearch aria-hidden className="h-3.5 w-3.5" />}
+            >
+              {review.data ? 'Revisar de novo' : 'Revisar com IA'}
+            </Button>
+          }
+        />
+        {review.data ? (
+          <div className="card-body space-y-4">
+            {review.data.summary ? (
+              <Note tone="accent" icon={<Sparkles aria-hidden className="h-3.5 w-3.5" />}>
+                {review.data.summary}
+              </Note>
+            ) : null}
+
+            <div>
+              <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+                Crítica
+              </p>
+              <ul className="mt-2 space-y-1.5">
+                {review.data.critique.map((note) => (
+                  <li key={note.category} className="text-xs leading-relaxed">
+                    <span className="font-medium text-content">
+                      {REVIEW_CATEGORY_LABELS[note.category] ?? note.category}:
+                    </span>{' '}
+                    <span className="text-content-muted">{note.note}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {review.data.coverage.length > 0 ? (
+              <div>
+                <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+                  Cobertura dos requisitos
+                </p>
+                <ul className="mt-2 space-y-1.5">
+                  {review.data.coverage.map((row) => (
+                    <li key={row.requirement} className="flex items-start gap-2 text-xs">
+                      <span className={badgeClass(COVERAGE_TONES[row.status] ?? 'neutral')}>
+                        {COVERAGE_LABELS[row.status] ?? row.status}
+                      </span>
+                      <span className="min-w-0 leading-relaxed">
+                        <span className="font-medium text-content">{row.requirement}</span>
+                        {row.note ? (
+                          <span className="text-content-subtle"> — {row.note}</span>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {review.data.edits.length > 0 ? (
+              <div>
+                <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+                  Edições sugeridas na carta
+                </p>
+                <ul className="mt-2 space-y-2.5">
+                  {review.data.edits.map((edit) => (
+                    <li
+                      key={edit.old_string}
+                      className="rounded-lg border border-line bg-surface-sunken px-3 py-2.5 text-xs"
+                    >
+                      <p className="leading-relaxed text-danger-strong line-through decoration-danger/50">
+                        {edit.old_string}
+                      </p>
+                      <p className="mt-1 leading-relaxed text-success">{edit.new_string}</p>
+                      <div className="mt-2 flex items-center justify-between gap-3">
+                        <p className="text-2xs leading-relaxed text-content-subtle">{edit.reason}</p>
+                        <Button
+                          size="sm"
+                          disabled={isBusy}
+                          onClick={() => applyEdit(edit.old_string, edit.new_string)}
+                        >
+                          Aplicar
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-2xs text-content-subtle">
+                  Aplicar altera só o rascunho — salve as alterações para persistir.
+                </p>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </Card>
 
       <Card>

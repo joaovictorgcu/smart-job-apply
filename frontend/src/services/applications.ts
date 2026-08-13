@@ -8,6 +8,7 @@ import type {
   ApplicationListQuery,
   ApplicationOutcome,
   ApplicationUpdate,
+  DraftReview,
   Page,
 } from "@/types/api";
 
@@ -89,6 +90,11 @@ export async function downloadApplicationsCsv(): Promise<void> {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+/** POST /api/ai/review/{applicationId} — second-pass AI review of the draft. */
+export function reviewApplication(applicationId: number): Promise<DraftReview> {
+  return api.post<DraftReview>(`/ai/review/${applicationId}`);
 }
 
 /** GET /api/applications/board — submitted applications for the pipeline board. */

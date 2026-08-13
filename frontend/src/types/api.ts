@@ -324,6 +324,33 @@ export interface StretchFlag {
   why_stretch: string;
 }
 
+export type ReviewCategory = "missed_keywords" | "company_angle" | "reframing" | "tone";
+export type CoverageStatus = "covered" | "synonym_only" | "missing_have_it" | "missing_gap";
+
+export interface SuggestedEdit {
+  old_string: string;
+  new_string: string;
+  reason: string;
+}
+
+export interface ReviewNote {
+  category: ReviewCategory;
+  note: string;
+}
+
+export interface RequirementCoverage {
+  requirement: string;
+  status: CoverageStatus;
+  note: string | null;
+}
+
+export interface DraftReview {
+  edits: SuggestedEdit[];
+  critique: ReviewNote[];
+  coverage: RequirementCoverage[];
+  summary: string | null;
+}
+
 export type AnswerSource = "answer_bank" | "ai" | "user";
 
 export interface ScreeningAnswer {
