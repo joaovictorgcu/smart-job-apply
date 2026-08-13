@@ -75,8 +75,12 @@ export function JobList({
 
   return (
     <ul className={cn('space-y-2.5', className)}>
-      {jobs.map((job) => (
-        <li key={job.id}>
+      {jobs.map((job, index) => (
+        <li
+          key={job.id}
+          className="animate-fade-in"
+          style={{ animationDelay: `${Math.min(index, 10) * 35}ms` }}
+        >
           <JobCard
             job={job}
             selectable={selectable}

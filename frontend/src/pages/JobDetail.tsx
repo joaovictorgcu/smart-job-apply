@@ -58,7 +58,7 @@ const DIMENSION_LABELS: Record<ScoreDimensionName, string> = {
 function cnBar(score: number): string {
   const tone =
     score >= 80 ? 'bg-success' : score >= 60 ? 'bg-accent-500' : score >= 40 ? 'bg-warning' : 'bg-danger';
-  return `h-full rounded ${tone}`;
+  return `h-full origin-left animate-bar-in rounded ${tone}`;
 }
 
 export function JobDetail() {

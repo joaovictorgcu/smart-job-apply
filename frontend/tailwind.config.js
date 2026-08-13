@@ -117,11 +117,16 @@ export default {
         shimmer: {
           "100%": { transform: "translateX(100%)" },
         },
+        "bar-in": {
+          from: { transform: "scaleX(0)" },
+          to: { transform: "scaleX(1)" },
+        },
       },
       animation: {
         "pulse-soft": "pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
         "fade-in": "fade-in 0.24s ease-out both",
         shimmer: "shimmer 1.6s infinite",
+        "bar-in": "bar-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both",
       },
       transitionTimingFunction: {
         snap: "cubic-bezier(0.2, 0.8, 0.2, 1)",

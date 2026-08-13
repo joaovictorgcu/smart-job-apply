@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import type { DragEvent, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
+import { CountUp } from '@/components/CountUp';
 import { EmptyState } from '@/components/EmptyState';
 import { Card, CardHeader, PageHeader, Select, Skeleton } from '@/components/primitives';
 import { ScoreBadge } from '@/components/ScoreBadge';
@@ -160,14 +161,15 @@ export function Pipeline() {
                       Solte um card aqui
                     </p>
                   ) : (
-                    items.map((card) => (
+                    items.map((card, cardIndex) => (
                       <article
                         key={card.id}
                         draggable
                         onDragStart={(event) =>
                           event.dataTransfer.setData('text/plain', String(card.id))
                         }
-                        className="cursor-grab rounded-lg border border-line bg-surface p-2.5 shadow-sm active:cursor-grabbing"
+                        style={{ animationDelay: `${Math.min(cardIndex, 8) * 45}ms` }}
+                        className="animate-fade-in cursor-grab rounded-lg border border-line bg-surface p-2.5 shadow-sm transition-shadow duration-150 hover:shadow-lifted active:cursor-grabbing"
                       >
                         <div className="flex items-start gap-2">
                           <ScoreBadge score={card.score} size="sm" />
@@ -258,9 +260,14 @@ interface AnalyticsProps {
 
 function OutcomeAnalytics({ stats }: AnalyticsProps) {
   const tiles: { label: string; value: ReactNode; icon: typeof Send; hint?: string }[] = [
-    { label: 'Enviadas', value: stats.total_submitted, icon: Send },
-    { label: 'Entrevistas', value: stats.interviews, icon: CalendarCheck, hint: 'entrevista ou proposta' },
-    { label: 'Propostas', value: stats.offers, icon: Trophy },
+    { label: 'Enviadas', value: <CountUp value={stats.total_submitted} />, icon: Send },
+    {
+      label: 'Entrevistas',
+      value: <CountUp value={stats.interviews} />,
+      icon: CalendarCheck,
+      hint: 'entrevista ou proposta',
+    },
+    { label: 'Propostas', value: <CountUp value={stats.offers} />, icon: Trophy },
     { label: 'Taxa de entrevista', value: percent(stats.interview_rate), icon: Percent },
   ];
 

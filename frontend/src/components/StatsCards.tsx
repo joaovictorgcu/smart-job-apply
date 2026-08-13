@@ -1,7 +1,9 @@
 import { Briefcase, ClipboardCheck, Gauge, TrendingUp } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 
+import { CountUp } from '@/components/CountUp';
 import { formatNumber, formatScore } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { DashboardStats } from '@/types/api';
@@ -11,7 +13,7 @@ import { Card, ProgressRing, SectionLabel, Skeleton } from './primitives';
 interface StatTileProps {
   icon: LucideIcon;
   label: string;
-  value: string;
+  value: ReactNode;
   suffix?: string;
   hint?: string;
   to?: string;
@@ -106,7 +108,7 @@ export function StatsCards({ stats, isLoading = false, className }: StatsCardsPr
       <StatTile
         icon={ClipboardCheck}
         label="Aguardando revisão"
-        value={formatNumber(stats.awaiting_review)}
+        value={<CountUp value={stats.awaiting_review} />}
         hint={
           stats.awaiting_review > 0
             ? 'Preenchidas e paradas — aguardando a sua aprovação.'
@@ -119,7 +121,7 @@ export function StatsCards({ stats, isLoading = false, className }: StatsCardsPr
       <StatTile
         icon={Briefcase}
         label="Vagas encontradas"
-        value={formatNumber(stats.jobs_total)}
+        value={<CountUp value={stats.jobs_total} />}
         hint={`${formatNumber(stats.applications_total)} candidaturas no total`}
         to="/jobs"
       />
