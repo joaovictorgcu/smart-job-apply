@@ -5,11 +5,13 @@ from __future__ import annotations
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from app.ai import scoring
+from app.ai.schemas import DraftReview
 from app.api.deps import CurrentUser, SessionDep
-from app.api.errors import NotFoundError
+from app.api.errors import NotFoundError, UpstreamError
 from app.config import get_settings
 from app.schemas.tailoring import TailoredResumeRead, TailoredResumeUpdate
-from app.services import job_service, tailoring_service, user_service
+from app.services import application_service, job_service, tailoring_service, user_service
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 
@@ -60,6 +62,32 @@ async def create_tailored_cv(
     row = await tailoring_service.create_tailored_resume(session, user, job_id)
     current = await tailoring_service.current_fingerprint(session, user)
     return tailoring_service.to_read(row, current=current)
+
+
+@router.post("/review/{application_id}", response_model=DraftReview)
+async def review_application_draft(
+    application_id: int, user: CurrentUser, session: SessionDep
+) -> DraftReview:
+    """Second-pass AI review of a drafted application, from a fresh context.
+
+    Returns suggested letter edits, a four-category critique, and a requirement
+    coverage table. Nothing is applied automatically and nothing is submitted —
+    the user decides what to change on the review screen.
+    """
+    application = await application_service.get_application(session, user, application_id)
+    settings_row = await user_service.get_or_create_settings(session, user)
+    profile_ctx = await user_service.build_profile_context(session, user)
+    result = await scoring.review_draft(
+        session,
+        user=user,
+        job=application.job,
+        application=application,
+        profile_ctx=profile_ctx,
+        settings_row=settings_row,
+    )
+    if result is None:
+        raise UpstreamError("The AI did not return a review. Try again, or review by hand.")
+    return result
 
 
 @router.get("/tailor-cv/{job_id}", response_model=TailoredResumeRead)

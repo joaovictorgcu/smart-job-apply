@@ -200,6 +200,63 @@ class TailoredResume(BaseModel):
     summary: str | None = Field(default=None, description="A one-line note on the approach.")
 
 
+# The reviewer's critique arrives in four mandatory categories, so silence in
+# one of them is an explicit "no issues", never a skipped check.
+ReviewCategory = Literal["missed_keywords", "company_angle", "reframing", "tone"]
+
+# Four coverage states, not two: "the document never says it but the profile
+# supports it" is the actionable one, and "gap" must stay visible, never stuffed.
+CoverageStatus = Literal["covered", "synonym_only", "missing_have_it", "missing_gap"]
+
+
+class SuggestedEdit(BaseModel):
+    """One mechanical edit to the cover letter, applied verbatim or not at all."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    old_string: str = Field(description="Exact text currently in the letter.")
+    new_string: str = Field(description="The replacement text.")
+    reason: str = Field(description="Why, in one sentence.")
+
+
+class ReviewNote(BaseModel):
+    """The reviewer's finding in one category — 'no issues' is a valid finding."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    category: ReviewCategory
+    note: str
+
+
+class RequirementCoverage(BaseModel):
+    """Whether one stated requirement is addressed by the draft documents."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    requirement: str
+    status: CoverageStatus
+    note: str | None = Field(
+        default=None, description="Where it is covered, or what supports adding it."
+    )
+
+
+class DraftReview(BaseModel):
+    """A second, fresh-context pass over the drafted application materials.
+
+    `edits` are grounded, mechanical improvements to the letter; `critique` is
+    the narrative judgment in four mandatory categories; `coverage` maps every
+    stated requirement to one of four statuses. Nothing here submits anything —
+    the human still reads and approves.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    edits: list[SuggestedEdit] = Field(default_factory=list)
+    critique: list[ReviewNote] = Field(default_factory=list)
+    coverage: list[RequirementCoverage] = Field(default_factory=list)
+    summary: str | None = Field(default=None, description="One-sentence verdict on the draft.")
+
+
 class JobAnalysis(BaseModel):
     """Consolidated result of a job analysis."""
 

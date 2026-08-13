@@ -31,12 +31,14 @@ from app.ai.prompts.cover_letter import (
     COVER_LETTER_SYSTEM_PROMPT,
     build_cover_letter_prompt,
 )
+from app.ai.prompts.review import REVIEW_SYSTEM_PROMPT, build_review_prompt
 from app.ai.prompts.scoring import SCORING_SYSTEM_PROMPT, build_scoring_prompt
 from app.ai.prompts.screening import SCREENING_SYSTEM_PROMPT, build_screening_prompt
 from app.ai.prompts.tailoring import TAILORING_SYSTEM_PROMPT, build_tailoring_prompt
 from app.ai.schemas import (
     AIUsage,
     CoverLetter,
+    DraftReview,
     JobScore,
     ScreeningAnswer,
     ScreeningAnswerSet,
@@ -57,6 +59,8 @@ COVER_LETTER_MAX_TOKENS = 4096
 # A whole resume plus the structured change list; generous so a long CV is not
 # truncated mid-document (thinking shares this budget on Opus 5).
 TAILORING_MAX_TOKENS = 12288
+# Edits + four critique notes + a coverage table over every stated requirement.
+REVIEW_MAX_TOKENS = 8192
 
 # Cover letters and screening answers are low-volume and correctness-sensitive;
 # only bulk scoring uses the cheaper effort from settings.
@@ -592,6 +596,63 @@ class AIClient:
             )
             return (
                 TailoredResume(tailored_markdown=""),
+                self._usage(
+                    response,
+                    started_at=started_at,
+                    refused=True,
+                    refusal_category=f"unparsed_output:{response.stop_reason}",
+                ),
+            )
+
+        return parsed, self._usage(response, started_at=started_at)
+
+    async def review_draft(
+        self,
+        profile: ProfileContext,
+        job: JobLike,
+        *,
+        cover_letter: str | None,
+        answers: list[dict[str, Any]],
+    ) -> tuple[DraftReview, AIUsage]:
+        """Second-pass review of drafted materials, from a fresh context.
+
+        On refusal or unparseable output, returns an empty `DraftReview` with
+        `AIUsage.refused` set so the caller degrades to "review it yourself".
+        """
+        started_at = time.perf_counter()
+        response = await self._send(
+            system=REVIEW_SYSTEM_PROMPT,
+            user_prompt=build_review_prompt(
+                profile, job, cover_letter=cover_letter, answers=answers
+            ),
+            max_tokens=REVIEW_MAX_TOKENS,
+            effort=QUALITY_EFFORT,
+            output_format=DraftReview,
+        )
+
+        if response.stop_reason == "refusal":
+            category = _refusal_category(response)
+            logger.warning(
+                "Model declined to review the draft (category=%s).",
+                category,
+                extra={"action": "ai.review.refused", "refusal_category": category},
+            )
+            return (
+                DraftReview(),
+                self._usage(
+                    response, started_at=started_at, refused=True, refusal_category=category
+                ),
+            )
+
+        parsed = response.parsed_output
+        if parsed is None:
+            logger.warning(
+                "Review response could not be parsed (stop_reason=%s).",
+                response.stop_reason,
+                extra={"action": "ai.review.unparsed", "stop_reason": response.stop_reason},
+            )
+            return (
+                DraftReview(),
                 self._usage(
                     response,
                     started_at=started_at,

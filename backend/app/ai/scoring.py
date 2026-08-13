@@ -26,7 +26,14 @@ from app.ai.client import (
     estimate_cost_usd,
     get_ai_client,
 )
-from app.ai.schemas import AIUsage, CoverLetter, JobAnalysis, ScreeningAnswer, TailoredResume
+from app.ai.schemas import (
+    AIUsage,
+    CoverLetter,
+    DraftReview,
+    JobAnalysis,
+    ScreeningAnswer,
+    TailoredResume,
+)
 from app.automation.contracts import FormQuestion, ProfileContext
 from app.models.enums import AnalysisKind, AnswerConfidence, JobStatus
 from app.models.job import AIAnalysis
@@ -296,6 +303,69 @@ async def tailor_resume(
     return result
 
 
+async def review_draft(
+    session: AsyncSession,
+    *,
+    user: Any,
+    job: Any,
+    application: Any,
+    profile_ctx: ProfileContext,
+    settings_row: Any,
+    client: AIClient | None = None,
+) -> DraftReview | None:
+    """Second-pass review of a drafted application, persisted for audit.
+
+    Returns `None` when the model refuses or fails — the caller surfaces that as
+    "review it yourself", never as a blocked application.
+    """
+    ai = client or get_ai_client_for(settings_row)
+    try:
+        result, usage = await ai.review_draft(
+            profile_ctx,
+            job,
+            cover_letter=getattr(application, "cover_letter", None),
+            answers=list(getattr(application, "screening_answers", None) or []),
+        )
+    except AINotConfiguredError:
+        raise
+    except (anthropic.APIError, ValueError, RuntimeError) as exc:
+        logger.error(
+            "Draft review failed for application_id=%s: %s",
+            getattr(application, "id", None),
+            exc,
+            extra={
+                "action": "ai.review.failed",
+                "application_id": getattr(application, "id", None),
+            },
+        )
+        _persist_analysis(
+            session,
+            user_id=user.id,
+            job_id=getattr(job, "id", None),
+            kind=AnalysisKind.REVIEW,
+            model=ai.model,
+            result={},
+            error_message=str(exc),
+        )
+        await session.flush()
+        return None
+
+    _persist_analysis(
+        session,
+        user_id=user.id,
+        job_id=getattr(job, "id", None),
+        kind=AnalysisKind.REVIEW,
+        model=ai.model,
+        result=result.model_dump(mode="json"),
+        usage=usage,
+    )
+    await session.flush()
+
+    if usage.refused:
+        return None
+    return result
+
+
 async def answer_screening(
     session: AsyncSession,
     *,
@@ -447,5 +517,6 @@ __all__ = [
     "analyze_job",
     "answer_screening",
     "generate_cover_letter",
+    "review_draft",
     "tailor_resume",
 ]

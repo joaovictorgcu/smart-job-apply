@@ -26,11 +26,15 @@ from app.ai.schemas import (
     AIUsage,
     CoverLetter,
     CVChange,
+    DraftReview,
     JobScore,
+    RequirementCoverage,
+    ReviewNote,
     ScoreDimension,
     ScoreGate,
     ScreeningAnswer,
     StretchFlag,
+    SuggestedEdit,
     TailoredResume,
 )
 from app.models.enums import AnswerConfidence
@@ -107,6 +111,20 @@ class FakeAIClient:
             ]
         )
         self.stretch_flags = stretch_flags if stretch_flags is not None else []
+        # Deterministic review: one grounded edit, the four mandatory critique
+        # notes, and one coverage row per status a test may want to assert on.
+        self.review_edits: list[dict[str, str]] = [
+            {
+                "old_string": "I am excited about this role",
+                "new_string": "Your posting asks for production Python; I have shipped it",
+                "reason": "Names the stated requirement instead of generic enthusiasm.",
+            }
+        ]
+        self.review_coverage: list[dict[str, Any]] = [
+            {"requirement": "Python", "status": "covered", "note": "Named in the letter."},
+            {"requirement": "FastAPI", "status": "missing_have_it", "note": "In the profile."},
+            {"requirement": "Kubernetes", "status": "missing_gap", "note": None},
+        ]
         self.recommend_apply = recommend_apply
         self.cover_letter_text = cover_letter_text
         self.language = language
@@ -230,6 +248,33 @@ class FakeAIClient:
                 unsupported_requirements=list(self.tailor_unsupported),
                 stretch_flags=[StretchFlag(**flag) for flag in self.stretch_flags],
                 summary="Deterministic tailored resume.",
+            ),
+            usage,
+        )
+
+    async def review_draft(
+        self,
+        profile: Any = None,
+        job: Any = None,
+        *,
+        cover_letter: str | None = None,
+        answers: Any = (),
+        **_kwargs: Any,
+    ) -> tuple[DraftReview, AIUsage]:
+        usage = self._record("review_draft")
+        if self.refused:
+            return DraftReview(), usage
+        return (
+            DraftReview(
+                edits=[SuggestedEdit(**edit) for edit in self.review_edits],
+                critique=[
+                    ReviewNote(category="missed_keywords", note="FastAPI never appears."),
+                    ReviewNote(category="company_angle", note="No issues."),
+                    ReviewNote(category="reframing", note="'participated in' undersells."),
+                    ReviewNote(category="tone", note="No issues."),
+                ],
+                coverage=[RequirementCoverage(**row) for row in self.review_coverage],
+                summary="Deterministic test review.",
             ),
             usage,
         )

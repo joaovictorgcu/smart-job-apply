@@ -88,6 +88,7 @@ class AnalysisKind(StrEnum):
     COVER_LETTER = "cover_letter"
     SCREENING = "screening"
     CV_TAILORING = "cv_tailoring"
+    REVIEW = "review"
 
 
 class AnswerConfidence(StrEnum):
