@@ -290,6 +290,7 @@ def to_job_read(job: Job) -> JobRead:
     return JobRead(
         id=job.id,
         external_id=job.external_id,
+        source=job.source or "linkedin",
         title=job.title,
         company=job.company,
         location=job.location,

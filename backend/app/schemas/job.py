@@ -49,6 +49,7 @@ class SearchRead(ORMModel, SearchBase):
 class JobRead(ORMModel):
     id: int
     external_id: str
+    source: str = "linkedin"
     title: str
     company: str
     location: str | None = None

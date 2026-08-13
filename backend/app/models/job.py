@@ -73,6 +73,9 @@ class Job(Base, TimestampMixin):
     )
 
     external_id: Mapped[str] = mapped_column(String(100), index=True)
+    # Which portal the job came from ("linkedin", "gupy", ...). Discovery is
+    # per-portal; the scoring/review pipeline downstream is portal-agnostic.
+    source: Mapped[str] = mapped_column(String(30), default="linkedin", index=True)
     title: Mapped[str] = mapped_column(String(300))
     company: Mapped[str] = mapped_column(String(300))
     location: Mapped[str | None] = mapped_column(String(200), default=None)

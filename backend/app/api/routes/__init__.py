@@ -9,6 +9,7 @@ from app.api.routes import (
     automation,
     health,
     jobs,
+    portals,
     profile,
     searches,
     settings,
@@ -28,6 +29,7 @@ api_router.include_router(searches.router)
 api_router.include_router(jobs.router)
 api_router.include_router(applications.router)
 api_router.include_router(automation.router)
+api_router.include_router(portals.router)
 api_router.include_router(ai.router)
 api_router.include_router(stats.router)
 api_router.include_router(ws.router)
