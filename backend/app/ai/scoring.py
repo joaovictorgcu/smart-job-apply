@@ -366,6 +366,85 @@ async def review_draft(
     return result
 
 
+async def prepare_interview(
+    session: AsyncSession,
+    *,
+    user: Any,
+    job: Any,
+    application: Any,
+    profile_ctx: ProfileContext,
+    settings_row: Any,
+    client: AIClient | None = None,
+) -> str | None:
+    """A markdown prep pack from the stored application, persisted for audit.
+
+    Prefers the frozen submission snapshot over the live rows: the pack must
+    match what the interviewer actually read, and the posting may have vanished.
+    """
+    ai = client or get_ai_client_for(settings_row)
+    snapshot = getattr(application, "submitted_snapshot", None) or {}
+
+    class _SnapshotJob:
+        title = snapshot.get("job_title") or getattr(job, "title", "")
+        company = snapshot.get("company") or getattr(job, "company", "")
+        location = snapshot.get("location") or getattr(job, "location", None)
+        description = snapshot.get("description") or getattr(job, "description", None)
+
+    try:
+        content, usage = await ai.interview_prep(
+            profile_ctx,
+            _SnapshotJob(),
+            submitted_cover_letter=(
+                snapshot.get("cover_letter") or getattr(application, "cover_letter", None)
+            ),
+            submitted_answers=list(
+                snapshot.get("screening_answers")
+                or getattr(application, "screening_answers", None)
+                or []
+            ),
+            missing_requirements=list(getattr(job, "missing_requirements", None) or []),
+            score_summary=None,
+        )
+    except AINotConfiguredError:
+        raise
+    except (anthropic.APIError, ValueError, RuntimeError) as exc:
+        logger.error(
+            "Interview prep failed for application_id=%s: %s",
+            getattr(application, "id", None),
+            exc,
+            extra={
+                "action": "ai.interview_prep.failed",
+                "application_id": getattr(application, "id", None),
+            },
+        )
+        _persist_analysis(
+            session,
+            user_id=user.id,
+            job_id=getattr(job, "id", None),
+            kind=AnalysisKind.INTERVIEW_PREP,
+            model=ai.model,
+            result={},
+            error_message=str(exc),
+        )
+        await session.flush()
+        return None
+
+    _persist_analysis(
+        session,
+        user_id=user.id,
+        job_id=getattr(job, "id", None),
+        kind=AnalysisKind.INTERVIEW_PREP,
+        model=ai.model,
+        result={"content": content},
+        usage=usage,
+    )
+    await session.flush()
+
+    if usage.refused or not content:
+        return None
+    return content
+
+
 async def answer_screening(
     session: AsyncSession,
     *,
@@ -517,6 +596,7 @@ __all__ = [
     "analyze_job",
     "answer_screening",
     "generate_cover_letter",
+    "prepare_interview",
     "review_draft",
     "tailor_resume",
 ]

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -53,6 +53,34 @@ class OutcomeUpdate(BaseModel):
 
     outcome: ApplicationOutcome
     note: str | None = Field(default=None, max_length=500)
+
+
+StageType = Literal["phone_screen", "technical", "case_study", "final_round", "offer_discussion"]
+
+
+class InterviewStageCreate(BaseModel):
+    stage_type: StageType
+    scheduled_at: datetime | None = None
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class InterviewStageUpdate(BaseModel):
+    """Partial update; `mark_completed` stamps `completed_at` with now."""
+
+    mark_completed: bool = False
+    completed_at: datetime | None = None
+    scheduled_at: datetime | None = None
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class InterviewStageRead(ORMModel):
+    id: int
+    application_id: int
+    stage_type: str
+    scheduled_at: datetime | None = None
+    completed_at: datetime | None = None
+    note: str | None = None
+    created_at: datetime | None = None
 
 
 class ApplicationEventOut(ORMModel):

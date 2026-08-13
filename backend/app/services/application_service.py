@@ -19,6 +19,7 @@ from app.models import (
     ApplicationEventType,
     ApplicationOutcome,
     ApplicationStatus,
+    InterviewStage,
     Job,
     JobStatus,
     User,
@@ -208,6 +209,18 @@ async def mark_submitted(
     application.submitted_at = utcnow()
     application.was_dry_run = was_dry_run
     application.error_message = None
+    # Freeze what actually went out: postings vanish from LinkedIn quickly, and
+    # later edits to the draft must not rewrite the record of what was sent.
+    job = application.job
+    application.submitted_snapshot = {
+        "job_title": job.title if job else None,
+        "company": job.company if job else None,
+        "location": job.location if job else None,
+        "url": job.url if job else None,
+        "description": job.description if job else None,
+        "cover_letter": application.cover_letter,
+        "screening_answers": list(application.screening_answers or []),
+    }
     # A submitted application enters the pipeline board at APPLIED, waiting for the
     # user to record what happens next (interview, offer, rejection).
     if application.outcome is None:
@@ -308,6 +321,100 @@ async def discard(
         user_id=user.id,
     )
     return application
+
+
+STAGE_TYPES = {"phone_screen", "technical", "case_study", "final_round", "offer_discussion"}
+
+
+async def list_stages(
+    session: AsyncSession, user: User, application_id: int
+) -> list[InterviewStage]:
+    # Resolve through the application so the stages stay scoped to the owner.
+    application = await get_application(session, user, application_id)
+    result = await session.execute(
+        select(InterviewStage)
+        .where(InterviewStage.application_id == application.id)
+        .order_by(InterviewStage.created_at, InterviewStage.id)
+    )
+    return list(result.scalars().all())
+
+
+async def add_stage(
+    session: AsyncSession,
+    user: User,
+    application_id: int,
+    *,
+    stage_type: str,
+    scheduled_at: datetime | None = None,
+    note: str | None = None,
+) -> InterviewStage:
+    """Record one interview step. Only a submitted application has a process."""
+    application = await get_application(session, user, application_id)
+    if application.status != ApplicationStatus.SUBMITTED:
+        raise PreconditionFailedError(
+            "Only a submitted application can have interview stages "
+            f"(current status: '{application.status}')."
+        )
+    stage = InterviewStage(
+        user_id=user.id,
+        application_id=application.id,
+        stage_type=stage_type,
+        scheduled_at=scheduled_at,
+        note=note,
+    )
+    session.add(stage)
+    await session.flush()
+    return stage
+
+
+async def update_stage(
+    session: AsyncSession,
+    user: User,
+    application_id: int,
+    stage_id: int,
+    *,
+    completed_at: datetime | None = None,
+    scheduled_at: datetime | None = None,
+    note: str | None = None,
+    mark_completed: bool = False,
+) -> InterviewStage:
+    application = await get_application(session, user, application_id)
+    result = await session.execute(
+        select(InterviewStage).where(
+            InterviewStage.id == stage_id,
+            InterviewStage.application_id == application.id,
+        )
+    )
+    stage = result.scalar_one_or_none()
+    if stage is None:
+        raise NotFoundError("Interview stage not found.")
+    if mark_completed and completed_at is None:
+        completed_at = utcnow()
+    if completed_at is not None:
+        stage.completed_at = completed_at
+    if scheduled_at is not None:
+        stage.scheduled_at = scheduled_at
+    if note is not None:
+        stage.note = note or None
+    await session.flush()
+    return stage
+
+
+async def delete_stage(
+    session: AsyncSession, user: User, application_id: int, stage_id: int
+) -> None:
+    application = await get_application(session, user, application_id)
+    result = await session.execute(
+        select(InterviewStage).where(
+            InterviewStage.id == stage_id,
+            InterviewStage.application_id == application.id,
+        )
+    )
+    stage = result.scalar_one_or_none()
+    if stage is None:
+        raise NotFoundError("Interview stage not found.")
+    await session.delete(stage)
+    await session.flush()
 
 
 async def export_csv(session: AsyncSession, user: User) -> str:

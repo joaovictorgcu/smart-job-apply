@@ -146,6 +146,10 @@ class Application(Base, TimestampMixin):
     outcome_updated_at: Mapped[datetime | None] = mapped_column(default=None)
     outcome_note: Mapped[str | None] = mapped_column(Text, default=None)
 
+    # Frozen at submit time: the posting text (LinkedIn postings vanish quickly)
+    # and the exact letter/answers that went out. Null for pre-feature rows.
+    submitted_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=None)
+
     user: Mapped[User] = relationship(back_populates="applications")
     job: Mapped[Job] = relationship(back_populates="application")
     events: Mapped[list[ApplicationEvent]] = relationship(
@@ -153,6 +157,37 @@ class Application(Base, TimestampMixin):
         cascade="all, delete-orphan",
         order_by="ApplicationEvent.created_at",
     )
+    stages: Mapped[list[InterviewStage]] = relationship(
+        back_populates="application",
+        cascade="all, delete-orphan",
+        order_by="InterviewStage.created_at",
+    )
+
+
+class InterviewStage(Base, TimestampMixin):
+    """One interview step of a submitted application.
+
+    Finer-grained than the board's single Interview column: a process is a
+    sequence of stages (phone screen, technical, final round...), each with its
+    own date and feedback.
+    """
+
+    __tablename__ = "interview_stages"
+    __table_args__ = (Index("ix_stage_application", "application_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    application_id: Mapped[int] = mapped_column(
+        ForeignKey("applications.id", ondelete="CASCADE"), index=True
+    )
+
+    # phone_screen / technical / case_study / final_round / offer_discussion
+    stage_type: Mapped[str] = mapped_column(String(30))
+    scheduled_at: Mapped[datetime | None] = mapped_column(default=None)
+    completed_at: Mapped[datetime | None] = mapped_column(default=None)
+    note: Mapped[str | None] = mapped_column(Text, default=None)
+
+    application: Mapped[Application] = relationship(back_populates="stages")
 
 
 class ApplicationEvent(Base):

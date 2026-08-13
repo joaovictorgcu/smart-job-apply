@@ -31,6 +31,10 @@ from app.ai.prompts.cover_letter import (
     COVER_LETTER_SYSTEM_PROMPT,
     build_cover_letter_prompt,
 )
+from app.ai.prompts.interview_prep import (
+    INTERVIEW_PREP_SYSTEM_PROMPT,
+    build_interview_prep_prompt,
+)
 from app.ai.prompts.review import REVIEW_SYSTEM_PROMPT, build_review_prompt
 from app.ai.prompts.scoring import SCORING_SYSTEM_PROMPT, build_scoring_prompt
 from app.ai.prompts.screening import SCREENING_SYSTEM_PROMPT, build_screening_prompt
@@ -61,6 +65,8 @@ COVER_LETTER_MAX_TOKENS = 4096
 TAILORING_MAX_TOKENS = 12288
 # Edits + four critique notes + a coverage table over every stated requirement.
 REVIEW_MAX_TOKENS = 8192
+# A ~600-word markdown pack; headroom for thinking on Opus 5.
+INTERVIEW_PREP_MAX_TOKENS = 6144
 
 # Cover letters and screening answers are low-volume and correctness-sensitive;
 # only bulk scoring uses the cheaper effort from settings.
@@ -662,6 +668,57 @@ class AIClient:
             )
 
         return parsed, self._usage(response, started_at=started_at)
+
+    async def interview_prep(
+        self,
+        profile: ProfileContext,
+        job: JobLike,
+        *,
+        submitted_cover_letter: str | None,
+        submitted_answers: list[dict[str, Any]],
+        missing_requirements: list[str],
+        score_summary: str | None,
+    ) -> tuple[str, AIUsage]:
+        """A markdown interview-prep pack grounded in the stored application.
+
+        On refusal or empty output, returns an empty string with `AIUsage.refused`
+        set so the caller degrades to "prepare by hand".
+        """
+        started_at = time.perf_counter()
+        response = await self._send(
+            system=INTERVIEW_PREP_SYSTEM_PROMPT,
+            user_prompt=build_interview_prep_prompt(
+                profile,
+                job,
+                submitted_cover_letter=submitted_cover_letter,
+                submitted_answers=submitted_answers,
+                missing_requirements=missing_requirements,
+                score_summary=score_summary,
+            ),
+            max_tokens=INTERVIEW_PREP_MAX_TOKENS,
+            effort=QUALITY_EFFORT,
+        )
+
+        if response.stop_reason == "refusal":
+            category = _refusal_category(response)
+            logger.warning(
+                "Model declined the interview prep (category=%s).",
+                category,
+                extra={"action": "ai.interview_prep.refused", "refusal_category": category},
+            )
+            return "", self._usage(
+                response, started_at=started_at, refused=True, refusal_category=category
+            )
+
+        content = _first_text(response).strip()
+        if not content:
+            return "", self._usage(
+                response,
+                started_at=started_at,
+                refused=True,
+                refusal_category=f"empty_output:{response.stop_reason}",
+            )
+        return content, self._usage(response, started_at=started_at)
 
 
 def _reconcile_answer(answer: ScreeningAnswer, questions: list[FormQuestion]) -> ScreeningAnswer:

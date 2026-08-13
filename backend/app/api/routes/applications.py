@@ -14,6 +14,9 @@ from app.schemas.application import (
     ApplicationEventOut,
     ApplicationRead,
     ApplicationUpdate,
+    InterviewStageCreate,
+    InterviewStageRead,
+    InterviewStageUpdate,
     OutcomeUpdate,
 )
 from app.schemas.automation import SubmitRequest
@@ -142,6 +145,65 @@ async def discard_application(
     await application_service.discard(session, user, application_id)
     application = await application_service.get_application(session, user, application_id)
     return application_service.to_application_detail(application)
+
+
+@router.get("/{application_id}/stages", response_model=list[InterviewStageRead])
+async def list_interview_stages(
+    application_id: int, user: CurrentUser, session: SessionDep
+) -> list[InterviewStageRead]:
+    """The interview steps of this application, oldest first."""
+    stages = await application_service.list_stages(session, user, application_id)
+    return [InterviewStageRead.model_validate(stage) for stage in stages]
+
+
+@router.post("/{application_id}/stages", response_model=InterviewStageRead)
+async def add_interview_stage(
+    application_id: int,
+    payload: InterviewStageCreate,
+    user: CurrentUser,
+    session: SessionDep,
+) -> InterviewStageRead:
+    """Record one interview step (phone screen, technical, final round...)."""
+    stage = await application_service.add_stage(
+        session,
+        user,
+        application_id,
+        stage_type=payload.stage_type,
+        scheduled_at=payload.scheduled_at,
+        note=payload.note,
+    )
+    return InterviewStageRead.model_validate(stage)
+
+
+@router.patch("/{application_id}/stages/{stage_id}", response_model=InterviewStageRead)
+async def update_interview_stage(
+    application_id: int,
+    stage_id: int,
+    payload: InterviewStageUpdate,
+    user: CurrentUser,
+    session: SessionDep,
+) -> InterviewStageRead:
+    """Complete or annotate an interview step."""
+    stage = await application_service.update_stage(
+        session,
+        user,
+        application_id,
+        stage_id,
+        completed_at=payload.completed_at,
+        scheduled_at=payload.scheduled_at,
+        note=payload.note,
+        mark_completed=payload.mark_completed,
+    )
+    return InterviewStageRead.model_validate(stage)
+
+
+@router.delete("/{application_id}/stages/{stage_id}", status_code=204)
+async def delete_interview_stage(
+    application_id: int, stage_id: int, user: CurrentUser, session: SessionDep
+) -> Response:
+    """Remove an interview step recorded by mistake."""
+    await application_service.delete_stage(session, user, application_id, stage_id)
+    return Response(status_code=204)
 
 
 @router.get("/{application_id}/events", response_model=list[ApplicationEventOut])

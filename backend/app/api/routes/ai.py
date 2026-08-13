@@ -26,6 +26,10 @@ class CoverLetterResponse(BaseModel):
     language: str
 
 
+class InterviewPrepResponse(BaseModel):
+    content: str
+
+
 @router.get("/status", response_model=AIStatus)
 async def read_status(user: CurrentUser, session: SessionDep) -> AIStatus:
     """Whether an API key is configured, and which model this account would use."""
@@ -88,6 +92,32 @@ async def review_application_draft(
     if result is None:
         raise UpstreamError("The AI did not return a review. Try again, or review by hand.")
     return result
+
+
+@router.post("/interview-prep/{application_id}", response_model=InterviewPrepResponse)
+async def create_interview_prep(
+    application_id: int, user: CurrentUser, session: SessionDep
+) -> InterviewPrepResponse:
+    """A markdown prep pack for an interview, grounded only in stored data.
+
+    Uses the frozen submission snapshot (the posting and the exact materials
+    sent), the fit analysis gaps, and the profile — no web research, nothing
+    invented.
+    """
+    application = await application_service.get_application(session, user, application_id)
+    settings_row = await user_service.get_or_create_settings(session, user)
+    profile_ctx = await user_service.build_profile_context(session, user)
+    content = await scoring.prepare_interview(
+        session,
+        user=user,
+        job=application.job,
+        application=application,
+        profile_ctx=profile_ctx,
+        settings_row=settings_row,
+    )
+    if content is None:
+        raise UpstreamError("The AI did not return a prep pack. Try again.")
+    return InterviewPrepResponse(content=content)
 
 
 @router.get("/tailor-cv/{job_id}", response_model=TailoredResumeRead)

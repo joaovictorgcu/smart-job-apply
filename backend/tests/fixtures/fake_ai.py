@@ -279,6 +279,22 @@ class FakeAIClient:
             usage,
         )
 
+    async def interview_prep(
+        self,
+        profile: Any = None,
+        job: Any = None,
+        **_kwargs: Any,
+    ) -> tuple[str, AIUsage]:
+        usage = self._record("interview_prep")
+        if self.refused:
+            return "", usage
+        return (
+            "## Provaveis perguntas\n- Kubernetes?\n\n## Consistencia com o que foi enviado\n"
+            "- 7 anos de Python\n\n## Historias para ter na ponta da lingua\n- API em producao\n\n"
+            "## Perguntas para fazer\n- Como e o time?",
+            usage,
+        )
+
     # --- helpers ----------------------------------------------------------
 
     def build_answers(self, questions: Any = ()) -> list[ScreeningAnswer]:
