@@ -22,6 +22,8 @@ from app.schemas.stats import (
     OutcomeStats,
     ScoreBandRate,
     ScoreBucket,
+    SegmentRate,
+    SegmentStats,
 )
 from app.services import application_service, job_service, user_service
 
@@ -218,4 +220,53 @@ async def build_dashboard_stats(session: AsyncSession, user: User) -> DashboardS
         ai_calls_total=int(ai_calls or 0),
         ai_tokens_input=int(tokens_in or 0),
         ai_tokens_output=int(tokens_out or 0),
+    )
+
+
+# Segments with fewer submissions than this are noise, not signal; they are
+# still returned (the user should see them) but sorted after the meaningful ones.
+_SEGMENT_LIMIT = 8
+
+
+async def build_segment_stats(session: AsyncSession, user: User) -> SegmentStats:
+    """Which kinds of application convert: by company, location and workplace."""
+    interview_list = list(_INTERVIEW_OUTCOMES)
+    submitted = (
+        Application.user_id == user.id,
+        Application.status == ApplicationStatus.SUBMITTED,
+    )
+
+    async def slice_by(column) -> list[SegmentRate]:  # noqa: ANN001 - SQLA column
+        rows = (
+            await session.execute(
+                select(
+                    column,
+                    func.count(Application.id),
+                    func.sum(case((Application.outcome.in_(interview_list), 1), else_=0)),
+                )
+                .select_from(Application)
+                .join(Job, Application.job_id == Job.id)
+                .where(*submitted)
+                .group_by(column)
+            )
+        ).all()
+        segments = []
+        for label, total, interviews in rows:
+            total = int(total or 0)
+            interviews = int(interviews or 0)
+            segments.append(
+                SegmentRate(
+                    label=str(label) if label else "(não informado)",
+                    total=total,
+                    interviews=interviews,
+                    rate=round(interviews / total, 3) if total else None,
+                )
+            )
+        segments.sort(key=lambda item: (-item.total, item.label.lower()))
+        return segments[:_SEGMENT_LIMIT]
+
+    return SegmentStats(
+        by_company=await slice_by(Job.company),
+        by_location=await slice_by(Job.location),
+        by_workplace=await slice_by(Job.workplace_type),
     )

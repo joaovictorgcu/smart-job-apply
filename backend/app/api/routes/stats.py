@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.api.deps import CurrentUser, SessionDep
-from app.schemas.stats import DashboardStats, OutcomeStats
+from app.schemas.stats import DashboardStats, OutcomeStats, SegmentStats
 from app.services import stats_service
 
 router = APIRouter(prefix="/stats", tags=["stats"])
@@ -21,3 +21,9 @@ async def read_stats(user: CurrentUser, session: SessionDep) -> DashboardStats:
 async def read_outcome_stats(user: CurrentUser, session: SessionDep) -> OutcomeStats:
     """Interview rate by match-score band — whether a high score predicts interviews."""
     return await stats_service.build_outcome_stats(session, user)
+
+
+@router.get("/segments", response_model=SegmentStats)
+async def read_segment_stats(user: CurrentUser, session: SessionDep) -> SegmentStats:
+    """Interview rate by company, location and workplace type."""
+    return await stats_service.build_segment_stats(session, user)

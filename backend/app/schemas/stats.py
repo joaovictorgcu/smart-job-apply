@@ -30,6 +30,23 @@ class ScoreBandRate(BaseModel):
     rate: float | None = None  # interviews / total, or null when total is 0
 
 
+class SegmentRate(BaseModel):
+    """Interview rate of submitted applications sharing one attribute value."""
+
+    label: str
+    total: int
+    interviews: int  # outcome in {interview, offer}
+    rate: float | None = None  # interviews / total, or null when total is 0
+
+
+class SegmentStats(BaseModel):
+    """Which kinds of application actually convert, sliced three ways."""
+
+    by_company: list[SegmentRate] = []
+    by_location: list[SegmentRate] = []
+    by_workplace: list[SegmentRate] = []
+
+
 class OutcomeStats(BaseModel):
     """Does a high AI match score actually lead to interviews?"""
 
