@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 
 import { ApplicationReviewPanel } from '@/components/ApplicationReviewPanel';
 import { EmptyState } from '@/components/EmptyState';
+import { InterviewPanel } from '@/components/InterviewPanel';
 import { Card, CardHeader, MetaRow, Note, Skeleton } from '@/components/primitives';
 import { ScoreBadge } from '@/components/ScoreBadge';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -180,6 +181,11 @@ export function ApplicationDetail() {
         <ApplicationReviewPanel application={application} className="lg:col-span-2" />
 
         <div className="space-y-4">
+          <InterviewPanel
+            applicationId={application.id}
+            enabled={application.status === 'submitted'}
+          />
+
           <Card>
             <CardHeader title="Linha do tempo" description="Tudo que aconteceu, do mais antigo ao mais recente." />
             <div className="card-body">

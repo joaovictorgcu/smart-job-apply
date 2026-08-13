@@ -324,6 +324,33 @@ export interface StretchFlag {
   why_stretch: string;
 }
 
+export type StageType =
+  | "phone_screen"
+  | "technical"
+  | "case_study"
+  | "final_round"
+  | "offer_discussion";
+
+export interface InterviewStage {
+  id: number;
+  application_id: number;
+  stage_type: StageType | string;
+  scheduled_at: string | null;
+  completed_at: string | null;
+  note: string | null;
+  created_at: string | null;
+}
+
+export interface InterviewStageCreate {
+  stage_type: StageType;
+  scheduled_at?: string | null;
+  note?: string | null;
+}
+
+export interface InterviewPrep {
+  content: string;
+}
+
 export type ReviewCategory = "missed_keywords" | "company_angle" | "reframing" | "tone";
 export type CoverageStatus = "covered" | "synonym_only" | "missing_have_it" | "missing_gap";
 

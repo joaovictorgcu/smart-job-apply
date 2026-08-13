@@ -9,6 +9,9 @@ import type {
   ApplicationOutcome,
   ApplicationUpdate,
   DraftReview,
+  InterviewPrep,
+  InterviewStage,
+  InterviewStageCreate,
   Page,
 } from "@/types/api";
 
@@ -95,6 +98,33 @@ export async function downloadApplicationsCsv(): Promise<void> {
 /** POST /api/ai/review/{applicationId} — second-pass AI review of the draft. */
 export function reviewApplication(applicationId: number): Promise<DraftReview> {
   return api.post<DraftReview>(`/ai/review/${applicationId}`);
+}
+
+/** GET /api/applications/{id}/stages */
+export function listStages(id: number, signal?: AbortSignal): Promise<InterviewStage[]> {
+  return api.get<InterviewStage[]>(`/applications/${id}/stages`, { signal });
+}
+
+/** POST /api/applications/{id}/stages */
+export function addStage(id: number, payload: InterviewStageCreate): Promise<InterviewStage> {
+  return api.post<InterviewStage>(`/applications/${id}/stages`, payload);
+}
+
+/** PATCH /api/applications/{id}/stages/{stageId} — mark completed / annotate. */
+export function completeStage(id: number, stageId: number): Promise<InterviewStage> {
+  return api.patch<InterviewStage>(`/applications/${id}/stages/${stageId}`, {
+    mark_completed: true,
+  });
+}
+
+/** DELETE /api/applications/{id}/stages/{stageId} */
+export function deleteStage(id: number, stageId: number): Promise<void> {
+  return api.delete<void>(`/applications/${id}/stages/${stageId}`);
+}
+
+/** POST /api/ai/interview-prep/{id} — markdown prep pack from stored data. */
+export function fetchInterviewPrep(id: number): Promise<InterviewPrep> {
+  return api.post<InterviewPrep>(`/ai/interview-prep/${id}`);
 }
 
 /** GET /api/applications/board — submitted applications for the pipeline board. */
