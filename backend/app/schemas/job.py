@@ -6,6 +6,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.ai.schemas import ScoreDimension, ScoreGate
 from app.models.enums import JobStatus
 from app.schemas.common import ORMModel
 
@@ -58,6 +59,8 @@ class JobRead(ORMModel):
     score: int | None = None
     score_reasons: list[str] = Field(default_factory=list)
     missing_requirements: list[str] = Field(default_factory=list)
+    score_breakdown: list[ScoreDimension] = Field(default_factory=list)
+    score_gates: list[ScoreGate] = Field(default_factory=list)
     skip_reason: str | None = None
     detected_language: str | None = None
     posted_at: datetime | None = None

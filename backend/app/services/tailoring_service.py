@@ -100,6 +100,7 @@ async def create_tailored_resume(session: AsyncSession, user: User, job_id: int)
     row.changes = [change.model_dump(mode="json") for change in result.changes]
     row.unsupported_requirements = list(result.unsupported_requirements)
     row.invention_flags = flags
+    row.stretch_flags = [flag.model_dump(mode="json") for flag in result.stretch_flags]
     row.summary = result.summary
     row.model = settings_row.ai_model or get_settings().anthropic_model
     row.source_fingerprint = _fingerprint(profile)
@@ -165,6 +166,7 @@ def to_read(row: TailoredResume, *, current: str | None) -> TailoredResumeRead:
         changes=changes,
         unsupported_requirements=list(row.unsupported_requirements or []),
         invention_flags=list(row.invention_flags or []),
+        stretch_flags=list(row.stretch_flags or []),
         summary=row.summary,
         model=row.model,
         was_edited=row.was_edited,

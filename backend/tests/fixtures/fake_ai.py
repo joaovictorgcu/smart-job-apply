@@ -22,7 +22,17 @@ from typing import Any
 import anthropic
 import httpx
 
-from app.ai.schemas import AIUsage, CoverLetter, CVChange, JobScore, ScreeningAnswer, TailoredResume
+from app.ai.schemas import (
+    AIUsage,
+    CoverLetter,
+    CVChange,
+    JobScore,
+    ScoreDimension,
+    ScoreGate,
+    ScreeningAnswer,
+    StretchFlag,
+    TailoredResume,
+)
 from app.models.enums import AnswerConfidence
 
 DEFAULT_MODEL = "claude-opus-5"
@@ -40,6 +50,9 @@ class FakeAIClient:
         score: int = 85,
         reasons: list[str] | None = None,
         missing_requirements: list[str] | None = None,
+        breakdown: list[dict[str, Any]] | None = None,
+        gates: list[dict[str, Any]] | None = None,
+        stretch_flags: list[dict[str, str]] | None = None,
         recommend_apply: bool | None = None,
         cover_letter_text: str = "I am excited about this role and my background fits it well.",
         language: str = "en",
@@ -65,6 +78,35 @@ class FakeAIClient:
         self.missing_requirements = (
             missing_requirements if missing_requirements is not None else ["Kubernetes"]
         )
+        self.breakdown = (
+            breakdown
+            if breakdown is not None
+            else [
+                {
+                    "dimension": "skills",
+                    "score": 90,
+                    "weight": "hard",
+                    "evidence": "Posting asks for Python and FastAPI; both are on the resume.",
+                },
+                {
+                    "dimension": "experience",
+                    "score": 80,
+                    "weight": "hard",
+                    "evidence": "Asks for 5+ years, resume shows 7.",
+                },
+            ]
+        )
+        # Both gates pass by default so existing tests keep their behaviour; a
+        # test opts into a failure or a flag explicitly.
+        self.gates = (
+            gates
+            if gates is not None
+            else [
+                {"gate": "eligibility", "status": "pass", "evidence": "No such requirement."},
+                {"gate": "language", "status": "pass", "evidence": "Posting is in English."},
+            ]
+        )
+        self.stretch_flags = stretch_flags if stretch_flags is not None else []
         self.recommend_apply = recommend_apply
         self.cover_letter_text = cover_letter_text
         self.language = language
@@ -140,6 +182,8 @@ class FakeAIClient:
                 score=self.score,
                 reasons=list(self.reasons),
                 missing_requirements=list(self.missing_requirements),
+                breakdown=[ScoreDimension(**dimension) for dimension in self.breakdown],
+                gates=[ScoreGate(**gate) for gate in self.gates],
                 recommend_apply=recommend,
                 summary=f"Deterministic test score of {self.score}.",
             ),
@@ -184,6 +228,7 @@ class FakeAIClient:
                 tailored_markdown=self.tailored_markdown,
                 changes=[CVChange(**change) for change in self.tailor_changes],
                 unsupported_requirements=list(self.tailor_unsupported),
+                stretch_flags=[StretchFlag(**flag) for flag in self.stretch_flags],
                 summary="Deterministic tailored resume.",
             ),
             usage,

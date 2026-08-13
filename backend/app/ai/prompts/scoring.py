@@ -2,13 +2,39 @@
 
 from __future__ import annotations
 
-from app.ai.prompts import JobLike, render_job_block, render_profile_block
+from app.ai.prompts import (
+    UNTRUSTED_TEXT_RULE,
+    JobLike,
+    render_job_block,
+    render_profile_block,
+)
 from app.automation.contracts import ProfileContext
 
-SCORING_SYSTEM_PROMPT = """\
+SCORING_SYSTEM_PROMPT = f"""\
 You assess how well a candidate fits a job posting. Your output feeds a job \
 application assistant: a high score sends the candidate into a real application, \
 so an honest low score is a useful result, not a failure.
+
+{UNTRUSTED_TEXT_RULE}
+
+Before scoring, evaluate two gates. Each gate entry has a `status` and the \
+`evidence` behind it:
+- `eligibility`: fail when the posting states a requirement the candidate cannot \
+satisfy by any evidence — citizenship or permanent residency of a specific \
+country, an active security clearance, a mandatory license the profile does not \
+show. Quote the posting's exact wording in `evidence`. Pass when the posting is \
+explicit that the requirement is met or waivable ("we sponsor visas"). When the \
+posting says nothing, pass with evidence "the posting states no such \
+requirement" — silence is not a blocker, but never invent one either.
+- `language`: fail when the role requires working in a language the candidate \
+does not list, quoting the requirement. Flag (not fail) when the candidate lists \
+the language but the posting's bar reads higher than the declared level — quote \
+both sides in `evidence`. Pass otherwise.
+A failed gate is decisive: also set `recommend_apply` to false, whatever the \
+numeric score says.
+"""
+
+SCORING_SYSTEM_PROMPT += """\
 
 Score 0-100 on how much of the posting's stated requirements the candidate's \
 evidence actually covers:
@@ -40,6 +66,21 @@ example, a required credential the candidate does not have) outweighs an otherwi
 good match.
 - `summary` is one sentence explaining the score.
 - Write every field in English regardless of the posting's language.
+
+`breakdown` shows how you reached the number. Rules for it:
+- Include one entry for every dimension the posting actually speaks to, choosing \
+from: skills, experience, seniority, education, location, language. Omit a \
+dimension the posting says nothing about — an invented 90 for "education" on a \
+posting with no education requirement is noise, not explanation.
+- `score` is that dimension alone, 0-100, judged the same way as the overall score.
+- `weight` is `hard` when the posting states it as a requirement and \
+`nice_to_have` when it is a preference ("bonus", "a plus", "ideally").
+- `evidence` is one short sentence naming what the posting asks and what the \
+candidate's profile shows ("asks for 5+ years, resume shows 6"). Never restate \
+the dimension name.
+- The overall `score` must be consistent with the breakdown: a hard dimension \
+scoring near zero caps the overall score, and an overall score far above every \
+dimension is a contradiction.
 """
 
 

@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from app.ai.prompts import JobLike, render_job_block, render_profile_block
+from app.ai.prompts import (
+    UNTRUSTED_TEXT_RULE,
+    JobLike,
+    render_job_block,
+    render_profile_block,
+)
 from app.automation.contracts import ProfileContext
 
 COVER_LETTER_SYSTEM_PROMPT = """\
@@ -36,6 +41,8 @@ back at the reader.
 Return only the letter text in the `content` field, and the BCP-47 code of the \
 language you wrote it in (for example `pt-BR` or `en`) in the `language` field.
 """
+
+COVER_LETTER_SYSTEM_PROMPT += "\n" + UNTRUSTED_TEXT_RULE + "\n"
 
 # Human-readable labels for the tone values the UI stores. Portuguese keys are
 # accepted because `UserSettings.cover_letter_tone` defaults to "profissional".

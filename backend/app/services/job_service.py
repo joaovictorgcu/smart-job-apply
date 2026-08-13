@@ -300,6 +300,8 @@ def to_job_read(job: Job) -> JobRead:
         score=job.score,
         score_reasons=list(job.score_reasons or []),
         missing_requirements=list(job.missing_requirements or []),
+        score_breakdown=list(job.score_breakdown or []),
+        score_gates=list(job.score_gates or []),
         skip_reason=job.skip_reason,
         detected_language=job.detected_language,
         posted_at=job.posted_at,

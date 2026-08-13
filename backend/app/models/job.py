@@ -87,6 +87,14 @@ class Job(Base, TimestampMixin):
     score: Mapped[int | None] = mapped_column(Integer, default=None, index=True)
     score_reasons: Mapped[list[str]] = mapped_column(JSON, default=list)
     missing_requirements: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # [{"dimension", "score", "weight", "evidence"}] — how the overall score was
+    # reached, so the number can be argued with instead of taken on faith. Empty
+    # for jobs scored before this existed, and for a model that returned none.
+    score_breakdown: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    # [{"gate", "status", "evidence"}] — decisive checks (eligibility, language)
+    # evaluated before the score. A failed gate skips the job with the posting's
+    # own wording as the reason, instead of a misleading low score.
+    score_gates: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     skip_reason: Mapped[str | None] = mapped_column(String(300), default=None)
 
     user: Mapped[User] = relationship(back_populates="jobs")
@@ -228,6 +236,9 @@ class TailoredResume(Base, TimestampMixin):
     changes: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     unsupported_requirements: Mapped[list[str]] = mapped_column(JSON, default=list)
     invention_flags: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # [{"text", "why_stretch"}] — grounded but aggressive claims the user should
+    # keep, soften, or drop; the middle band the binary invention guard lacks.
+    stretch_flags: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     summary: Mapped[str | None] = mapped_column(Text, default=None)
     model: Mapped[str | None] = mapped_column(String(100), default=None)
     # Hash of the source resume when this was generated, to detect a stale draft

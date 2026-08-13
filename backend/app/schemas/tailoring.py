@@ -6,6 +6,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.ai.schemas import StretchFlag
+
 
 class CVChangeOut(BaseModel):
     section: str
@@ -22,6 +24,8 @@ class TailoredResumeRead(BaseModel):
     # Technologies the invention guard found in the tailored text but not the
     # source; the user verifies each one.
     invention_flags: list[str] = Field(default_factory=list)
+    # Grounded but aggressive claims — keep, soften, or drop is the user's call.
+    stretch_flags: list[StretchFlag] = Field(default_factory=list)
     summary: str | None = None
     model: str | None = None
     was_edited: bool = False

@@ -18,6 +18,52 @@ from app.models.enums import AnswerConfidence
 
 QuestionType = Literal["text", "textarea", "number", "select", "radio", "checkbox", "unknown"]
 
+# A closed set, not free text: the dashboard renders one labelled row per
+# dimension and has to translate the label, which is impossible if the model
+# invents its own names. It also makes two jobs' breakdowns comparable.
+ScoreDimensionName = Literal[
+    "skills",
+    "experience",
+    "seniority",
+    "education",
+    "location",
+    "language",
+]
+
+
+class ScoreDimension(BaseModel):
+    """One axis of the fit score, so a number becomes an explanation."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    dimension: ScoreDimensionName
+    score: int = Field(ge=0, le=100, description="0-100 for this dimension alone.")
+    weight: Literal["hard", "nice_to_have"] = Field(
+        default="hard",
+        description="Whether the posting states this as a requirement or a preference.",
+    )
+    evidence: str = Field(
+        description="What in the posting and the candidate's profile produced this number."
+    )
+
+
+# Decisive checks evaluated before the score. A failed gate means the score is
+# irrelevant: no fit number outweighs "requires citizenship the candidate lacks".
+GateName = Literal["eligibility", "language"]
+GateStatus = Literal["pass", "fail", "flag"]
+
+
+class ScoreGate(BaseModel):
+    """One decisive check, with the posting's own wording as evidence."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    gate: GateName
+    status: GateStatus
+    evidence: str = Field(
+        description="The posting's quoted wording, or why the gate passed."
+    )
+
 
 class JobScore(BaseModel):
     """How well a job matches the user's profile."""
@@ -25,11 +71,19 @@ class JobScore(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     score: int = Field(ge=0, le=100, description="0-100; how well the profile fits the job.")
+    gates: list[ScoreGate] = Field(
+        default_factory=list,
+        description="Eligibility and language gates, evaluated before the score.",
+    )
     reasons: list[str] = Field(
         default_factory=list, description="Objective reasons for the score (strengths)."
     )
     missing_requirements: list[str] = Field(
         default_factory=list, description="Job requirements the profile does not cover."
+    )
+    breakdown: list[ScoreDimension] = Field(
+        default_factory=list,
+        description="Per-dimension scores that explain how the overall score was reached.",
     )
     recommend_apply: bool = Field(description="Is it worth applying?")
     summary: str | None = Field(default=None, description="A one-sentence rationale.")
@@ -38,6 +92,12 @@ class JobScore(BaseModel):
     @classmethod
     def _clamp(cls, value: int) -> int:
         return max(0, min(100, value))
+
+
+# Where an answer came from. The distinction that matters to the reviewer is
+# "something I wrote" versus "something the model produced": `answer_bank` and
+# `user` are the user's own words, `ai` is inference over the profile.
+AnswerSource = Literal["answer_bank", "ai", "user"]
 
 
 class ScreeningAnswer(BaseModel):
@@ -55,6 +115,9 @@ class ScreeningAnswer(BaseModel):
     confidence: AnswerConfidence = AnswerConfidence.MEDIUM
     needs_review: bool = False
     reasoning: str | None = None
+    # Defaults to `ai`: this schema is what the model fills in, and every other
+    # producer (the answer bank, the review UI) sets the field explicitly.
+    source: AnswerSource = "ai"
     # Identifier of the form field, when known (filled in by the automation).
     field_id: str | None = None
 
@@ -100,6 +163,20 @@ class CVChange(BaseModel):
     detail: str = Field(description="What changed and why it fits this job.")
 
 
+class StretchFlag(BaseModel):
+    """A tailored claim in the grey zone between honest rephrasing and invention.
+
+    Grounded in the source resume, but framed aggressively enough that an
+    interviewer probing it could make the candidate backtrack — the user decides
+    whether to keep, soften, or drop it.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    text: str = Field(description="The stretched claim, quoted from the tailored resume.")
+    why_stretch: str = Field(description="What makes it a stretch rather than a plain fact.")
+
+
 class TailoredResume(BaseModel):
     """A resume adapted to one job — reorganized and re-emphasized, never invented.
 
@@ -116,6 +193,10 @@ class TailoredResume(BaseModel):
         default_factory=list,
         description="Requirements the source resume does not support (not invented).",
     )
+    stretch_flags: list[StretchFlag] = Field(
+        default_factory=list,
+        description="Claims kept in the resume but aggressive enough to deserve review.",
+    )
     summary: str | None = Field(default=None, description="A one-line note on the approach.")
 
 
@@ -127,6 +208,7 @@ class JobAnalysis(BaseModel):
     score: int = 0
     reasons: list[str] = Field(default_factory=list)
     missing_requirements: list[str] = Field(default_factory=list)
+    breakdown: list[ScoreDimension] = Field(default_factory=list)
     recommend_apply: bool = False
     summary: str | None = None
     cover_letter: str | None = None

@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -134,11 +135,24 @@ async def update_draft(
     if "cover_letter" in changes:
         application.cover_letter = payload.cover_letter
     if payload.screening_answers is not None:
+        # Provenance is decided here rather than trusted from the request: an
+        # answer whose text differs from the stored one is the user's wording now,
+        # whatever the client claims its source is.
+        previous = {
+            str(stored.get("field_id") or stored.get("question")): str(stored.get("answer") or "")
+            for stored in (application.screening_answers or [])
+        }
+        serialised: list[dict[str, Any]] = []
+        for answer in payload.screening_answers:
+            row = answer.model_dump(mode="json")
+            key = str(answer.field_id or answer.question)
+            if key in previous and previous[key] != answer.answer:
+                row["source"] = "user"
+            serialised.append(row)
+
         # The column is plain JSON: Pydantic objects must be serialised first or
         # SQLAlchemy cannot persist them.
-        application.screening_answers = [
-            answer.model_dump(mode="json") for answer in payload.screening_answers
-        ]
+        application.screening_answers = serialised
         application.needs_human_input = any(
             answer.needs_review for answer in payload.screening_answers
         )

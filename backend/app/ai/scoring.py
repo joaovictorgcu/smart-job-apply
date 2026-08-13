@@ -148,9 +148,18 @@ async def analyze_job(
     job.score = score.score
     job.score_reasons = list(score.reasons)
     job.missing_requirements = list(score.missing_requirements)
+    job.score_breakdown = [dimension.model_dump(mode="json") for dimension in score.breakdown]
+    job.score_gates = [gate.model_dump(mode="json") for gate in score.gates]
 
+    failed_gate = next((gate for gate in score.gates if gate.status == "fail"), None)
     min_score = getattr(settings_row, "min_score", 0) or 0
-    if score.score < min_score:
+    if failed_gate is not None:
+        # A failed gate is decisive whatever the number says: skipping with the
+        # posting's own wording beats surfacing a misleading "82" the user would
+        # waste an application on.
+        job.status = JobStatus.SKIPPED
+        job.skip_reason = f"Gate {failed_gate.gate}: {failed_gate.evidence}"[:300]
+    elif score.score < min_score:
         job.status = JobStatus.SKIPPED
         job.skip_reason = f"Score {score.score} is below the minimum of {min_score}."
     else:
@@ -424,6 +433,7 @@ def _answer_from_bank(
         confidence=confidence,
         needs_review=needs_review,
         reasoning=f"From the profile answer bank (key: {original_key}).",
+        source="answer_bank",
         field_id=question.field_id,
     )
 

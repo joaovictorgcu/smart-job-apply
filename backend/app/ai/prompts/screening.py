@@ -9,7 +9,12 @@ from __future__ import annotations
 
 import json
 
-from app.ai.prompts import JobLike, render_job_block, render_profile_block
+from app.ai.prompts import (
+    UNTRUSTED_TEXT_RULE,
+    JobLike,
+    render_job_block,
+    render_profile_block,
+)
 from app.automation.contracts import FormQuestion, ProfileContext
 
 SCREENING_SYSTEM_PROMPT = """\
@@ -58,6 +63,8 @@ demographic declaration.
 the employer and do not ask the reader questions.
 - `reasoning` is one short sentence naming where the answer came from, in English.
 """
+
+SCREENING_SYSTEM_PROMPT += "\n" + UNTRUSTED_TEXT_RULE + "\n"
 
 
 def _render_question(index: int, question: FormQuestion) -> str:

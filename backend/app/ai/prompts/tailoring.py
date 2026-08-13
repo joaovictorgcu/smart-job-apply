@@ -7,7 +7,12 @@ have is worse than useless — it fails the interview and burns the relationship
 
 from __future__ import annotations
 
-from app.ai.prompts import JobLike, render_job_block, render_profile_block
+from app.ai.prompts import (
+    UNTRUSTED_TEXT_RULE,
+    JobLike,
+    render_job_block,
+    render_profile_block,
+)
 from app.automation.contracts import ProfileContext
 
 TAILORING_SYSTEM_PROMPT = """\
@@ -39,8 +44,18 @@ short `detail` of what changed and why it fits this posting. Do not invent an \
 action type; if you did not change something, do not list it.
 - `unsupported_requirements`: posting requirements the resume genuinely cannot \
 back. Empty if there are none.
+- `stretch_flags`: the grey zone between honest rephrasing and invention. Flag a \
+claim you kept when it merges separate experiences into one stronger statement, \
+adopts the posting's exact terminology for adjacent-but-different work, or frames \
+a supporting role as more central than the source resume states. The test: would \
+the candidate have to backtrack if an interviewer probed the claim? Each flag \
+quotes the claim in `text` and says in `why_stretch` what makes it a stretch. \
+Never use a flag as licence to keep a fabricated claim — anything with no \
+grounding at all still may not appear in the resume.
 - `summary`: one sentence on how you approached the tailoring.
 """
+
+TAILORING_SYSTEM_PROMPT += "\n" + UNTRUSTED_TEXT_RULE + "\n"
 
 
 def build_tailoring_prompt(profile: ProfileContext, job: JobLike) -> str:
