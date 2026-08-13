@@ -66,3 +66,8 @@ export function listRuns(limit?: number, signal?: AbortSignal): Promise<Automati
 export function fetchRun(id: number, signal?: AbortSignal): Promise<AutomationRun> {
   return api.get<AutomationRun>(`/automation/runs/${id}`, { signal });
 }
+
+/** POST /api/automation/runs/{id}/resume — pick an interrupted run back up. */
+export function resumeRun(id: number): Promise<AutomationRun> {
+  return api.post<AutomationRun>(`/automation/runs/${id}/resume`);
+}

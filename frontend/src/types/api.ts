@@ -561,6 +561,8 @@ export interface PreviewResponse {
 }
 
 export interface AutomationRun {
+  /** An interrupted run whose inputs survived — it can pick up where it stopped. */
+  resumable: boolean;
   id: number;
   kind: AutomationRunKind;
   status: AutomationRunStatus;

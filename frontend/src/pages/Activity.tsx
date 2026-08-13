@@ -1,13 +1,16 @@
-import { Copy, Eraser, History } from 'lucide-react';
+import { Copy, Eraser, History, RotateCw } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { EmptyState } from '@/components/EmptyState';
 import { Button, Card, CardHeader, PageHeader, Skeleton } from '@/components/primitives';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/ToastProvider';
-import { useRuns } from '@/hooks/useApi';
+import { queryKeys, useRuns } from '@/hooks/useApi';
 import { useEvents } from '@/hooks/useEvents';
+import { resumeRun } from '@/services/automation';
+import { errorMessage } from '@/services/client';
 import { enumLabel, formatDuration, formatNumber, formatRelativeTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { EventLevel } from '@/types/events';
@@ -21,8 +24,18 @@ const LEVELS: Array<{ value: EventLevel; label: string; active: string }> = [
 
 export function Activity() {
   const toast = useToast();
+  const client = useQueryClient();
   const { events, connected, clearEvents } = useEvents();
   const { data: runs, isLoading: runsLoading } = useRuns(8);
+
+  const resume = useMutation({
+    mutationFn: (runId: number) => resumeRun(runId),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: queryKeys.runsAll() });
+      toast.success('Execução retomada', 'O que já foi processado será pulado.');
+    },
+    onError: (error) => toast.error('Não foi possível retomar', errorMessage(error)),
+  });
   const [enabled, setEnabled] = useState<EventLevel[]>(['info', 'success', 'warning', 'error']);
 
   const filtered = useMemo(
@@ -175,6 +188,18 @@ export function Activity() {
                     <p className="mt-1.5 text-2xs leading-relaxed text-danger">
                       {run.error_message}
                     </p>
+                  ) : null}
+                  {run.resumable ? (
+                    <Button
+                      size="sm"
+                      className="mt-2"
+                      loading={resume.isPending && resume.variables === run.id}
+                      disabled={resume.isPending}
+                      onClick={() => resume.mutate(run.id)}
+                      icon={<RotateCw aria-hidden className="h-3.5 w-3.5" />}
+                    >
+                      Retomar de onde parou
+                    </Button>
                   ) : null}
                 </li>
               ))}
