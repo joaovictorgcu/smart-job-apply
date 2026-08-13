@@ -19,6 +19,14 @@ const CONFIDENCE_LABEL: Record<AnswerConfidence, string> = {
   low: 'Confiança baixa',
 };
 
+// Where the answer came from. "Sua resposta" is the trust anchor: the user's own
+// words, either stored in the bank or typed during review.
+const SOURCE_LABEL: Record<NonNullable<ScreeningAnswer['source']>, string> = {
+  answer_bank: 'Do seu banco de respostas',
+  user: 'Sua resposta',
+  ai: 'Gerada pela IA',
+};
+
 export interface ScreeningAnswerEditorProps {
   answers: ScreeningAnswer[];
   onChange: (answers: ScreeningAnswer[]) => void;
@@ -74,6 +82,11 @@ export function ScreeningAnswerEditor({
                 {answer.question}
               </label>
               <div className="flex shrink-0 items-center gap-1.5">
+                {answer.source ? (
+                  <span className={badgeClass(answer.source === 'ai' ? 'info' : 'accent')}>
+                    {SOURCE_LABEL[answer.source]}
+                  </span>
+                ) : null}
                 <span className={badgeClass(CONFIDENCE_TONE[answer.confidence])}>
                   {CONFIDENCE_LABEL[answer.confidence]}
                 </span>

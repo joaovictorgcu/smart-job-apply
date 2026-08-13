@@ -38,6 +38,28 @@ import {
 } from '@/hooks/useApi';
 import { badgeClass, formatDate, humanizeSnakeCase } from '@/lib/format';
 import { errorMessage } from '@/services/client';
+import type { GateName, ScoreDimensionName } from '@/types/api';
+
+const GATE_LABELS: Record<GateName, string> = {
+  eligibility: 'elegibilidade',
+  language: 'idioma',
+};
+
+const DIMENSION_LABELS: Record<ScoreDimensionName, string> = {
+  skills: 'Habilidades',
+  experience: 'Experiência',
+  seniority: 'Senioridade',
+  education: 'Formação',
+  location: 'Localização',
+  language: 'Idioma',
+};
+
+/** Same colour ramp as the score badge, applied to a dimension bar. */
+function cnBar(score: number): string {
+  const tone =
+    score >= 80 ? 'bg-success' : score >= 60 ? 'bg-accent-500' : score >= 40 ? 'bg-warning' : 'bg-danger';
+  return `h-full rounded ${tone}`;
+}
 
 export function JobDetail() {
   const params = useParams<{ id: string }>();
@@ -241,6 +263,58 @@ export function JobDetail() {
                 </Note>
               ) : (
                 <>
+                  {job.score_gates.some((gate) => gate.status !== 'pass') ? (
+                    <div className="space-y-1.5">
+                      {job.score_gates
+                        .filter((gate) => gate.status !== 'pass')
+                        .map((gate) => (
+                          <Note
+                            key={gate.gate}
+                            tone={gate.status === 'fail' ? 'danger' : 'warning'}
+                            icon={<TriangleAlert aria-hidden className="h-3.5 w-3.5" />}
+                          >
+                            <span className="font-medium">
+                              {gate.status === 'fail' ? 'Excluída' : 'Atenção'} —{' '}
+                              {GATE_LABELS[gate.gate] ?? gate.gate}:
+                            </span>{' '}
+                            {gate.evidence}
+                          </Note>
+                        ))}
+                    </div>
+                  ) : null}
+
+                  {job.score_breakdown.length > 0 ? (
+                    <div>
+                      <SectionLabel>Como a nota foi composta</SectionLabel>
+                      <ul className="mt-2 space-y-2">
+                        {job.score_breakdown.map((dimension) => (
+                          <li key={dimension.dimension}>
+                            <div className="flex items-center gap-2">
+                              <span className="w-24 shrink-0 text-xs font-medium text-content-muted">
+                                {DIMENSION_LABELS[dimension.dimension] ?? dimension.dimension}
+                              </span>
+                              <div className="h-2 flex-1 overflow-hidden rounded bg-surface-sunken">
+                                <div
+                                  className={cnBar(dimension.score)}
+                                  style={{ width: `${dimension.score}%` }}
+                                />
+                              </div>
+                              <span className="tabular w-8 shrink-0 text-right text-xs font-semibold text-content">
+                                {dimension.score}
+                              </span>
+                              {dimension.weight === 'nice_to_have' ? (
+                                <span className={badgeClass('neutral')}>desejável</span>
+                              ) : null}
+                            </div>
+                            <p className="mt-0.5 pl-[6.5rem] text-2xs leading-relaxed text-content-subtle">
+                              {dimension.evidence}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
                   {job.score_reasons.length > 0 ? (
                     <div>
                       <SectionLabel>Por que combina</SectionLabel>

@@ -115,6 +115,24 @@ export function CVTailorPanel({ jobId, aiConfigured }: CVTailorPanelProps) {
               </Note>
             )}
 
+            {data.stretch_flags.length > 0 ? (
+              <div>
+                <SectionLabel>Afirmações no limite — manter, suavizar ou remover</SectionLabel>
+                <ul className="mt-2 space-y-2">
+                  {data.stretch_flags.map((flag) => (
+                    <li key={flag.text} className="text-xs leading-relaxed">
+                      <p className="font-medium text-content">“{flag.text}”</p>
+                      <p className="mt-0.5 text-content-muted">{flag.why_stretch}</p>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-2xs text-content-subtle">
+                  Cada uma é fundamentada no seu currículo, mas agressiva o bastante para uma
+                  entrevista fazer você recuar. Edite o texto abaixo para suavizar ou remover.
+                </p>
+              </div>
+            ) : null}
+
             {data.unsupported_requirements.length > 0 ? (
               <div>
                 <SectionLabel>Lacunas que ele não disfarçou</SectionLabel>

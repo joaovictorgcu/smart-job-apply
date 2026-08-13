@@ -271,6 +271,8 @@ export interface Job {
   score: number | null;
   score_reasons: string[];
   missing_requirements: string[];
+  score_breakdown: ScoreDimension[];
+  score_gates: ScoreGate[];
   skip_reason: string | null;
   detected_language: string | null;
   posted_at: string | null;
@@ -293,6 +295,37 @@ export interface JobListQuery extends Paginated {
 /* AI output (ai/schemas.py)                                                  */
 /* -------------------------------------------------------------------------- */
 
+export type ScoreDimensionName =
+  | "skills"
+  | "experience"
+  | "seniority"
+  | "education"
+  | "location"
+  | "language";
+
+export interface ScoreDimension {
+  dimension: ScoreDimensionName;
+  score: number;
+  weight: "hard" | "nice_to_have";
+  evidence: string;
+}
+
+export type GateName = "eligibility" | "language";
+export type GateStatus = "pass" | "fail" | "flag";
+
+export interface ScoreGate {
+  gate: GateName;
+  status: GateStatus;
+  evidence: string;
+}
+
+export interface StretchFlag {
+  text: string;
+  why_stretch: string;
+}
+
+export type AnswerSource = "answer_bank" | "ai" | "user";
+
 export interface ScreeningAnswer {
   question: string;
   answer: string;
@@ -300,6 +333,8 @@ export interface ScreeningAnswer {
   confidence: AnswerConfidence;
   needs_review: boolean;
   reasoning: string | null;
+  // Absent on answers stored before provenance existed.
+  source?: AnswerSource;
   field_id: string | null;
 }
 
@@ -328,6 +363,8 @@ export interface TailoredResume {
   unsupported_requirements: string[];
   /** Technologies in the tailored text but not the profile, for you to verify. */
   invention_flags: string[];
+  /** Grounded but aggressive claims — keep, soften, or drop is your call. */
+  stretch_flags: StretchFlag[];
   summary: string | null;
   model: string | null;
   was_edited: boolean;
