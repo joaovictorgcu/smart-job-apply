@@ -478,6 +478,19 @@ export interface OutcomeCount {
   avg_score: number | null;
 }
 
+export interface SegmentRate {
+  label: string;
+  total: number;
+  interviews: number;
+  rate: number | null;
+}
+
+export interface SegmentStats {
+  by_company: SegmentRate[];
+  by_location: SegmentRate[];
+  by_workplace: SegmentRate[];
+}
+
 export interface ScoreBandRate {
   /** e.g. "90-100" */
   label: string;

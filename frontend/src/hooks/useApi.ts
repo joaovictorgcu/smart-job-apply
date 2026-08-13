@@ -35,6 +35,7 @@ import type {
   AutomationRun,
   DashboardStats,
   OutcomeStats,
+  SegmentStats,
   Job,
   JobDetail,
   JobListQuery,
@@ -76,6 +77,7 @@ export const queryKeys = {
   applicationEvents: (id: number) => ["applications", "events", id] as const,
   board: () => ["applications", "board"] as const,
   outcomeStats: () => ["stats", "outcomes"] as const,
+  segmentStats: () => ["stats", "segments"] as const,
 
   automation: () => ["automation"] as const,
   session: () => ["automation", "session"] as const,
@@ -534,6 +536,16 @@ export function useOutcomeStats(
   return useQuery<OutcomeStats, ApiError>({
     queryKey: queryKeys.outcomeStats(),
     queryFn: ({ signal }) => statsService.fetchOutcomeStats(signal),
+    ...options,
+  });
+}
+
+export function useSegmentStats(
+  options?: QueryOpts<SegmentStats>,
+): UseQueryResult<SegmentStats, ApiError> {
+  return useQuery<SegmentStats, ApiError>({
+    queryKey: queryKeys.segmentStats(),
+    queryFn: ({ signal }) => statsService.fetchSegmentStats(signal),
     ...options,
   });
 }

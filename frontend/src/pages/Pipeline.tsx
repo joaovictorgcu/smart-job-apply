@@ -7,10 +7,15 @@ import { EmptyState } from '@/components/EmptyState';
 import { Card, CardHeader, PageHeader, Select, Skeleton } from '@/components/primitives';
 import { ScoreBadge } from '@/components/ScoreBadge';
 import { useToast } from '@/components/ToastProvider';
-import { useBoard, useOutcomeStats, useUpdateOutcome } from '@/hooks/useApi';
+import { useBoard, useOutcomeStats, useSegmentStats, useUpdateOutcome } from '@/hooks/useApi';
 import { formatDate } from '@/lib/format';
 import { errorMessage } from '@/services/client';
-import type { ApplicationCard, ApplicationOutcome, OutcomeStats } from '@/types/api';
+import type {
+  ApplicationCard,
+  ApplicationOutcome,
+  OutcomeStats,
+  SegmentRate,
+} from '@/types/api';
 
 interface Column {
   outcome: ApplicationOutcome;
@@ -35,6 +40,7 @@ export function Pipeline() {
   const toast = useToast();
   const { data: cards, isLoading } = useBoard();
   const { data: stats } = useOutcomeStats();
+  const { data: segments } = useSegmentStats();
   const move = useUpdateOutcome({
     onError: (error) => toast.error('Não foi possível mover a candidatura', errorMessage(error)),
   });
@@ -81,6 +87,23 @@ export function Pipeline() {
           }
         }
       />
+
+      {segments &&
+      (segments.by_company.length > 1 ||
+        segments.by_location.length > 1 ||
+        segments.by_workplace.length > 1) ? (
+        <Card>
+          <CardHeader
+            title="Onde as entrevistas acontecem"
+            description="Taxa de entrevista por empresa, localização e modelo de trabalho, sobre as candidaturas enviadas."
+          />
+          <div className="card-body grid gap-5 md:grid-cols-3">
+            <SegmentList title="Por empresa" rows={segments.by_company} />
+            <SegmentList title="Por localização" rows={segments.by_location} />
+            <SegmentList title="Por modelo" rows={segments.by_workplace} />
+          </div>
+        </Card>
+      ) : null}
 
       {isLoading ? (
         <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
@@ -190,6 +213,41 @@ export function Pipeline() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function SegmentList({ title, rows }: { title: string; rows: SegmentRate[] }) {
+  if (rows.length === 0) {
+    return (
+      <div>
+        <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+          {title}
+        </p>
+        <p className="mt-2 text-xs text-content-subtle">Sem dados ainda.</p>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+        {title}
+      </p>
+      <ul className="mt-2 space-y-1.5">
+        {rows.map((row) => (
+          <li key={row.label} className="flex items-center gap-2 text-xs">
+            <span className="min-w-0 flex-1 truncate text-content-muted" title={row.label}>
+              {row.label}
+            </span>
+            <span className="tabular shrink-0 font-semibold text-content">
+              {percent(row.rate)}
+            </span>
+            <span className="tabular shrink-0 text-content-subtle">
+              ({row.interviews}/{row.total})
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
