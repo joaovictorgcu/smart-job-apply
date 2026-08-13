@@ -75,3 +75,6 @@ class AutomationRunRead(ORMModel):
     started_at: datetime | None = None
     finished_at: datetime | None = None
     created_at: datetime | None = None
+    # Computed by the service: an interrupted run whose inputs are on the
+    # checkpoint can be picked up where it stopped.
+    resumable: bool = False

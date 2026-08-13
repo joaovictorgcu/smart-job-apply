@@ -458,9 +458,12 @@ class AutomationEngine:
                             counters["jobs_skipped"] += 1
 
                 processed.add(posting.external_id)
+                # Merged over the stored checkpoint: the run's inputs (filters)
+                # live in the same dict and must survive every progress write.
                 await self._update_run(
                     run_id,
                     checkpoint={
+                        **checkpoint,
                         "processed_ids": sorted(processed),
                         "page": (index - 1) // PAGE_SIZE,
                     },
@@ -642,10 +645,11 @@ class AutomationEngine:
                     if application_id is not None:
                         prepared.append(application_id)
                     processed.add(job_id)
+                    # Merged so the run's `job_ids` input survives progress writes.
                     await self._update_run(
                         run_id,
                         applications_prepared=len(prepared),
-                        checkpoint={"processed_ids": sorted(processed)},
+                        checkpoint={**checkpoint, "processed_ids": sorted(processed)},
                     )
                     await self._publish(
                         user_id,

@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 from collections.abc import Callable, Coroutine
+from dataclasses import asdict
 from typing import Any
 
 from fastapi import BackgroundTasks
@@ -217,8 +218,14 @@ async def create_run(
     *,
     search_id: int | None = None,
     dry_run: bool | None = None,
+    checkpoint: dict[str, Any] | None = None,
 ) -> AutomationRun:
-    """Create the audit record every automation run is tracked by."""
+    """Create the audit record every automation run is tracked by.
+
+    `checkpoint` seeds the run's inputs (search filters, job ids) so an
+    interrupted run can be resumed without reconstructing them from a closure
+    that no longer exists.
+    """
     if dry_run is None:
         user_settings = await user_service.get_or_create_settings(session, user)
         dry_run = user_settings.dry_run
@@ -228,7 +235,7 @@ async def create_run(
         kind=kind,
         status=AutomationRunStatus.PENDING,
         dry_run=dry_run,
-        checkpoint={},
+        checkpoint=checkpoint or {},
     )
     session.add(run)
     await session.flush()
@@ -443,7 +450,15 @@ async def start_search_run(
 
     # Checked after validation so a malformed request is reported as such.
     _ensure_engine_free(user.id)
-    run = await create_run(session, user, AutomationRunKind.SEARCH, search_id=payload.search_id)
+    run = await create_run(
+        session,
+        user,
+        AutomationRunKind.SEARCH,
+        search_id=payload.search_id,
+        # The filters ride on the run so a resume can rebuild them; the engine
+        # merges its progress (processed_ids) into the same dict as it goes.
+        checkpoint={"filters": asdict(filters), "analyze": payload.analyze},
+    )
     run_id = run.id
     user_id = user.id
     analyze = payload.analyze
@@ -477,10 +492,15 @@ async def start_prepare_run(
         raise ValidationError("None of the selected jobs can be prepared.")
     _ensure_engine_free(user.id)
 
-    run = await create_run(session, user, AutomationRunKind.PREPARE)
+    job_ids = [job.id for job in eligible]
+    run = await create_run(
+        session,
+        user,
+        AutomationRunKind.PREPARE,
+        checkpoint={"job_ids": job_ids},
+    )
     run_id = run.id
     user_id = user.id
-    job_ids = [job.id for job in eligible]
 
     _schedule(
         background,
@@ -646,5 +666,90 @@ async def shutdown_engine() -> None:
     _session_users.clear()
 
 
+def _is_resumable(run: AutomationRun) -> bool:
+    """An interrupted run whose inputs survived on the checkpoint."""
+    if run.status not in (
+        AutomationRunStatus.STOPPED,
+        AutomationRunStatus.FAILED,
+        AutomationRunStatus.BLOCKED,
+    ):
+        return False
+    checkpoint = run.checkpoint or {}
+    if run.kind == AutomationRunKind.SEARCH:
+        return bool(checkpoint.get("filters"))
+    if run.kind == AutomationRunKind.PREPARE:
+        return bool(checkpoint.get("job_ids"))
+    return False
+
+
+async def resume_run(
+    session: AsyncSession,
+    user: User,
+    run_id: int,
+    *,
+    background: BackgroundTasks | None = None,
+) -> AutomationRun:
+    """Pick an interrupted run up where it stopped.
+
+    The engine's loops skip everything recorded in `checkpoint.processed_ids`,
+    so already-handled jobs are never re-scraped or re-prepared. Counters are
+    recomputed by the resumed pass; the audit trail keeps the full history.
+    """
+    run = await get_run(session, user, run_id)
+    if not _is_resumable(run):
+        raise PreconditionFailedError(
+            "Only a stopped, failed or blocked run with recorded inputs can be resumed "
+            f"(status: '{run.status}')."
+        )
+    _ensure_engine_free(user.id)
+
+    checkpoint = dict(run.checkpoint or {})
+    run.status = AutomationRunStatus.PENDING
+    run.stop_requested = False
+    run.error_message = None
+    run.blocked_reason = None
+    run.finished_at = None
+    await session.flush()
+
+    run_id_value = run.id
+    user_id = user.id
+    if run.kind == AutomationRunKind.SEARCH:
+        filters = SearchFilters(**checkpoint["filters"])
+        analyze = bool(checkpoint.get("analyze", True))
+        _schedule(
+            background,
+            lambda: _engine_coroutine(
+                "run_search", user_id, run_id_value, filters, analyze=analyze
+            ),
+            label="search-resume",
+            user_id=user_id,
+            run_id=run_id_value,
+        )
+    else:
+        job_ids = [int(value) for value in checkpoint["job_ids"]]
+        _schedule(
+            background,
+            lambda: _engine_coroutine("prepare_applications", user_id, run_id_value, job_ids),
+            label="prepare-resume",
+            user_id=user_id,
+            run_id=run_id_value,
+        )
+
+    logger.info(
+        "Automation run resumed.",
+        extra={
+            "action": "run.resume",
+            "status": "scheduled",
+            "user_id": user_id,
+            "run_id": run_id_value,
+            "kind": str(run.kind),
+            "already_processed": len(checkpoint.get("processed_ids") or []),
+        },
+    )
+    return run
+
+
 def to_run_read(run: AutomationRun) -> AutomationRunRead:
-    return AutomationRunRead.model_validate(run)
+    read = AutomationRunRead.model_validate(run)
+    read.resumable = _is_resumable(run)
+    return read

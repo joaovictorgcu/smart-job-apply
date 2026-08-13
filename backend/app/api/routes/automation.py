@@ -116,3 +116,20 @@ async def read_run(run_id: int, user: CurrentUser, session: SessionDep) -> Autom
     """Return one run with its counters and stop/blocked flags."""
     run = await automation_service.get_run(session, user, run_id)
     return automation_service.to_run_read(run)
+
+
+@router.post("/runs/{run_id}/resume", response_model=AutomationRunRead)
+async def resume_run(
+    run_id: int,
+    user: CurrentUser,
+    session: SessionDep,
+    background: BackgroundTasks,
+) -> AutomationRunRead:
+    """Resume an interrupted run from its checkpoint.
+
+    Jobs already processed are skipped, never re-scraped or re-prepared. All the
+    usual guard rails apply — one run at a time, stop flag cleared, and a prepare
+    resume still stops every application at the review step.
+    """
+    run = await automation_service.resume_run(session, user, run_id, background=background)
+    return automation_service.to_run_read(run)
