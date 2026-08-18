@@ -5,7 +5,7 @@
 # your own browser and log in to LinkedIn by hand.
 #
 # Build from the repository root:
-#     docker build -f docker/Dockerfile -t linkedin-auto-apply .
+#     docker build -f docker/Dockerfile -t smart-job-apply .
 
 # -----------------------------------------------------------------------------
 # Stage 1 — build the frontend

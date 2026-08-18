@@ -1,4 +1,4 @@
-# linkedin-auto-apply — developer tasks.
+# smart-job-apply — developer tasks.
 #
 # Written for Linux and macOS (GNU make + POSIX shell). On Windows either use
 # WSL, or run the PowerShell equivalent listed next to each target:
@@ -39,7 +39,7 @@ BACKEND_PORT ?= 8000
         docker-logs clean
 
 help: ## Show this help
-	@printf 'linkedin-auto-apply — available targets\n\n'
+	@printf 'smart-job-apply — available targets\n\n'
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "} {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 	@printf '\nFirst run:  make install  &&  make migrate  &&  make user  &&  make dev\n'

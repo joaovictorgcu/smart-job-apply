@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     )
 
     # --- Application ---
-    app_name: str = "LinkedIn Auto Apply"
+    app_name: str = "Smart Job Apply"
     environment: str = "development"
     debug: bool = False
 

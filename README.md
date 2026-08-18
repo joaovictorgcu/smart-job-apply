@@ -1,4 +1,4 @@
-# LinkedIn Auto Apply
+# Smart Job Apply
 
 Um agente assistido de candidatura a vagas para o LinkedIn Easy Apply (Candidatura Simplificada). Ele encontra vagas, pontua cada uma em relação ao seu currículo com a
 Claude, redige as respostas de triagem e a carta de apresentação, preenche o formulário — e então **para e espera

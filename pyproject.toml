@@ -1,7 +1,7 @@
 [project]
-name = "linkedin-auto-apply"
+name = "smart-job-apply"
 version = "0.1.0"
-description = "LinkedIn application assistant: finds jobs, scores them with AI and fills the Easy Apply form for you to review and approve."
+description = "AI-powered career application assistant: finds jobs, scores them against your resume and fills the application form for you to review and approve."
 requires-python = ">=3.11"
 readme = "README.md"
 license = { text = "MIT" }
@@ -39,6 +39,8 @@ dev = [
     "httpx>=0.28",
     "ruff>=0.8",
     "mypy>=1.14",
+    "pytest-cov>=6.0",
+    "hypothesis>=6.100",
 ]
 
 [tool.setuptools.packages.find]
@@ -63,7 +65,35 @@ testpaths = ["backend/tests"]
 pythonpath = ["backend"]
 filterwarnings = ["ignore::DeprecationWarning"]
 
+[tool.coverage.run]
+source = ["backend/app"]
+branch = true
+omit = [
+    # Playwright drivers: nothing here executes without a real browser and a live
+    # LinkedIn session, so measuring them only reports a floor that can never move.
+    # Their behaviour is exercised by the fixture-based tests in backend/tests instead.
+    "backend/app/automation/linkedin/*",
+    "backend/app/automation/browser.py",
+]
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    # Protocol and overload bodies are declarations, not statements to execute.
+    "^\\s*\\.\\.\\.$",
+]
+
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = true
 plugins = ["pydantic.mypy"]
+
+# Strict only where it is cheap to keep clean: modules that are new, pure or small.
+# The rest of the package stays advisory while app/automation and app/services are
+# being restructured; their pre-existing errors are a baseline, not a target.
+[[tool.mypy.overrides]]
+module = ["app.domain.*", "app.ai.port", "app.observability.*", "app.schemas.*"]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+warn_return_any = true
+no_implicit_optional = true

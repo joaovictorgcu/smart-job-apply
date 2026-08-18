@@ -23,7 +23,7 @@ ambiente reais têm precedência sobre ambos.
 
 | Variável | Tipo | Padrão | O que faz |
 |---|---|---|---|
-| `APP_NAME` | string | `LinkedIn Auto Apply` | Nome de exibição usado no título da API. |
+| `APP_NAME` | string | `Smart Job Apply` | Nome de exibição usado no título da API. |
 | `ENVIRONMENT` | string | `development` | Rótulo livre para a implantação (`development`, `production`). |
 | `DEBUG` | bool | `false` | Liga o echo de statements do SQLAlchemy. Deixe desligado fora de depuração local — statements podem conter os seus dados. |
 

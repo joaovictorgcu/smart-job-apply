@@ -372,13 +372,13 @@ várias pessoas numa instância, ou backups tratados pelo seu ferramental de ban
 2. Crie o banco:
 
    ```bash
-   createdb linkedin_auto_apply
+   createdb smart_job_apply
    ```
 
 3. Aponte `DATABASE_URL` para ele, no `.env`:
 
    ```dotenv
-   DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/linkedin_auto_apply
+   DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/smart_job_apply
    ```
 
    A parte `+asyncpg` é obrigatória. Uma URL `postgresql://` simples falha na criação do engine, porque o
