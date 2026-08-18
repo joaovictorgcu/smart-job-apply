@@ -56,6 +56,9 @@ class ApplicationEventType(StrEnum):
     COVER_LETTER_GENERATED = "cover_letter_generated"
     FORM_OPENED = "form_opened"
     FORM_STEP_COMPLETED = "form_step_completed"
+    # The posting's form no longer matches the one the user reviewed, so the
+    # submission was refused instead of sent against a different document.
+    FORM_CHANGED = "form_changed"
     QUESTION_ANSWERED = "question_answered"
     RESUME_UPLOADED = "resume_uploaded"
     AWAITING_REVIEW = "awaiting_review"

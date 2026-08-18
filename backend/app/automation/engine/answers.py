@@ -3,15 +3,24 @@
 Pure functions over the contracts: no database, no browser, no engine state.
 They decide what value goes into each field, where it came from, and whether a
 human still has to look at it.
+
+The second half of the module serves the submit path, which re-opens the form
+the user reviewed and has to prove it is still the same one: `_form_fingerprint`
+hashes a form's shape, `_approved_answers` rebuilds the values to type from the
+records the user approved, and `_describe_form_change` turns a hash mismatch
+into something a human can act on.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
+from collections.abc import Sequence
 from typing import Any
 
 from app.ai.schemas import ScreeningAnswer
-from app.automation.contracts import ApplicationDraft, FormAnswer, FormQuestion, ProfileContext
+from app.automation.contracts import FormAnswer, FormQuestion, ProfileContext
 from app.models import AnswerConfidence
 
 _EMAIL_HINTS = ("email", "e-mail")
@@ -76,37 +85,93 @@ def _build_answers(
     return form_answers, records
 
 
-def _merge_draft_answers(
-    records: list[dict[str, Any]], draft: ApplicationDraft
-) -> list[dict[str, Any]]:
-    """Reflect what actually landed in the form back into the stored answers."""
-    filled = {answer.field_id for answer in draft.answers}
-    unanswered = {question.field_id for question in draft.unanswered}
-    known = {record["field_id"] for record in records}
+def _form_fingerprint(questions: Sequence[FormQuestion]) -> str:
+    """Hash the *shape* of a form: which questions it asks, not how we answered.
 
+    Only what a reviewer would have read counts — the label, the options offered
+    and whether an answer is required — so re-rendering the same form in a
+    different order is not a change, while a new required question is. The payload
+    is JSON rather than `repr`, because this hash is compared against one computed
+    in another process, possibly days later.
+
+    `field_id` is deliberately excluded. It is the control's DOM id, and LinkedIn's
+    Easy Apply ids embed a per-form-instance URN, so re-opening the same posting
+    can hand back different ids for the same questions. Hashing them would refuse
+    every real submission while protecting nothing: the reviewer never saw a DOM
+    id, and `_approved_answers` already falls back to matching on the label when an
+    id has moved.
+    """
+    shape = sorted(
+        [question.label, sorted(question.options), bool(question.required)]
+        for question in questions
+    )
+    payload = json.dumps(shape, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _approved_answers(
+    questions: Sequence[FormQuestion], records: Sequence[dict[str, Any]]
+) -> list[FormAnswer]:
+    """Rebuild what to type from the answer records the user approved.
+
+    Every value comes from storage: nothing is re-drafted, re-inferred or asked
+    of the model at submit time, so what the human read is what gets typed. Only
+    the field kind is taken from the freshly opened form, which reconciliation
+    has already proved identical to the reviewed one.
+    """
+    by_field: dict[str, str] = {}
+    by_text: dict[str, str] = {}
     for record in records:
-        record["filled"] = record["field_id"] in filled
-        if record["field_id"] in unanswered:
-            record["needs_review"] = True
-
-    for question in draft.questions:
-        if question.field_id in known:
+        value = str(record.get("answer") or "").strip()
+        if not value:
             continue
-        records.append(
-            {
-                "field_id": question.field_id,
-                "question": question.label,
-                "answer": question.current_value or "",
-                "type": question.kind,
-                "options": list(question.options),
-                "required": question.required,
-                "confidence": AnswerConfidence.LOW.value,
-                "needs_review": True,
-                "source": "form",
-                "filled": question.field_id in filled,
-            }
-        )
-    return records
+        field_id = str(record.get("field_id") or "")
+        if field_id:
+            by_field.setdefault(field_id, value)
+        label = _normalize(str(record.get("question") or ""))
+        if label:
+            by_text.setdefault(label, value)
+
+    answers: list[FormAnswer] = []
+    for question in questions:
+        # Same fallback as `_build_answers`: a record may only know the label.
+        approved = by_field.get(question.field_id) or by_text.get(_normalize(question.label))
+        if approved:
+            answers.append(
+                FormAnswer(field_id=question.field_id, value=approved, kind=question.kind)
+            )
+    return answers
+
+
+def _describe_form_change(
+    questions: Sequence[FormQuestion], records: Sequence[dict[str, Any]]
+) -> str:
+    """Name how a re-opened form differs from the one the records were written for.
+
+    Best effort, and deliberately powerless: the refusal is decided by the
+    server-side fingerprint. This only turns that hash mismatch into a sentence,
+    and it reads `screening_answers`, which the review UI overwrites — so it may
+    describe the difference imprecisely, and must never be allowed to hide one.
+    """
+    reviewed = {_normalize(str(record.get("question") or "")) for record in records}
+    current = {_normalize(question.label) for question in questions}
+    added = sorted(
+        question.label for question in questions if _normalize(question.label) not in reviewed
+    )
+    removed = sorted(
+        str(record.get("question") or "")
+        for record in records
+        if _normalize(str(record.get("question") or "")) not in current
+    )
+
+    parts: list[str] = []
+    if added:
+        parts.append(f"new question(s): {', '.join(added)}")
+    if removed:
+        parts.append(f"question(s) gone: {', '.join(removed)}")
+    if not parts:
+        parts.append("the same questions now have different options or requirements")
+    return "; ".join(parts)
 
 
 def _answer_from_profile(question: FormQuestion, profile: ProfileContext) -> str | None:

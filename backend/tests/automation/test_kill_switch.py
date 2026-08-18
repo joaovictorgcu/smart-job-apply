@@ -174,14 +174,15 @@ class TestRunEndsStopped:
         second = await create_job(session, user, status=JobStatus.ANALYZED, score=90)
         run = await a_run(session, user, kind=AutomationRunKind.PREPARE)
 
-        original_fill = fake_linkedin.fill_and_advance
+        # `discard` is the last thing preparing does in the browser, so stopping
+        # there lands right after the first job's work is finished.
+        original_discard = fake_linkedin.discard
 
-        async def fill_then_stop(answers: Any, *, cover_letter: Any = None) -> Any:
-            draft = await original_fill(answers, cover_letter=cover_letter)
+        async def discard_then_stop() -> None:
+            await original_discard()
             automation_engine.request_stop(user.id)
-            return draft
 
-        fake_linkedin.fill_and_advance = fill_then_stop  # type: ignore[method-assign]
+        fake_linkedin.discard = discard_then_stop  # type: ignore[method-assign]
         first_id, second_id = first.id, second.id
 
         await automation_engine.prepare_applications(user.id, run.id, [first_id, second_id])
@@ -201,14 +202,13 @@ class TestStopIsRecorded:
         ]
         run = await a_run(session, user, kind=AutomationRunKind.PREPARE)
 
-        original_fill = fake_linkedin.fill_and_advance
+        original_discard = fake_linkedin.discard
 
-        async def fill_then_stop(answers: Any, *, cover_letter: Any = None) -> Any:
-            draft = await original_fill(answers, cover_letter=cover_letter)
+        async def discard_then_stop() -> None:
+            await original_discard()
             automation_engine.request_stop(user.id)
-            return draft
 
-        fake_linkedin.fill_and_advance = fill_then_stop  # type: ignore[method-assign]
+        fake_linkedin.discard = discard_then_stop  # type: ignore[method-assign]
 
         await automation_engine.prepare_applications(
             user.id, run.id, [job.id for job in jobs]

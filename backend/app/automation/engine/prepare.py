@@ -1,9 +1,17 @@
-"""The prepare run: fill the Easy Apply form and stop at the review step.
+"""The prepare run: read the Easy Apply form, draft the answers, close it again.
 
 This is where assisted mode is enforced. A prepared application always lands in
 `AWAITING_REVIEW` with everything the reviewer needs — the answers, their
-confidence, what the form left blank — and never touches the submit button. In
+confidence, what was left blank — and never touches the submit button. In
 dry-run mode the real modal is not opened at all.
+
+Preparing is an *inspection* pass: it opens the form to see what it asks, drafts
+the answers, records a fingerprint of the form's shape, and closes it. Nothing
+is typed in and nothing is left open, because a browser tab is the wrong place
+to keep a draft the user may only look at tomorrow — and because the service
+holds exactly one open modal, so leaving it open meant only the last job of a
+batch was ever really submittable. `SubmitMixin` re-opens, fills and sends in
+one uninterrupted sequence once the human has approved.
 """
 
 from __future__ import annotations
@@ -15,8 +23,8 @@ from typing import Any
 from sqlalchemy import select
 
 from app.ai.schemas import ScreeningAnswer
-from app.automation.contracts import ApplicationDraft, FormQuestion, ProfileContext
-from app.automation.engine.answers import _build_answers, _merge_draft_answers
+from app.automation.contracts import FormQuestion, ProfileContext
+from app.automation.engine.answers import _build_answers, _form_fingerprint
 from app.automation.engine.base import EngineBase
 from app.automation.errors import (
     AutomationError,
@@ -201,7 +209,6 @@ class PrepareMixin(EngineBase):
                     run_id=run_id,
                     job_id=job_id,
                     application_id=application_id,
-                    draft=None,
                     cover_letter=cover_letter,
                     screening=[],
                     resume_filename=resume_filename,
@@ -229,20 +236,24 @@ class PrepareMixin(EngineBase):
                 )
 
             screening = await self._ai_screening(user_id, job_id, profile, questions)
-            answers, enriched = _build_answers(questions, screening, profile)
-            draft = await service.fill_and_advance(answers, cover_letter=cover_letter)
-            enriched = _merge_draft_answers(enriched, draft)
+            # Only the records are kept. The values to type are rebuilt at submit
+            # time from the records as the user left them, which is the whole
+            # point of the review step.
+            _, enriched = _build_answers(questions, screening, profile)
+
+            # Nothing stays open: the draft lives in the database from here on.
+            await service.discard()
 
             await self._store_draft(
                 user_id=user_id,
                 run_id=run_id,
                 job_id=job_id,
                 application_id=application_id,
-                draft=draft,
                 cover_letter=cover_letter,
                 screening=enriched,
                 resume_filename=resume_filename,
                 dry_run=False,
+                fingerprint=_form_fingerprint(questions),
             )
             return application_id
 
@@ -260,22 +271,32 @@ class PrepareMixin(EngineBase):
         run_id: int | None,
         job_id: int,
         application_id: int,
-        draft: ApplicationDraft | None,
         cover_letter: str | None,
         screening: list[dict[str, Any]],
         resume_filename: str | None,
         dry_run: bool,
+        fingerprint: str | None = None,
     ) -> None:
-        """Persist the filled draft and park it in AWAITING_REVIEW."""
-        unanswered = [question.label for question in (draft.unanswered if draft else [])]
+        """Persist the drafted content and park the application in AWAITING_REVIEW.
+
+        There is no browser draft to interrogate any more, so whether a human is
+        needed is decided from the answers themselves: a required question left
+        empty, an answer the model was unsure of, or one it flagged for review.
+        `_build_answers` already marks required-with-no-value as needing review;
+        `unanswered` names those separately, because "the form demands this and we
+        have nothing" is a different conversation from "check this wording".
+        """
+        unanswered = [
+            entry["question"]
+            for entry in screening
+            if entry.get("required") and not str(entry.get("answer") or "").strip()
+        ]
         low_confidence = [
             entry["question"]
             for entry in screening
             if entry.get("needs_review") or entry.get("confidence") == AnswerConfidence.LOW.value
         ]
-        needs_human = bool(unanswered or low_confidence) or (
-            draft is not None and not draft.ready_to_submit
-        )
+        needs_human = bool(unanswered or low_confidence)
 
         async with session_scope() as session:
             application = await session.get(Application, application_id)
@@ -286,8 +307,14 @@ class PrepareMixin(EngineBase):
             application.resume_filename = (
                 Path(resume_filename).name if resume_filename else application.resume_filename
             )
-            application.total_steps = draft.total_steps if draft else None
-            application.current_step = draft.current_step if draft else None
+            # Both are only knowable once the form is walked, which now happens at
+            # submit time; a stale count from an earlier attempt would be a lie.
+            application.total_steps = None
+            application.current_step = None
+            # Always written, including the None of a dry run: a fingerprint left
+            # over from an earlier live prepare would authorize submitting content
+            # that was reviewed against a different form.
+            application.form_fingerprint = fingerprint
             application.needs_human_input = needs_human
             application.was_dry_run = dry_run
             application.status = ApplicationStatus.AWAITING_REVIEW
@@ -299,7 +326,8 @@ class PrepareMixin(EngineBase):
             message = (
                 "Dry run: content generated without opening the LinkedIn form."
                 if dry_run
-                else "Form filled and stopped at the review step. Waiting for your approval."
+                else "Form inspected and closed. The answers are saved here and are "
+                "typed into LinkedIn only when you approve the submission."
             )
             event = await self._record(
                 session,
@@ -313,11 +341,14 @@ class PrepareMixin(EngineBase):
                     "dry_run": dry_run,
                     "unanswered": unanswered,
                     "needs_review": low_confidence,
-                    "ready_to_submit": bool(draft.ready_to_submit) if draft else False,
-                    "screenshot": draft.screenshot_path if draft else None,
-                    "notes": list(draft.notes) if draft else [],
-                    "total_steps": draft.total_steps if draft else None,
-                    "current_step": draft.current_step if draft else None,
+                    # Nothing is filled in yet, so nothing is ready to send, and
+                    # no step counter or review screenshot exists to report.
+                    "ready_to_submit": False,
+                    "screenshot": None,
+                    "notes": [],
+                    "total_steps": None,
+                    "current_step": None,
+                    "form_fingerprint": fingerprint,
                 },
             )
             live = to_live_event(event, job_id=job_id, needs_human_input=needs_human)

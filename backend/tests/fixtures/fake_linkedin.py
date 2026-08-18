@@ -9,6 +9,14 @@ It is scriptable to return a chosen set of postings, to raise
 Most importantly it records whether `submit()` was ever reached — the assertion
 that guards assisted mode.
 
+It models the real modal's single-draft lifecycle, because the engine now
+depends on it: preparing is `open` then `discard`, and submitting is a second
+`open`, then `fill_and_advance`, then `submit`. Filling or submitting with no
+open modal raises exactly as `EasyApplyModal` does, so a test can prove the
+sequence rather than assume it, and `questions_on_reopen` makes that second
+`open` return a different form — the case where a posting changed between the
+review and the submission.
+
 `FakePage` is separate and much smaller: just the slice of the Playwright page API
 that `BrowserSession.detect_checkpoint` touches, so checkpoint detection can be
 tested against the real detector.
@@ -33,6 +41,7 @@ from app.automation.errors import (
     EasyApplyUnavailableError,
     NotLoggedInError,
     SecurityCheckpointError,
+    UnexpectedPageError,
 )
 
 CHECKPOINT_URL = "https://www.linkedin.com/checkpoint/challenge/AgH9x"
@@ -147,6 +156,9 @@ class FakeLinkedInService:
         error_on / error:     raise an arbitrary error at a chosen method.
         unanswered:           questions `fill_and_advance` reports as unanswered,
                               which keeps `ready_to_submit` False.
+        questions_on_reopen:  what the SECOND `open_easy_apply` of a posting
+                              returns — a form that changed between the review
+                              and the submission.
         logged_in:            when False, browser-driving calls raise
                               `NotLoggedInError`.
     """
@@ -155,6 +167,7 @@ class FakeLinkedInService:
     postings: list[JobPosting] | None = None
     job_count: int = 3
     questions: list[FormQuestion] | None = None
+    questions_on_reopen: list[FormQuestion] | None = None
     unanswered: list[FormQuestion] = field(default_factory=list)
     total_steps: int = 3
     checkpoint_on: str | None = None
@@ -179,6 +192,9 @@ class FakeLinkedInService:
     blocked: bool = False
     blocked_reason: str | None = None
     current_external_id: str | None = None
+    # The form of the modal that is open right now, which is not necessarily
+    # `default_questions` once `questions_on_reopen` is in play.
+    current_questions: list[FormQuestion] = field(default_factory=list)
     throttle: Any = None
     resume_path: str | None = None
 
@@ -265,6 +281,7 @@ class FakeLinkedInService:
         self._record("stop")
         self.browser_open = False
         self.current_external_id = None
+        self.current_questions = []
 
     async def get_state(self) -> SessionState:
         self.calls.append("get_state")
@@ -311,19 +328,30 @@ class FakeLinkedInService:
             raise EasyApplyUnavailableError(f"Job {external_id} has no Easy Apply.")
         if external_id in self.already_applied_ids:
             raise AlreadyAppliedError(f"Job {external_id} already has an application.")
+        # The engine opens a posting twice: once to draft the answers, once to
+        # type them in after approval. A posting that changed in between hands
+        # back a different form on the second open.
+        reopened = external_id in self.opened
         self.opened.append(external_id)
         self.current_external_id = external_id
-        return list(self.default_questions)
+        self.current_questions = list(
+            self.questions_on_reopen
+            if reopened and self.questions_on_reopen is not None
+            else self.default_questions
+        )
+        return list(self.current_questions)
 
     async def fill_and_advance(
         self, answers: list[FormAnswer], *, cover_letter: str | None = None
     ) -> ApplicationDraft:
         self._record("fill_and_advance", needs_login=True)
+        if self.current_external_id is None:
+            raise UnexpectedPageError("The Easy Apply modal is not open.")
         self.filled.append(list(answers))
         self.cover_letters.append(cover_letter)
         return ApplicationDraft(
-            job_external_id=self.current_external_id or "unknown",
-            questions=list(self.default_questions),
+            job_external_id=self.current_external_id,
+            questions=list(self.current_questions),
             answers=list(answers),
             unanswered=list(self.unanswered),
             total_steps=self.total_steps,
@@ -337,14 +365,21 @@ class FakeLinkedInService:
 
     async def submit(self) -> bool:
         self._record("submit", needs_login=True)
+        # Flipped before the modal check on purpose: this flag is the tripwire for
+        # "assisted mode was violated", so it fires on any attempt to reach the
+        # button. `submitted` records only what a real click would have sent.
         self.submit_called = True
-        self.submitted.append(self.current_external_id or "unknown")
+        if self.current_external_id is None:
+            raise UnexpectedPageError("The Easy Apply modal is not open; nothing to submit.")
+        self.submitted.append(self.current_external_id)
         self.current_external_id = None
+        self.current_questions = []
         return self.submit_result
 
     async def discard(self) -> None:
         self._record("discard")
         self.current_external_id = None
+        self.current_questions = []
 
     async def capture_screenshot(self, name: str) -> str | None:
         self.calls.append("capture_screenshot")

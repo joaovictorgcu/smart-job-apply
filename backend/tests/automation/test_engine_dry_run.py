@@ -3,8 +3,8 @@
 Two properties are pinned down here:
 
 * dry-run produces content and events but never drives the browser;
-* a live run fills the form and stops — `submit()` is never reached without a
-  separate, explicitly confirmed action.
+* a live prepare reads the form and closes it — nothing is typed in and
+  `submit()` is never reached without a separate, explicitly confirmed action.
 """
 
 from __future__ import annotations
@@ -255,9 +255,10 @@ class TestDryRunPrepare:
 
 
 class TestLivePrepareStopsAtReview:
-    async def test_fills_the_form_and_stops(
+    async def test_reads_the_form_and_closes_it_without_typing_anything(
         self, session: AsyncSession, automation_engine: Any, fake_linkedin: FakeLinkedInService
     ) -> None:
+        """Preparing is an inspection pass; the answers are typed in after approval."""
         user = await create_user(session, email="live1@example.com", settings={"dry_run": False})
         job = await create_job(session, user, status=JobStatus.ANALYZED, score=90)
         run = await prepare_run(session, user)
@@ -265,9 +266,37 @@ class TestLivePrepareStopsAtReview:
         await automation_engine.prepare_applications(user.id, run.id, [job.id])
 
         assert fake_linkedin.call_count("open_easy_apply") == 1
-        assert fake_linkedin.call_count("fill_and_advance") == 1
+        assert fake_linkedin.call_count("fill_and_advance") == 0
+        assert fake_linkedin.call_count("discard") == 1
         # The one call that must never happen without explicit approval.
         assert fake_linkedin.submit_called is False
+
+    async def test_it_leaves_no_form_open_in_the_browser(
+        self, session: AsyncSession, automation_engine: Any, fake_linkedin: FakeLinkedInService
+    ) -> None:
+        """The draft lives in the database, not in a tab that the next job replaces."""
+        user = await create_user(session, email="live8@example.com", settings={"dry_run": False})
+        job = await create_job(session, user, status=JobStatus.ANALYZED, score=90)
+        run = await prepare_run(session, user)
+
+        await automation_engine.prepare_applications(user.id, run.id, [job.id])
+
+        assert fake_linkedin.has_open_draft() is False
+
+    async def test_it_records_the_shape_of_the_form_the_user_reviews(
+        self, session: AsyncSession, automation_engine: Any
+    ) -> None:
+        """Without this, submitting cannot tell the reviewed form from a new one."""
+        user = await create_user(session, email="live9@example.com", settings={"dry_run": False})
+        job = await create_job(session, user, status=JobStatus.ANALYZED, score=90)
+        run = await prepare_run(session, user)
+
+        await automation_engine.prepare_applications(user.id, run.id, [job.id])
+
+        application = await application_for_job(session, job.id)
+        assert application is not None
+        assert application.form_fingerprint
+        assert len(application.form_fingerprint) == 64
 
     async def test_leaves_the_application_awaiting_review_and_unapproved(
         self, session: AsyncSession, automation_engine: Any
@@ -300,14 +329,20 @@ class TestLivePrepareStopsAtReview:
         assert ApplicationEventType.AWAITING_REVIEW in recorded
 
     async def test_an_unanswerable_question_asks_for_a_human(
-        self, session: AsyncSession, automation_engine: Any, fake_linkedin: FakeLinkedInService
+        self,
+        session: AsyncSession,
+        automation_engine: Any,
+        fake_linkedin: FakeLinkedInService,
+        fake_ai: FakeAIClient,
     ) -> None:
+        """A required field neither the model nor the profile can fill stops here."""
         from tests.fixtures.factories import make_form_question
 
         user = await create_user(session, email="live4@example.com", settings={"dry_run": False})
         job = await create_job(session, user, status=JobStatus.ANALYZED, score=90)
         run = await prepare_run(session, user)
-        fake_linkedin.unanswered = [
+        fake_ai.answer_value = ""
+        fake_linkedin.questions = [
             make_form_question("q-clearance", "Do you hold a security clearance?", "radio")
         ]
 
@@ -413,24 +448,33 @@ class TestSubmitRequiresApproval:
 
         assert fake_linkedin.submit_called is False
 
-    async def test_submitting_without_an_open_draft_is_refused(
+    async def test_an_application_with_no_recorded_form_is_refused(
         self, session: AsyncSession, automation_engine: Any, fake_linkedin: FakeLinkedInService
     ) -> None:
-        """Nothing is clicked blind: the filled form has to still be on screen."""
+        """Nothing is typed in blind.
+
+        A draft the engine never fingerprinted cannot be shown to be the one the
+        user reviewed, so the form it re-opens is treated as an unknown form.
+        """
         from app.database.base import utcnow
         from tests.fixtures.factories import create_application
 
         user = await create_user(session, email="submit3@example.com", settings={"dry_run": False})
         job = await create_job(session, user, status=JobStatus.QUEUED, score=90)
         application = await create_application(
-            session, user, job, status=ApplicationStatus.AWAITING_REVIEW, approved_at=utcnow()
+            session,
+            user,
+            job,
+            status=ApplicationStatus.AWAITING_REVIEW,
+            approved_at=utcnow(),
+            form_fingerprint=None,
         )
-        fake_linkedin.current_external_id = None
 
-        with pytest.raises(AutomationError, match="no longer open"):
+        with pytest.raises(AutomationError, match="Nothing was submitted"):
             await automation_engine.submit_application(user.id, application.id)
 
         assert fake_linkedin.submit_called is False
+        assert fake_linkedin.call_count("fill_and_advance") == 0
         reverted = await application_for_job(session, job.id)
         assert reverted is not None
         assert reverted.status == ApplicationStatus.AWAITING_REVIEW

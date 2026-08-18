@@ -137,6 +137,14 @@ class Application(Base, TimestampMixin):
     resume_filename: Mapped[str | None] = mapped_column(String(255), default=None)
     total_steps: Mapped[int | None] = mapped_column(Integer, default=None)
     current_step: Mapped[int | None] = mapped_column(Integer, default=None)
+    # SHA-256 of the *shape* of the Easy Apply form the user reviewed — field ids,
+    # labels, options and required flags. Submission re-opens the posting and
+    # refuses unless the freshly read form hashes to the same value: a posting
+    # that changed its questions in between means the human approved a different
+    # document than the one about to be sent. Computed server-side from what the
+    # browser returned, never from `screening_answers`, which the review UI
+    # overwrites. Null for dry runs and for drafts prepared before this existed.
+    form_fingerprint: Mapped[str | None] = mapped_column(String(64), default=None)
     needs_human_input: Mapped[bool] = mapped_column(Boolean, default=False)
     was_dry_run: Mapped[bool] = mapped_column(Boolean, default=False)
     approved_at: Mapped[datetime | None] = mapped_column(default=None)
