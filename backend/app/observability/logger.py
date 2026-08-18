@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
+from collections.abc import MutableMapping
 from contextvars import ContextVar
 from typing import Any
 
@@ -56,8 +57,29 @@ def configure_logging(level: str = "INFO", *, as_json: bool = True) -> None:
     logging.getLogger("uvicorn.access").propagate = False
 
 
-def get_logger(name: str) -> logging.LoggerAdapter:
-    return logging.LoggerAdapter(logging.getLogger(name), {})
+class ContextLoggerAdapter(logging.LoggerAdapter):
+    """A `LoggerAdapter` that merges the caller's `extra` instead of replacing it.
+
+    The stdlib `process()` assigns `kwargs["extra"] = self.extra`, so every
+    `extra={"action": ..., "user_id": ...}` in this codebase was thrown away before
+    the formatter ever saw it — the JSON lines carried only the message and the
+    contextvars. Python 3.13 added `merge_extra=True` for exactly this, but the
+    project targets 3.11+, so the merge is done here instead.
+
+    Per-call fields win over the adapter's own, which is the direction callers
+    expect when they pass a field explicitly.
+    """
+
+    def process(
+        self, msg: Any, kwargs: MutableMapping[str, Any]
+    ) -> tuple[Any, MutableMapping[str, Any]]:
+        merged = {**(self.extra or {}), **(kwargs.get("extra") or {})}
+        kwargs["extra"] = merged
+        return msg, kwargs
+
+
+def get_logger(name: str) -> ContextLoggerAdapter:
+    return ContextLoggerAdapter(logging.getLogger(name), {})
 
 
 def bind_context(**values: Any) -> None:
