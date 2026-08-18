@@ -12,6 +12,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  guards:
+    name: Safety guards
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # No `pip install` step on purpose: tools/guards.py is stdlib-only, so this
+      # job answers "did this PR widen the safety envelope?" in seconds, before any
+      # dependency has been resolved. It is the machine-checked version of the
+      # promises README.md and docs/safety.md only make in prose.
+      - name: Run the guards
+        run: python tools/guards.py
+
   backend:
     name: Backend (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
@@ -55,7 +74,10 @@ jobs:
           ENCRYPTION_KEY: "ci-encryption-key-not-used-anywhere-else"
           # Quoted: a plain scalar ending in ':' parses as a mapping key.
           DATABASE_URL: "sqlite+aiosqlite:///:memory:"
-        run: pytest -v
+        # Coverage is reported, not enforced: a threshold here would push people
+        # to test the easy modules, and the modules that matter are the ones the
+        # guards job already pins down.
+        run: pytest -q --cov=backend/app --cov-report=term-missing
 
   frontend:
     name: Frontend
@@ -82,6 +104,11 @@ jobs:
       - name: Lint
         working-directory: frontend
         run: npm run lint
+
+      - name: Tests
+        working-directory: frontend
+        # `--run` keeps vitest from dropping into its interactive watch mode.
+        run: npm test -- --run
 
       - name: Build
         working-directory: frontend
