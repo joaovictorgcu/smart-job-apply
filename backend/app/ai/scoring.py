@@ -35,6 +35,7 @@ from app.ai.schemas import (
     TailoredResume,
 )
 from app.automation.contracts import FormQuestion, ProfileContext
+from app.domain.scoring import decide
 from app.models.enums import AnalysisKind, AnswerConfidence, JobStatus
 from app.models.job import AIAnalysis
 from app.observability import get_logger
@@ -158,20 +159,10 @@ async def analyze_job(
     job.score_breakdown = [dimension.model_dump(mode="json") for dimension in score.breakdown]
     job.score_gates = [gate.model_dump(mode="json") for gate in score.gates]
 
-    failed_gate = next((gate for gate in score.gates if gate.status == "fail"), None)
     min_score = getattr(settings_row, "min_score", 0) or 0
-    if failed_gate is not None:
-        # A failed gate is decisive whatever the number says: skipping with the
-        # posting's own wording beats surfacing a misleading "82" the user would
-        # waste an application on.
-        job.status = JobStatus.SKIPPED
-        job.skip_reason = f"Gate {failed_gate.gate}: {failed_gate.evidence}"[:300]
-    elif score.score < min_score:
-        job.status = JobStatus.SKIPPED
-        job.skip_reason = f"Score {score.score} is below the minimum of {min_score}."
-    else:
-        job.status = JobStatus.ANALYZED
-        job.skip_reason = None
+    decision = decide(score, min_score=min_score)
+    job.status = JobStatus.SKIPPED if decision.skipped else JobStatus.ANALYZED
+    job.skip_reason = decision.skip_reason
 
     await session.flush()
 

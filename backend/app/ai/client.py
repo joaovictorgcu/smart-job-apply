@@ -20,7 +20,6 @@ import asyncio
 import random
 import re
 import time
-import unicodedata
 from typing import Any
 
 import anthropic
@@ -50,6 +49,10 @@ from app.ai.schemas import (
 )
 from app.automation.contracts import FormQuestion, ProfileContext
 from app.config import get_settings
+
+# `detect_language` is re-exported: the heuristic is pure domain, but callers
+# have always reached it through this module and still do.
+from app.domain.language import detect_language, fold, squash
 from app.models.enums import AnswerConfidence
 from app.observability import get_logger
 
@@ -108,57 +111,6 @@ class AINotConfiguredError(RuntimeError):
         super().__init__(message)
 
 
-_PORTUGUESE_MARKERS = frozenset(
-    {
-        "de", "da", "do", "das", "dos", "para", "com", "que", "nao", "voce", "como",
-        "uma", "um", "os", "as", "em", "por", "mais", "sua", "seu", "sera", "ser",
-        "tambem", "experiencia", "conhecimento", "desejavel", "requisitos",
-        "atividades", "empresa", "vaga", "area", "nossa", "nosso", "sobre",
-        "trabalho", "equipe", "anos", "salario", "beneficios", "ingles",
-    }
-)
-
-_ENGLISH_MARKERS = frozenset(
-    {
-        "the", "and", "of", "to", "in", "for", "with", "you", "your", "a", "an",
-        "are", "is", "will", "be", "or", "as", "on", "we", "our", "this", "that",
-        "have", "has", "experience", "requirements", "skills", "team", "work",
-        "role", "about", "strong", "ability", "years", "benefits", "salary",
-    }
-)
-
-_WORD = re.compile(r"[a-z]+")
-_NON_ALNUM = re.compile(r"[^a-z0-9]+")
-
-
-def _fold(text: str) -> str:
-    """Lowercase and strip accents, so `experiência` matches `experiencia`."""
-    decomposed = unicodedata.normalize("NFKD", text.lower())
-    return "".join(char for char in decomposed if not unicodedata.combining(char))
-
-
-def _squash(text: str) -> str:
-    """Fold, then reduce punctuation and runs of whitespace to single spaces."""
-    return _NON_ALNUM.sub(" ", _fold(text)).strip()
-
-
-def detect_language(text: str | None) -> str:
-    """Guess the language of a job description.
-
-    A deliberately small heuristic — stopword frequency, Portuguese versus
-    English — because the only consumers are `Job.detected_language` and the
-    "mirror the posting" cover-letter mode. Defaults to `"en"` with no signal.
-    """
-    if not text or not text.strip():
-        return "en"
-    words = _WORD.findall(_fold(text))
-    if not words:
-        return "en"
-    portuguese = sum(1 for word in words if word in _PORTUGUESE_MARKERS)
-    english = sum(1 for word in words if word in _ENGLISH_MARKERS)
-    return "pt-BR" if portuguese > english else "en"
-
-
 # Common technologies whose presence in a tailored resume but absence from the
 # source is the clearest, most checkable sign of invention. Lowercased; matched as
 # whole words. Not exhaustive by design — the structural checks below catch the
@@ -210,11 +162,11 @@ def flag_unsupported_skills(source_text: str, tailored_text: str) -> list[str]:
     design: every item is a "verify this yourself" prompt to the human, never an
     automatic block. Missing a real invention is the failure to avoid.
     """
-    source = _fold(source_text or "")
+    source = fold(source_text or "")
     source_words = set(_ALPHA_WORD.findall(source))
 
     def supported(token: str) -> bool:
-        folded = _fold(token)
+        folded = fold(token)
         # Whole-word membership, or a substring for multi-part tokens the word
         # split would break apart (e.g. "node.js" folding to "node js").
         return folded in source_words or folded in source
@@ -222,10 +174,10 @@ def flag_unsupported_skills(source_text: str, tailored_text: str) -> list[str]:
     flagged: dict[str, str] = {}  # folded -> original casing (first seen)
     for match in _CAMELCASE.findall(tailored_text) + _ALNUM_TOKEN.findall(tailored_text):
         if not supported(match):
-            flagged.setdefault(_fold(match), match)
+            flagged.setdefault(fold(match), match)
 
     for token in _ORIG_WORD.findall(tailored_text):
-        folded = _fold(token)
+        folded = fold(token)
         if folded in _KNOWN_TECHNOLOGIES and not supported(token):
             flagged.setdefault(folded, token)
 
@@ -740,9 +692,9 @@ def _reconcile_answer(answer: ScreeningAnswer, questions: list[FormQuestion]) ->
         if exact is None:
             # Recover a casing/whitespace mismatch; anything else is a value the
             # form does not offer and cannot be selected.
-            folded = _fold(answer.answer.strip())
+            folded = fold(answer.answer.strip())
             recovered = next(
-                (opt for opt in question.options if _fold(opt.strip()) == folded), None
+                (opt for opt in question.options if fold(opt.strip()) == folded), None
             )
             if recovered is not None:
                 answer.answer = recovered
@@ -769,11 +721,11 @@ def _match_question(label: str, questions: list[FormQuestion]) -> FormQuestion |
     for question in questions:
         if question.label == label:
             return question
-    squashed = _squash(label)
+    squashed = squash(label)
     if not squashed:
         return None
     for question in questions:
-        if _squash(question.label) == squashed:
+        if squash(question.label) == squashed:
             return question
     return None
 
