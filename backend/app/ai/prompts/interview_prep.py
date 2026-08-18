@@ -12,6 +12,7 @@ from typing import Any
 from app.ai.prompts import (
     UNTRUSTED_TEXT_RULE,
     JobLike,
+    fence_untrusted,
     render_job_block,
     render_profile_block,
 )
@@ -52,6 +53,17 @@ Keep the whole pack under 600 words. Be direct; no motivational padding.
 """
 
 
+def _render_answers(submitted_answers: list[dict[str, Any]]) -> str:
+    lines: list[str] = []
+    for answer in submitted_answers:
+        # The question is the employer's form label stored verbatim, so it stays
+        # fenced here too; the answer beside it is what we sent and is not.
+        lines.append("Q:")
+        lines.append(fence_untrusted(answer.get("question", "")))
+        lines.append(f"A: {answer.get('answer', '')}")
+    return "\n".join(lines)
+
+
 def build_interview_prep_prompt(
     profile: ProfileContext,
     job: JobLike,
@@ -62,10 +74,7 @@ def build_interview_prep_prompt(
     score_summary: str | None,
 ) -> str:
     """Render the prep request from the stored application data."""
-    answers = "\n".join(
-        f"Q: {answer.get('question', '')}\nA: {answer.get('answer', '')}"
-        for answer in submitted_answers
-    )
+    answers = _render_answers(submitted_answers)
     gaps = "\n".join(f"- {item}" for item in missing_requirements) or "(none recorded)"
     return (
         "Prepare this candidate for an interview for the posting below.\n\n"
