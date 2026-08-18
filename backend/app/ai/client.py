@@ -20,7 +20,8 @@ import asyncio
 import random
 import re
 import time
-from typing import Any
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 import anthropic
 from anthropic import AsyncAnthropic
@@ -227,6 +228,10 @@ def _first_text(response: Any) -> str:
     return ""
 
 
+# Ties a capability's empty-fallback factory to what that capability returns.
+_T = TypeVar("_T")
+
+
 class AIClient:
     """Async wrapper around the Anthropic Messages API."""
 
@@ -338,6 +343,106 @@ class AIClient:
             refusal_category=refusal_category,
         )
 
+    # --- refusal handling ----------------------------------------------------
+    #
+    # Every capability degrades the same way: a refusal or an unusable answer
+    # becomes an empty value plus a refused `AIUsage`, never an exception. The
+    # `action` and `refusal_category` strings are the audit trail — `app.ai.scoring`
+    # surfaces the category to the user as the refusal reason — so they are passed
+    # in verbatim rather than derived.
+
+    def _parsed_or_fallback(
+        self,
+        response: Any,
+        *,
+        started_at: float,
+        action: str,
+        refusal_log: str,
+        unparsed_log: str,
+        fallback: Callable[[], _T],
+        refusal_fallback: Callable[[], _T] | None = None,
+        usable: Callable[[Any], bool] | None = None,
+    ) -> tuple[_T, AIUsage]:
+        """Validated structured output, or an empty fallback.
+
+        `stop_reason` is checked before the content: on a refusal the parsed output
+        is absent and reading it would mask the reason.
+
+        `usable` is an extra check on a value the SDK did parse, for capabilities
+        whose empty answer still validates. `refusal_fallback` overrides the empty
+        value when declining and failing to answer deserve different wording.
+        """
+        if response.stop_reason == "refusal":
+            category = _refusal_category(response)
+            logger.warning(
+                refusal_log,
+                category,
+                extra={"action": f"{action}.refused", "refusal_category": category},
+            )
+            return (refusal_fallback or fallback)(), self._usage(
+                response, started_at=started_at, refused=True, refusal_category=category
+            )
+
+        parsed = response.parsed_output
+        if parsed is None or (usable is not None and not usable(parsed)):
+            logger.warning(
+                unparsed_log,
+                response.stop_reason,
+                extra={"action": f"{action}.unparsed", "stop_reason": response.stop_reason},
+            )
+            return fallback(), self._usage(
+                response,
+                started_at=started_at,
+                refused=True,
+                refusal_category=f"unparsed_output:{response.stop_reason}",
+            )
+
+        return parsed, self._usage(response, started_at=started_at)
+
+    def _text_or_fallback(
+        self,
+        response: Any,
+        *,
+        started_at: float,
+        action: str,
+        refusal_log: str,
+        empty_log: str | None = None,
+    ) -> tuple[str, AIUsage]:
+        """Free-text output, or `""` when the model refused or wrote nothing.
+
+        The caller wraps the text into whatever it returns; the empty fallback is
+        the same wrapping around `""`. `empty_log` is optional because interview
+        prep has never logged its empty case, and adding an action to the audit
+        trail is not this seam's call to make.
+        """
+        if response.stop_reason == "refusal":
+            category = _refusal_category(response)
+            logger.warning(
+                refusal_log,
+                category,
+                extra={"action": f"{action}.refused", "refusal_category": category},
+            )
+            return "", self._usage(
+                response, started_at=started_at, refused=True, refusal_category=category
+            )
+
+        content = _first_text(response).strip()
+        if not content:
+            if empty_log is not None:
+                logger.warning(
+                    empty_log,
+                    response.stop_reason,
+                    extra={"action": f"{action}.empty", "stop_reason": response.stop_reason},
+                )
+            return "", self._usage(
+                response,
+                started_at=started_at,
+                refused=True,
+                refusal_category=f"empty_output:{response.stop_reason}",
+            )
+
+        return content, self._usage(response, started_at=started_at)
+
     # --- capabilities --------------------------------------------------------
 
     async def score_job(
@@ -361,48 +466,23 @@ class AIClient:
             output_format=JobScore,
         )
 
-        # stop_reason is checked before content: on a refusal the parsed output is
-        # absent and reading it would mask the reason.
-        if response.stop_reason == "refusal":
-            category = _refusal_category(response)
-            logger.warning(
-                "Model declined to score the job (category=%s).",
-                category,
-                extra={"action": "ai.score.refused", "refusal_category": category},
-            )
-            return (
-                JobScore(
-                    score=0,
-                    recommend_apply=False,
-                    summary="The model declined to score this job; review it manually.",
-                ),
-                self._usage(
-                    response, started_at=started_at, refused=True, refusal_category=category
-                ),
-            )
-
-        parsed = response.parsed_output
-        if parsed is None:
-            logger.warning(
-                "Scoring response could not be parsed (stop_reason=%s).",
-                response.stop_reason,
-                extra={"action": "ai.score.unparsed", "stop_reason": response.stop_reason},
-            )
-            return (
-                JobScore(
-                    score=0,
-                    recommend_apply=False,
-                    summary="The model returned no usable score; review this job manually.",
-                ),
-                self._usage(
-                    response,
-                    started_at=started_at,
-                    refused=True,
-                    refusal_category=f"unparsed_output:{response.stop_reason}",
-                ),
-            )
-
-        return parsed, self._usage(response, started_at=started_at)
+        return self._parsed_or_fallback(
+            response,
+            started_at=started_at,
+            action="ai.score",
+            refusal_log="Model declined to score the job (category=%s).",
+            unparsed_log="Scoring response could not be parsed (stop_reason=%s).",
+            fallback=lambda: JobScore(
+                score=0,
+                recommend_apply=False,
+                summary="The model returned no usable score; review this job manually.",
+            ),
+            refusal_fallback=lambda: JobScore(
+                score=0,
+                recommend_apply=False,
+                summary="The model declined to score this job; review it manually.",
+            ),
+        )
 
     async def write_cover_letter(
         self,
@@ -427,41 +507,16 @@ class AIClient:
             else language.strip()
         )
 
-        if response.stop_reason == "refusal":
-            category = _refusal_category(response)
-            logger.warning(
-                "Model declined to write the cover letter (category=%s).",
-                category,
-                extra={"action": "ai.cover_letter.refused", "refusal_category": category},
-            )
-            return (
-                CoverLetter(content="", language=resolved_language),
-                self._usage(
-                    response, started_at=started_at, refused=True, refusal_category=category
-                ),
-            )
-
-        content = _first_text(response).strip()
-        if not content:
-            logger.warning(
-                "Cover letter response contained no text (stop_reason=%s).",
-                response.stop_reason,
-                extra={"action": "ai.cover_letter.empty", "stop_reason": response.stop_reason},
-            )
-            return (
-                CoverLetter(content="", language=resolved_language),
-                self._usage(
-                    response,
-                    started_at=started_at,
-                    refused=True,
-                    refusal_category=f"empty_output:{response.stop_reason}",
-                ),
-            )
-
-        return (
-            CoverLetter(content=content, language=resolved_language),
-            self._usage(response, started_at=started_at),
+        content, usage = self._text_or_fallback(
+            response,
+            started_at=started_at,
+            action="ai.cover_letter",
+            refusal_log="Model declined to write the cover letter (category=%s).",
+            empty_log="Cover letter response contained no text (stop_reason=%s).",
         )
+        # The language is reported even when the letter is empty: the caller shows
+        # it next to the "write this yourself" prompt.
+        return CoverLetter(content=content, language=resolved_language), usage
 
     async def answer_questions(
         self,
@@ -484,33 +539,16 @@ class AIClient:
             output_format=ScreeningAnswerSet,
         )
 
-        if response.stop_reason == "refusal":
-            category = _refusal_category(response)
-            logger.warning(
-                "Model declined to answer the screening questions (category=%s).",
-                category,
-                extra={"action": "ai.screening.refused", "refusal_category": category},
-            )
-            return [], self._usage(
-                response, started_at=started_at, refused=True, refusal_category=category
-            )
-
-        parsed = response.parsed_output
-        if parsed is None:
-            logger.warning(
-                "Screening response could not be parsed (stop_reason=%s).",
-                response.stop_reason,
-                extra={"action": "ai.screening.unparsed", "stop_reason": response.stop_reason},
-            )
-            return [], self._usage(
-                response,
-                started_at=started_at,
-                refused=True,
-                refusal_category=f"unparsed_output:{response.stop_reason}",
-            )
-
-        answers = [_reconcile_answer(answer, questions) for answer in parsed.answers]
-        return answers, self._usage(response, started_at=started_at)
+        # An answerless set is the empty fallback: reconciling it yields no answers.
+        parsed, usage = self._parsed_or_fallback(
+            response,
+            started_at=started_at,
+            action="ai.screening",
+            refusal_log="Model declined to answer the screening questions (category=%s).",
+            unparsed_log="Screening response could not be parsed (stop_reason=%s).",
+            fallback=ScreeningAnswerSet,
+        )
+        return [_reconcile_answer(answer, questions) for answer in parsed.answers], usage
 
     async def tailor_resume(
         self,
@@ -531,38 +569,16 @@ class AIClient:
             output_format=TailoredResume,
         )
 
-        if response.stop_reason == "refusal":
-            category = _refusal_category(response)
-            logger.warning(
-                "Model declined to tailor the resume (category=%s).",
-                category,
-                extra={"action": "ai.tailor.refused", "refusal_category": category},
-            )
-            return (
-                TailoredResume(tailored_markdown=""),
-                self._usage(
-                    response, started_at=started_at, refused=True, refusal_category=category
-                ),
-            )
-
-        parsed = response.parsed_output
-        if parsed is None or not parsed.tailored_markdown.strip():
-            logger.warning(
-                "Tailoring response was empty or unparsable (stop_reason=%s).",
-                response.stop_reason,
-                extra={"action": "ai.tailor.unparsed", "stop_reason": response.stop_reason},
-            )
-            return (
-                TailoredResume(tailored_markdown=""),
-                self._usage(
-                    response,
-                    started_at=started_at,
-                    refused=True,
-                    refusal_category=f"unparsed_output:{response.stop_reason}",
-                ),
-            )
-
-        return parsed, self._usage(response, started_at=started_at)
+        return self._parsed_or_fallback(
+            response,
+            started_at=started_at,
+            action="ai.tailor",
+            refusal_log="Model declined to tailor the resume (category=%s).",
+            unparsed_log="Tailoring response was empty or unparsable (stop_reason=%s).",
+            fallback=lambda: TailoredResume(tailored_markdown=""),
+            # A resume with no body parses fine and is still no answer.
+            usable=lambda parsed: bool(parsed.tailored_markdown.strip()),
+        )
 
     async def review_draft(
         self,
@@ -588,38 +604,14 @@ class AIClient:
             output_format=DraftReview,
         )
 
-        if response.stop_reason == "refusal":
-            category = _refusal_category(response)
-            logger.warning(
-                "Model declined to review the draft (category=%s).",
-                category,
-                extra={"action": "ai.review.refused", "refusal_category": category},
-            )
-            return (
-                DraftReview(),
-                self._usage(
-                    response, started_at=started_at, refused=True, refusal_category=category
-                ),
-            )
-
-        parsed = response.parsed_output
-        if parsed is None:
-            logger.warning(
-                "Review response could not be parsed (stop_reason=%s).",
-                response.stop_reason,
-                extra={"action": "ai.review.unparsed", "stop_reason": response.stop_reason},
-            )
-            return (
-                DraftReview(),
-                self._usage(
-                    response,
-                    started_at=started_at,
-                    refused=True,
-                    refusal_category=f"unparsed_output:{response.stop_reason}",
-                ),
-            )
-
-        return parsed, self._usage(response, started_at=started_at)
+        return self._parsed_or_fallback(
+            response,
+            started_at=started_at,
+            action="ai.review",
+            refusal_log="Model declined to review the draft (category=%s).",
+            unparsed_log="Review response could not be parsed (stop_reason=%s).",
+            fallback=DraftReview,
+        )
 
     async def interview_prep(
         self,
@@ -651,26 +643,12 @@ class AIClient:
             effort=QUALITY_EFFORT,
         )
 
-        if response.stop_reason == "refusal":
-            category = _refusal_category(response)
-            logger.warning(
-                "Model declined the interview prep (category=%s).",
-                category,
-                extra={"action": "ai.interview_prep.refused", "refusal_category": category},
-            )
-            return "", self._usage(
-                response, started_at=started_at, refused=True, refusal_category=category
-            )
-
-        content = _first_text(response).strip()
-        if not content:
-            return "", self._usage(
-                response,
-                started_at=started_at,
-                refused=True,
-                refusal_category=f"empty_output:{response.stop_reason}",
-            )
-        return content, self._usage(response, started_at=started_at)
+        return self._text_or_fallback(
+            response,
+            started_at=started_at,
+            action="ai.interview_prep",
+            refusal_log="Model declined the interview prep (category=%s).",
+        )
 
 
 def _reconcile_answer(answer: ScreeningAnswer, questions: list[FormQuestion]) -> ScreeningAnswer:
