@@ -103,6 +103,23 @@ class UserSettingsUpdate(BaseModel):
         return self
 
 
+class AuditEventRead(ORMModel):
+    """One recorded account change.
+
+    `relaxed` is what the trail exists for: which guardrails were loosened, and
+    therefore which entries deserve a second look.
+    """
+
+    id: int
+    action: str
+    subject_type: str
+    subject_id: int | None = None
+    before: dict[str, Any] = Field(default_factory=dict)
+    after: dict[str, Any] = Field(default_factory=dict)
+    relaxed: list[str] = Field(default_factory=list)
+    created_at: datetime
+
+
 class LinkedInAccountRead(ORMModel):
     """Metadata only. No cookie or credential ever leaves through the API."""
 

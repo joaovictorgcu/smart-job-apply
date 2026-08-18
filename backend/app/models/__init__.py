@@ -1,5 +1,6 @@
 """ORM models. Importing this module registers everything in SQLAlchemy's metadata."""
 
+from app.models.audit import AuditEvent
 from app.models.automation import AutomationRun
 from app.models.enums import (
     AnalysisKind,
@@ -7,6 +8,7 @@ from app.models.enums import (
     ApplicationEventType,
     ApplicationOutcome,
     ApplicationStatus,
+    AuditAction,
     AutomationRunKind,
     AutomationRunStatus,
     JobStatus,
@@ -31,6 +33,8 @@ __all__ = [
     "ApplicationEventType",
     "ApplicationOutcome",
     "ApplicationStatus",
+    "AuditAction",
+    "AuditEvent",
     "AutomationRun",
     "AutomationRunKind",
     "AutomationRunStatus",

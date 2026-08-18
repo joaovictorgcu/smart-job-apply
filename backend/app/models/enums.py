@@ -67,6 +67,18 @@ class ApplicationEventType(StrEnum):
     ERROR = "error"
 
 
+class AuditAction(StrEnum):
+    """Account-level changes that must survive a log rotation.
+
+    Distinct from `ApplicationEventType`, which explains one application: this
+    trail answers who loosened the guardrails, and when.
+    """
+
+    SETTINGS_UPDATED = "settings_updated"
+    PROFILE_UPDATED = "profile_updated"
+    RESUME_UPLOADED = "resume_uploaded"
+
+
 class AutomationRunStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"

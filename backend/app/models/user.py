@@ -11,6 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
+    from app.models.audit import AuditEvent
     from app.models.automation import AutomationRun
     from app.models.job import Application, Job, Search
 
@@ -50,6 +51,9 @@ class User(Base, TimestampMixin):
         back_populates="user", cascade="all, delete-orphan"
     )
     runs: Mapped[list[AutomationRun]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    audit_events: Mapped[list[AuditEvent]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
 

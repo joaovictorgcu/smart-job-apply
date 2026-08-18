@@ -1,4 +1,10 @@
-from app.observability.audit import record_event, to_live_event
+from app.observability.audit import (
+    GUARDRAILS,
+    record_audit_event,
+    record_event,
+    relaxations,
+    to_live_event,
+)
 from app.observability.events import Event, EventName, make_event
 from app.observability.logger import (
     bind_context,
@@ -8,6 +14,7 @@ from app.observability.logger import (
 )
 
 __all__ = [
+    "GUARDRAILS",
     "Event",
     "EventName",
     "bind_context",
@@ -15,6 +22,8 @@ __all__ = [
     "configure_logging",
     "get_logger",
     "make_event",
+    "record_audit_event",
     "record_event",
+    "relaxations",
     "to_live_event",
 ]
