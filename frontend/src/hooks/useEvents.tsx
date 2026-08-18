@@ -44,6 +44,42 @@ interface EventsContextValue {
 
 const EventsContext = createContext<EventsContextValue | null>(null);
 
+/**
+ * Identity of an event, for the reconnect dedupe.
+ *
+ * The backend replays its last 200 events to every new connection (see
+ * `ConnectionManager` in backend/app/websocket/manager.py), so after every drop
+ * — and every tab reload — the client is handed frames it already has. `Event`
+ * carries no server-assigned id (backend/app/observability/events.py), so
+ * identity has to be reconstructed from the envelope: a replayed frame is
+ * `model_dump(mode="json")` of the very same object the live frame came from,
+ * hence byte-identical field by field. Taking the whole envelope, `data`
+ * included, keeps the dedupe as narrow as possible — nothing is collapsed that
+ * differs in any observable way.
+ *
+ * What would make this wrong: two genuinely distinct events agreeing on every
+ * field, which today means being created inside the same microsecond (the
+ * resolution of `datetime.now(UTC)`) with the same ids, message and payload. A
+ * backend that truncated the timestamp to whole seconds, or re-serialized `data`
+ * with a different key order between the live send and the replay, would break
+ * the assumption in either direction — at which point the real fix is an event
+ * id on the wire rather than a wider tuple here.
+ */
+function eventKey(event: AppEvent): string {
+  // JSON rather than a joined string: a message containing the separator must
+  // not be able to impersonate a different field split.
+  return JSON.stringify([
+    event.name,
+    event.timestamp,
+    event.level,
+    event.run_id,
+    event.job_id,
+    event.application_id,
+    event.message,
+    event.data,
+  ]);
+}
+
 function invalidateForEvent(client: QueryClient, event: AppEvent): void {
   const invalidate = (queryKey: readonly unknown[]) => {
     void client.invalidateQueries({ queryKey });
@@ -106,6 +142,10 @@ export function EventsProvider({ children }: { children: ReactNode }) {
   const [lastEvent, setLastEvent] = useState<AppEvent | null>(null);
   const [blockedEvent, setBlockedEvent] = useState<AppEvent | null>(null);
 
+  // Keys of the events currently in the feed, so a replayed history is dropped
+  // instead of appended twice. Insertion-ordered like the feed itself and capped
+  // at the same MAX_EVENTS, so the two are trimmed in lockstep.
+  const seenRef = useRef<Set<string>>(new Set());
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<number | null>(null);
   const attemptsRef = useRef(0);
@@ -146,6 +186,10 @@ export function EventsProvider({ children }: { children: ReactNode }) {
   const clearEvents = useCallback(() => {
     setEvents([]);
     setLastEvent(null);
+    // Emptying the feed also forgets what was in it: if the server replays those
+    // events on the next connect, the user asked for a clean slate, not a
+    // permanently blank list.
+    seenRef.current = new Set();
   }, []);
 
   const clearBlocked = useCallback(() => setBlockedEvent(null), []);
@@ -164,6 +208,7 @@ export function EventsProvider({ children }: { children: ReactNode }) {
       setEvents([]);
       setLastEvent(null);
       setBlockedEvent(null);
+      seenRef.current = new Set();
       return;
     }
 
@@ -202,6 +247,20 @@ export function EventsProvider({ children }: { children: ReactNode }) {
         }
         const event = parseAppEvent(parsed);
         if (!event) return;
+
+        // A frame we already hold is the server replaying its history, not
+        // something that just happened: it must not append to the feed, nor
+        // re-run the invalidations and subscribers it already ran once.
+        const key = eventKey(event);
+        const seen = seenRef.current;
+        if (seen.has(key)) return;
+        seen.add(key);
+        if (seen.size > MAX_EVENTS) {
+          // Sets iterate in insertion order, so the oldest key belongs to the
+          // event the feed drops in the very same update below.
+          const oldest = seen.values().next().value;
+          if (oldest !== undefined) seen.delete(oldest);
+        }
 
         setEvents((previous) => {
           const next = [...previous, event];

@@ -3,7 +3,7 @@
  *
  * The backend replays its recent history to every new connection, so whatever
  * the client does with those frames decides whether the activity list is stable
- * or doubles on each drop. These tests pin the behaviour that ships today.
+ * or doubles on each drop.
  */
 
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -103,21 +103,9 @@ describe("useEvents reconnect", () => {
     expect(result.current.connected).toBe(true);
   });
 
-  /*
-   * FINDING — current behaviour, deliberately pinned rather than fixed here.
-   *
-   * `EventsProvider` appends every frame unconditionally, so the history the
-   * server replays on reconnect lands in the feed a second time: the activity
-   * list doubles on each drop and each tab reload. Deduping is not a one-liner,
-   * because `AppEvent` carries no server-assigned id (see types/events.ts) —
-   * only a name plus a timestamp, and two genuine events can share both. A
-   * correct fix most likely needs an event id from the backend, which is why
-   * this is reported instead of patched.
-   */
-  it("re-appends the replayed history after a reconnect (known duplication)", () => {
+  it("a reconnect does not duplicate events already in the feed", () => {
     const { result } = renderHook(() => useEvents(), { wrapper });
     replay(FakeWebSocket.instances[0], HISTORY);
-    expect(result.current.events).toHaveLength(2);
 
     act(() => {
       FakeWebSocket.instances[0].drop();
@@ -130,10 +118,10 @@ describe("useEvents reconnect", () => {
     expect(FakeWebSocket.instances).toHaveLength(2);
     replay(FakeWebSocket.instances[1], HISTORY);
 
-    expect(result.current.events).toHaveLength(4);
+    expect(result.current.events).toHaveLength(2);
   });
 
-  it.skip("INTENDED: a reconnect does not duplicate events already in the feed", () => {
+  it("still appends what actually happened while the connection was down", () => {
     const { result } = renderHook(() => useEvents(), { wrapper });
     replay(FakeWebSocket.instances[0], HISTORY);
 
@@ -143,8 +131,53 @@ describe("useEvents reconnect", () => {
     act(() => {
       vi.advanceTimersByTime(2000);
     });
+
+    // The replay is the same history plus the one event the client missed.
+    const missed = buildAppEvent({
+      name: "application.started",
+      application_id: 5,
+      timestamp: "2026-08-01T10:00:09Z",
+    });
+    replay(FakeWebSocket.instances[1], [...HISTORY, missed]);
+
+    expect(result.current.events).toHaveLength(3);
+    // Dedupe must not reorder the feed: the newcomer lands at the tail.
+    expect(result.current.events[2]).toEqual(missed);
+    expect(result.current.lastEvent).toEqual(missed);
+  });
+
+  it("keeps two same-second events that differ in their payload", () => {
+    const { result } = renderHook(() => useEvents(), { wrapper });
+    const stamp = "2026-08-01T10:00:00Z";
+
+    replay(FakeWebSocket.instances[0], [
+      buildAppEvent({ name: "job.found", job_id: 1, timestamp: stamp }),
+      buildAppEvent({ name: "job.found", job_id: 2, timestamp: stamp }),
+      buildAppEvent({ name: "log", message: "Primeira linha.", timestamp: stamp }),
+      buildAppEvent({ name: "log", message: "Segunda linha.", timestamp: stamp }),
+    ]);
+
+    expect(result.current.events).toHaveLength(4);
+  });
+
+  it("re-collects the replayed history after the feed is cleared by hand", () => {
+    const { result } = renderHook(() => useEvents(), { wrapper });
+    replay(FakeWebSocket.instances[0], HISTORY);
+
+    act(() => {
+      result.current.clearEvents();
+    });
+    expect(result.current.events).toHaveLength(0);
+
+    act(() => {
+      FakeWebSocket.instances[0].drop();
+    });
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
     replay(FakeWebSocket.instances[1], HISTORY);
 
+    // Clearing asks for a clean slate, not a permanently blank list.
     expect(result.current.events).toHaveLength(2);
   });
 });

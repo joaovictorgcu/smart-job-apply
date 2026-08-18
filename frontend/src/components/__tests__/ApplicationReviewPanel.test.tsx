@@ -110,12 +110,26 @@ describe("ApplicationReviewPanel approval gate", () => {
   });
 
   /*
-   * FINDING, not a regression: the panel gates on the per-answer `needs_review`
-   * flags only. The application-level `needs_human_input` field is never read
-   * here, so an application the backend marked as needing a human is still
-   * approvable as long as its individual answers are confirmed. Whether that
-   * flag should also block is a product decision; changing the gate is out of
-   * scope for the task that added these tests.
+   * The application-level flag and the per-answer flags are separate gates: the
+   * backend can mark an application as needing a human for reasons no single
+   * answer carries (an unanswered question, a draft that never reached the
+   * review step, a submission that failed at the browser). Either one blocks.
    */
-  it.todo("blocks approval while application.needs_human_input is true");
+  it("blocks approval while application.needs_human_input is true", () => {
+    renderPanel(
+      buildApplicationDetail({
+        needs_human_input: true,
+        screening_answers: [buildScreeningAnswer({ needs_review: false })],
+      }),
+    );
+
+    expect(screen.getByRole("button", { name: APPROVE })).toBeDisabled();
+    // Blocked despite every answer being confirmed, and the reason is on screen
+    // together with the way out.
+    expect(screen.getByText("Todas as respostas confirmadas")).toBeInTheDocument();
+    expect(screen.getByText("Revisão humana pendente")).toBeInTheDocument();
+    expect(
+      screen.getByText(/marcou esta candidatura como precisando de um humano/i),
+    ).toBeInTheDocument();
+  });
 });

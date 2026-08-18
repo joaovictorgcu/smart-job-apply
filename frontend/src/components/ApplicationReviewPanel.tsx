@@ -110,9 +110,9 @@ export interface ApplicationReviewPanelProps {
  *
  * "Save changes" and "Approve & submit" are deliberately separate actions, and
  * submitting is gated behind a second confirmation that names the company and
- * role. It stays disabled while any answer is still flagged, while edits are
- * unsaved, and while dry run is on — with the reason spelled out, never a
- * mysteriously grey button.
+ * role. It stays disabled while any answer is still flagged, while the backend
+ * says the application needs a human, while edits are unsaved, and while dry run
+ * is on — with the reason spelled out, never a mysteriously grey button.
  */
 export function ApplicationReviewPanel({ application, className }: ApplicationReviewPanelProps) {
   const toast = useToast();
@@ -185,6 +185,11 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
   }, [draft, application.cover_letter, application.screening_answers]);
 
   const pendingReview = draft.answers.filter((answer) => answer.needs_review).length;
+  // Two independent gates, deliberately not folded into one: `needs_review` is
+  // the local draft's view of each answer, while `needs_human_input` is the
+  // server's verdict on the application as a whole — the backend recomputes it
+  // when the draft is saved, so ticking answers on screen does not clear it.
+  const needsHuman = application.needs_human_input;
   const isReviewable = application.status === 'awaiting_review';
   const isBusy = update.isPending || submit.isPending || discard.isPending;
 
@@ -224,6 +229,15 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
           label: `${pendingReview} ${pendingReview === 1 ? 'resposta precisa' : 'respostas precisam'} de revisão`,
           detail: 'Confirme cada resposta sinalizada acima.',
         },
+    ...(needsHuman
+      ? [
+          {
+            state: 'fail' as const,
+            label: 'Revisão humana pendente',
+            detail: 'A automação sinalizou esta candidatura ao preencher o formulário.',
+          },
+        ]
+      : []),
     isDirty
       ? {
           state: 'fail',
@@ -245,7 +259,8 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
   const showReadiness = !['submitted', 'submitting', 'discarded'].includes(application.status);
 
   // Same gate as before the checklist existed: dry run still blocks the click.
-  const canSubmit = !isBusy && isReviewable && pendingReview === 0 && !isDirty && !dryRun;
+  const canSubmit =
+    !isBusy && isReviewable && pendingReview === 0 && !needsHuman && !isDirty && !dryRun;
   const jobTitle = application.job?.title ?? `vaga #${application.job_id}`;
   const company = application.job?.company ?? 'esta empresa';
 
@@ -507,6 +522,15 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
                 : application.status === 'submitting'
                   ? 'Enviando ao LinkedIn…'
                   : 'Esta candidatura foi descartada. Nada foi enviado.'}
+            </Note>
+          ) : null}
+
+          {showReadiness && needsHuman ? (
+            <Note tone="warning" icon={<TriangleAlert aria-hidden className="h-3.5 w-3.5" />}>
+              A automação marcou esta candidatura como precisando de um humano, então &ldquo;Aprovar
+              e enviar&rdquo; fica bloqueado — não há como ignorar. Confira a carta e as respostas
+              acima e salve as alterações: o servidor recalcula essa marcação a cada gravação, a
+              partir das respostas que ainda estiverem sinalizadas.
             </Note>
           ) : null}
 
