@@ -25,7 +25,7 @@ from app.models import (
     JobStatus,
 )
 from app.observability.audit import record_event, to_live_event
-from tests.automation import ai_seam, application_for_job, reload_run
+from tests.automation import application_for_job, reload_run
 from tests.fixtures.factories import (
     create_application,
     create_job,
@@ -143,7 +143,6 @@ class TestPrepareThenSubmit:
         assert application.submitted_at is None
         assert fake_linkedin.submit_called is False
 
-    @ai_seam
     async def test_the_draft_carries_the_generated_content(
         self, session: AsyncSession, automation_engine: Any
     ) -> None:
@@ -272,7 +271,6 @@ class TestAIRefusalDegradesGracefully:
         assert not application.cover_letter
         assert application.needs_human_input is True
 
-    @ai_seam
     async def test_the_refusal_is_recorded_for_audit(
         self, session: AsyncSession, automation_engine: Any, fake_ai: FakeAIClient
     ) -> None:
@@ -368,7 +366,6 @@ class TestLowConfidenceForcesReview:
             for answer in application.screening_answers
         )
 
-    @ai_seam
     async def test_a_confident_answer_does_not_flag_the_application(
         self, session: AsyncSession, automation_engine: Any, fake_linkedin: FakeLinkedInService
     ) -> None:

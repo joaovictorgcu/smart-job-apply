@@ -79,7 +79,7 @@ class TestUpsert:
         user = await create_user(session, email="upsert1@example.com")
 
         job, created = await upsert_job_from_posting(
-            session, user, make_job_posting(external_id="ext-100", title="Backend Engineer")
+            session, user.id, make_job_posting(external_id="ext-100", title="Backend Engineer")
         )
         await session.commit()
 
@@ -93,9 +93,9 @@ class TestUpsert:
         user = await create_user(session, email="upsert2@example.com")
         posting = make_job_posting(external_id="ext-101")
 
-        first, created_first = await upsert_job_from_posting(session, user, posting)
+        first, created_first = await upsert_job_from_posting(session, user.id, posting)
         await session.commit()
-        second, created_second = await upsert_job_from_posting(session, user, posting)
+        second, created_second = await upsert_job_from_posting(session, user.id, posting)
         await session.commit()
 
         assert created_first is True
@@ -108,13 +108,13 @@ class TestUpsert:
     ) -> None:
         user = await create_user(session, email="upsert3@example.com")
         await upsert_job_from_posting(
-            session, user, make_job_posting(external_id="ext-102", description="Short blurb.")
+            session, user.id, make_job_posting(external_id="ext-102", description="Short blurb.")
         )
         await session.commit()
 
         await upsert_job_from_posting(
             session,
-            user,
+            user.id,
             make_job_posting(
                 external_id="ext-102", description="The full description, fetched later."
             ),
@@ -131,12 +131,12 @@ class TestUpsert:
         """Search results are summaries; they must not overwrite a fetched detail page."""
         user = await create_user(session, email="upsert4@example.com")
         await upsert_job_from_posting(
-            session, user, make_job_posting(external_id="ext-103", description="The full text.")
+            session, user.id, make_job_posting(external_id="ext-103", description="The full text.")
         )
         await session.commit()
 
         await upsert_job_from_posting(
-            session, user, make_job_posting(external_id="ext-103", description=None)
+            session, user.id, make_job_posting(external_id="ext-103", description=None)
         )
         await session.commit()
 
@@ -149,7 +149,7 @@ class TestUpsert:
         await create_job(session, user, external_id="ext-104", status=JobStatus.APPLIED, score=95)
 
         await upsert_job_from_posting(
-            session, user, make_job_posting(external_id="ext-104")
+            session, user.id, make_job_posting(external_id="ext-104")
         )
         await session.commit()
 
@@ -171,7 +171,7 @@ class TestUpsert:
             skip_reason="Score 20 is below the minimum of 70.",
         )
 
-        await upsert_job_from_posting(session, user, make_job_posting(external_id="ext-105"))
+        await upsert_job_from_posting(session, user.id, make_job_posting(external_id="ext-105"))
         await session.commit()
 
         job = await job_by_external_id(session, user, "ext-105")
@@ -184,7 +184,7 @@ class TestUpsert:
         user = await create_user(session, email="upsert7@example.com")
 
         await upsert_job_from_posting(
-            session, user, make_job_posting(external_id="ext-106", already_applied=True)
+            session, user.id, make_job_posting(external_id="ext-106", already_applied=True)
         )
         await session.commit()
 
@@ -199,7 +199,7 @@ class TestUpsert:
         await create_job(session, first, external_id="ext-107", title="Owned by first")
 
         await upsert_job_from_posting(
-            session, second, make_job_posting(external_id="ext-107", title="Owned by second")
+            session, second.id, make_job_posting(external_id="ext-107", title="Owned by second")
         )
         await session.commit()
 
@@ -214,7 +214,7 @@ class TestUpsert:
         search = await create_search(session, user)
 
         job, _ = await upsert_job_from_posting(
-            session, user, make_job_posting(external_id="ext-108"), search_id=search.id
+            session, user.id, make_job_posting(external_id="ext-108"), search_id=search.id
         )
         await session.commit()
 
@@ -230,7 +230,7 @@ class TestUpsert:
 
         for _ in range(3):
             for posting in postings:
-                await upsert_job_from_posting(session, user, posting, search_id=search.id)
+                await upsert_job_from_posting(session, user.id, posting, search_id=search.id)
             await session.commit()
 
         assert await count_jobs(session, user) == 5

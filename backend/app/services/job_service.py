@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.ai.schemas import CoverLetter
 from app.api.errors import NotFoundError, PreconditionFailedError, UpstreamError
 from app.automation.contracts import JobPosting
+from app.domain.language import detect_language
 from app.models import Job, JobStatus, User
 from app.observability import EventName, get_logger, make_event
 from app.schemas.job import JobDetail, JobRead
@@ -74,25 +75,30 @@ async def get_jobs_by_ids(session: AsyncSession, user: User, job_ids: list[int])
 
 async def upsert_job_from_posting(
     session: AsyncSession,
-    user: User,
+    user_id: int,
     posting: JobPosting,
     *,
     search_id: int | None = None,
 ) -> tuple[Job, bool]:
     """Insert or refresh a job, deduplicating on `(user_id, external_id)`.
 
+    The single ingestion rule for every discovery path — the API and the
+    automation engine both come through here, so a posting is refreshed the same
+    way whoever found it. Takes a `user_id` because the engine works from ids and
+    holds no `User` row.
+
     Returns `(job, created)`. An already-applied job is never pushed back to an
     earlier state, so re-running a search cannot resurrect finished work.
     """
     result = await session.execute(
-        _job_query().where(Job.user_id == user.id, Job.external_id == posting.external_id)
+        _job_query().where(Job.user_id == user_id, Job.external_id == posting.external_id)
     )
     job = result.scalar_one_or_none()
     created = job is None
 
     if job is None:
         job = Job(
-            user_id=user.id,
+            user_id=user_id,
             external_id=posting.external_id,
             title=posting.title,
             company=posting.company,
@@ -106,13 +112,17 @@ async def upsert_job_from_posting(
     job.url = posting.url or job.url
     if posting.description:
         job.description = posting.description
+        job.detected_language = detect_language(posting.description)
     job.workplace_type = posting.workplace_type or job.workplace_type
     job.easy_apply = posting.easy_apply or job.easy_apply
     job.posted_at = posting.posted_at or job.posted_at
-    if search_id is not None:
+    # Credit the search that first found the posting; a later run that happens to
+    # return it again must not re-attribute it.
+    if search_id is not None and job.search_id is None:
         job.search_id = search_id
     if posting.already_applied and job.status != JobStatus.APPLIED:
         job.status = JobStatus.APPLIED
+        job.skip_reason = "LinkedIn reports this application was already sent."
 
     await session.flush()
     return job, created

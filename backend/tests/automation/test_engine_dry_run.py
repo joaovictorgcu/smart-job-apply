@@ -26,7 +26,7 @@ from app.models import (
     AutomationRunStatus,
     JobStatus,
 )
-from tests.automation import FILTERS, ai_seam, application_for_job, jobs_of, reload_run
+from tests.automation import FILTERS, application_for_job, jobs_of, reload_run
 from tests.fixtures.factories import create_job, create_run, create_search, create_user
 from tests.fixtures.fake_ai import FakeAIClient
 from tests.fixtures.fake_linkedin import FakeLinkedInService, make_postings
@@ -101,7 +101,6 @@ class TestSearch:
         assert stored.jobs_found == 2
         assert stored.finished_at is not None
 
-    @ai_seam
     async def test_scores_the_jobs_when_analysis_is_on(
         self, session: AsyncSession, automation_engine: Any, fake_linkedin: FakeLinkedInService
     ) -> None:
@@ -116,7 +115,6 @@ class TestSearch:
         assert all(job.score == 85 for job in jobs)
         assert all(job.status == JobStatus.ANALYZED for job in jobs)
 
-    @ai_seam
     async def test_a_weak_job_is_skipped_rather_than_queued(
         self,
         session: AsyncSession,
@@ -227,7 +225,6 @@ class TestDryRunPrepare:
         assert application.status == ApplicationStatus.AWAITING_REVIEW
         assert application.was_dry_run is True
 
-    @ai_seam
     async def test_the_draft_carries_the_generated_content(
         self, session: AsyncSession, automation_engine: Any, fake_ai: FakeAIClient
     ) -> None:

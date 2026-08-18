@@ -20,10 +20,8 @@ Assisted mode is enforced here, not in the UI:
 from __future__ import annotations
 
 import asyncio
-import importlib
-import inspect
 import re
-from collections.abc import AsyncIterator, Awaitable, Coroutine, Iterable, Sequence
+from collections.abc import AsyncIterator, Coroutine, Sequence
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from typing import Any
@@ -32,7 +30,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.ai.schemas import JobAnalysis, ScreeningAnswer
+from app.ai.port import AIOrchestrator, get_orchestrator
+from app.ai.schemas import ScreeningAnswer
 from app.auth.crypto import DecryptionError, decrypt_json, encrypt_json
 from app.automation.contracts import (
     ApplicationDraft,
@@ -70,32 +69,10 @@ from app.models import (
     UserSettings,
 )
 from app.observability import EventName, get_logger, make_event, record_event, to_live_event
+from app.services.job_service import upsert_job_from_posting
 from app.websocket.manager import manager
 
 logger = get_logger(__name__)
-
-# --- AI layer seam -------------------------------------------------------
-# `app.ai.*` is owned by another module and its exact entry-point names are
-# resolved at call time. Everything degrades gracefully: without a reachable AI
-# function, jobs stay unscored and applications are prepared without a cover
-# letter instead of the run failing.
-_SCORING_TARGETS: tuple[tuple[str, str], ...] = (
-    ("app.ai.scoring", "analyze_job"),
-    ("app.ai.scoring", "score_job"),
-    ("app.ai", "analyze_job"),
-)
-_COVER_LETTER_TARGETS: tuple[tuple[str, str], ...] = (
-    ("app.ai.cover_letter", "generate_cover_letter"),
-    ("app.ai.letters", "generate_cover_letter"),
-    ("app.ai.scoring", "generate_cover_letter"),
-    ("app.ai", "generate_cover_letter"),
-)
-_SCREENING_TARGETS: tuple[tuple[str, str], ...] = (
-    ("app.ai.screening", "answer_screening_questions"),
-    ("app.ai.screening", "answer_questions"),
-    ("app.ai.scoring", "answer_screening_questions"),
-    ("app.ai", "answer_screening_questions"),
-)
 
 _EMAIL_HINTS = ("email", "e-mail")
 _PHONE_HINTS = ("phone", "telefone", "celular", "mobile")
@@ -109,7 +86,7 @@ _FULL_NAME_HINTS = ("full name", "nome completo")
 class AutomationEngine:
     """One instance per process; use `get_engine()`."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, ai: AIOrchestrator | None = None) -> None:
         settings = get_settings()
         self._semaphore = asyncio.Semaphore(max(1, settings.max_concurrent_sessions))
         self._services: dict[int, LinkedInBrowserService] = {}
@@ -117,7 +94,7 @@ class AutomationEngine:
         self._tasks: dict[int, asyncio.Task[Any]] = {}
         self._detached: set[asyncio.Task[Any]] = set()
         self._stop_requested: set[int] = set()
-        self._ai_cache: dict[str, Any] = {}
+        self._ai = ai or get_orchestrator()
 
     # --- Concurrency ------------------------------------------------------
 
@@ -436,7 +413,7 @@ class AutomationEngine:
                 if posting.external_id in processed:
                     continue
 
-                job_id = await self._upsert_job(user_id, search_id, posting)
+                job_id = await self._store_posting(user_id, search_id, posting)
                 await self._publish(
                     user_id,
                     EventName.JOB_FOUND,
@@ -448,7 +425,7 @@ class AutomationEngine:
 
                 if not posting.description:
                     detail = await service.fetch_job_details(posting.external_id)
-                    job_id = await self._upsert_job(user_id, search_id, detail)
+                    job_id = await self._store_posting(user_id, search_id, detail)
 
                 if analyze:
                     outcome = await self._analyze_job(user_id, run_id, job_id)
@@ -509,78 +486,37 @@ class AutomationEngine:
                 select(AutomationRun.search_id).where(AutomationRun.id == run_id)
             )
 
-    async def _upsert_job(self, user_id: int, search_id: int | None, posting: JobPosting) -> int:
-        """Insert or refresh a job, deduplicating on (user_id, external_id)."""
+    @staticmethod
+    async def _store_posting(user_id: int, search_id: int | None, posting: JobPosting) -> int:
+        """Ingest a discovered posting through the one shared dedup rule."""
         async with session_scope() as session:
-            job = await session.scalar(
-                select(Job).where(Job.user_id == user_id, Job.external_id == posting.external_id)
-            )
-            if job is None:
-                job = Job(
-                    user_id=user_id,
-                    search_id=search_id,
-                    external_id=posting.external_id,
-                    title=posting.title,
-                    company=posting.company,
-                    status=JobStatus.DISCOVERED,
-                )
-                session.add(job)
-
-            job.title = posting.title or job.title
-            job.company = posting.company or job.company
-            job.location = posting.location or job.location
-            job.url = posting.url or job.url
-            if posting.description:
-                job.description = posting.description
-                job.detected_language = _detect_language(posting.description)
-            job.workplace_type = posting.workplace_type or job.workplace_type
-            job.easy_apply = posting.easy_apply or job.easy_apply
-            job.posted_at = posting.posted_at or job.posted_at
-            if search_id and job.search_id is None:
-                job.search_id = search_id
-            if posting.already_applied and job.status != JobStatus.APPLIED:
-                job.status = JobStatus.APPLIED
-                job.skip_reason = "LinkedIn reports this application was already sent."
-            await session.flush()
+            job, _ = await upsert_job_from_posting(session, user_id, posting, search_id=search_id)
             return job.id
 
     async def _analyze_job(self, user_id: int, run_id: int | None, job_id: int) -> JobStatus | None:
-        """Score one job with the AI layer. Returns the resulting job status."""
+        """Score one job with the AI layer. Returns the resulting job status.
+
+        The AI layer owns the outcome: it writes the score, the breakdown, the
+        gates and the resulting status. This method only reports what it wrote —
+        a second threshold here would be a second definition of "skipped".
+        """
         async with session_scope() as session:
             job = await session.get(Job, job_id)
             if job is None or job.user_id != user_id:
                 return None
+            user = await session.get(User, user_id)
+            if user is None:
+                logger.warning(
+                    "Cannot score a job for a user that no longer exists.",
+                    extra={"action": "engine.analyze", "user_id": user_id, "job_id": job_id},
+                )
+                return None
             settings = await self._settings(session, user_id)
             profile = await self._profile_context(session, user_id)
-            posting = _posting_from_job(job)
-            analysis = await self._ai_analysis(
-                session=session,
-                user_id=user_id,
-                job=job,
-                posting=posting,
-                profile=profile,
-                settings=settings,
-            )
-            if analysis is None:
-                return None
 
-            job.score = analysis.score
-            job.score_reasons = list(analysis.reasons)
-            job.missing_requirements = list(analysis.missing_requirements)
-            if analysis.cover_letter_language:
-                job.detected_language = analysis.cover_letter_language
-            min_score = int(settings.min_score) if settings else get_settings().default_min_score
-            if analysis.refused:
-                job.status = JobStatus.ANALYZED
-                job.skip_reason = analysis.refusal_reason
-            elif analysis.score < min_score or not analysis.recommend_apply:
-                job.status = JobStatus.SKIPPED
-                job.skip_reason = analysis.summary or (
-                    f"Score {analysis.score} is below the {min_score} threshold."
-                )
-            else:
-                job.status = JobStatus.ANALYZED
-                job.skip_reason = None
+            await self._ai.analyze_job(
+                session, user=user, job=job, profile_ctx=profile, settings_row=settings
+            )
             resulting = job.status
             score = job.score
             title = job.title
@@ -704,12 +640,10 @@ class AutomationEngine:
             settings = await self._settings(session, user_id)
             profile = await self._profile_context(session, user_id)
             dry_run = bool(settings.dry_run) if settings else True
-            generate_letter = bool(settings.generate_cover_letter) if settings else True
             external_id = job.external_id
             job_title = job.title
             job_company = job.company
             easy_apply = job.easy_apply
-            posting = _posting_from_job(job)
 
             application = await session.scalar(
                 select(Application).where(Application.job_id == job_id)
@@ -746,10 +680,10 @@ class AutomationEngine:
 
         try:
             cover_letter = cover_letter_existing
-            if generate_letter and not cover_letter:
-                cover_letter = await self._ai_cover_letter(
-                    user_id=user_id, posting=posting, profile=profile, settings_row=None
-                )
+            if not cover_letter:
+                # Whether a letter is wanted at all is the AI layer's call: it
+                # reads `generate_cover_letter` from the same settings row.
+                cover_letter = await self._ai_cover_letter(user_id, job_id, profile)
 
             if dry_run:
                 await self._store_draft(
@@ -784,9 +718,7 @@ class AutomationEngine:
                     payload={"fields": [question.label for question in questions]},
                 )
 
-            screening = await self._ai_screening(
-                user_id=user_id, posting=posting, profile=profile, questions=questions
-            )
+            screening = await self._ai_screening(user_id, job_id, profile, questions)
             answers, enriched = _build_answers(questions, screening, profile)
             draft = await service.fill_and_advance(answers, cover_letter=cover_letter)
             enriched = _merge_draft_answers(enriched, draft)
@@ -1290,226 +1222,43 @@ class AutomationEngine:
         )
 
     # --- AI layer calls ---------------------------------------------------
-
-    async def _ai_analysis(
-        self,
-        *,
-        session: AsyncSession,
-        user_id: int,
-        job: Job,
-        posting: JobPosting,
-        profile: ProfileContext,
-        settings: UserSettings | None,
-    ) -> JobAnalysis | None:
-        result = await self._call_ai(
-            "scoring",
-            _SCORING_TARGETS,
-            {
-                "session": session,
-                "user_id": user_id,
-                "job": job,
-                "job_id": job.id,
-                "posting": posting,
-                "job_posting": posting,
-                "profile": profile,
-                "profile_context": profile,
-                "settings": settings,
-                "user_settings": settings,
-            },
-        )
-        return _as_job_analysis(result)
+    #
+    # Nothing is caught around these three calls. `app.ai.scoring` already
+    # degrades internally — an API error or a refusal becomes an `AIAnalysis` row
+    # with an error message and a refused result — and it deliberately re-raises
+    # `AINotConfiguredError`, which the API layer renders as 503. A catch here
+    # would only hide the next signature mismatch, which is what broke this seam.
 
     async def _ai_cover_letter(
-        self,
-        *,
-        user_id: int,
-        posting: JobPosting,
-        profile: ProfileContext,
-        settings_row: UserSettings | None,
+        self, user_id: int, job_id: int, profile: ProfileContext
     ) -> str | None:
+        """Draft a letter, in a scope holding the ORM `Job` the audit row needs."""
         async with session_scope() as session:
-            settings = settings_row or await self._settings(session, user_id)
-            result = await self._call_ai(
-                "cover_letter",
-                _COVER_LETTER_TARGETS,
-                {
-                    "session": session,
-                    "user_id": user_id,
-                    "posting": posting,
-                    "job_posting": posting,
-                    "profile": profile,
-                    "profile_context": profile,
-                    "settings": settings,
-                    "user_settings": settings,
-                    "tone": settings.cover_letter_tone if settings else None,
-                    "language": settings.content_language if settings else None,
-                },
+            user = await session.get(User, user_id)
+            job = await session.get(Job, job_id)
+            if user is None or job is None:
+                return None
+            settings = await self._settings(session, user_id)
+            letter = await self._ai.generate_cover_letter(
+                session, user=user, job=job, profile_ctx=profile, settings_row=settings
             )
-        return _as_cover_letter(result)
+        return letter.content if letter is not None else None
 
     async def _ai_screening(
-        self,
-        *,
-        user_id: int,
-        posting: JobPosting,
-        profile: ProfileContext,
-        questions: list[FormQuestion],
+        self, user_id: int, job_id: int, profile: ProfileContext, questions: list[FormQuestion]
     ) -> list[ScreeningAnswer]:
-        payload_questions = [
-            {
-                "field_id": question.field_id,
-                "question": question.label,
-                "label": question.label,
-                "type": question.kind,
-                "question_type": question.kind,
-                "options": list(question.options),
-                "required": question.required,
-            }
-            for question in questions
-        ]
+        """Answer the form's questions, in a scope holding the ORM `Job`."""
         async with session_scope() as session:
-            settings = await self._settings(session, user_id)
-            result = await self._call_ai(
-                "screening",
-                _SCREENING_TARGETS,
-                {
-                    "session": session,
-                    "user_id": user_id,
-                    "posting": posting,
-                    "job_posting": posting,
-                    "profile": profile,
-                    "profile_context": profile,
-                    "settings": settings,
-                    "user_settings": settings,
-                    "questions": payload_questions,
-                    "form_questions": questions,
-                },
+            user = await session.get(User, user_id)
+            job = await session.get(Job, job_id)
+            if user is None or job is None:
+                return []
+            return await self._ai.answer_screening(
+                session, user=user, job=job, profile_ctx=profile, questions=questions
             )
-        return _as_screening_answers(result)
-
-    async def _call_ai(
-        self, kind: str, targets: tuple[tuple[str, str], ...], payload: dict[str, Any]
-    ) -> Any:
-        """Call the AI layer, passing only the arguments it declares.
-
-        The AI module is a separate unit with its own signatures; binding by name
-        keeps the engine working whether it takes ORM rows, dataclasses or both,
-        and a missing/incompatible AI layer degrades instead of failing the run.
-        """
-        func = self._resolve_ai(kind, targets)
-        if func is None:
-            return None
-        try:
-            signature = inspect.signature(func)
-            takes_kwargs = any(
-                parameter.kind is inspect.Parameter.VAR_KEYWORD
-                for parameter in signature.parameters.values()
-            )
-            kwargs = (
-                dict(payload)
-                if takes_kwargs
-                else {key: value for key, value in payload.items() if key in signature.parameters}
-            )
-            result = func(**kwargs)
-            if isinstance(result, Awaitable):
-                result = await result
-            return result
-        except Exception as exc:
-            logger.warning(
-                "The AI layer call failed; continuing without it.",
-                extra={"action": f"engine.ai.{kind}", "status": "degraded", "error": str(exc)},
-            )
-            return None
-
-    def _resolve_ai(self, kind: str, targets: tuple[tuple[str, str], ...]) -> Any:
-        if kind in self._ai_cache:
-            return self._ai_cache[kind]
-        for module_name, attribute in targets:
-            try:
-                module = importlib.import_module(module_name)
-            except ImportError:
-                continue
-            func = getattr(module, attribute, None)
-            if callable(func):
-                self._ai_cache[kind] = func
-                return func
-        logger.warning(
-            "No AI entry point found; the feature is disabled for this run.",
-            extra={"action": f"engine.ai.{kind}", "status": "unavailable"},
-        )
-        return None
 
 
 # --- Conversion helpers --------------------------------------------------
-
-
-def _posting_from_job(job: Job) -> JobPosting:
-    return JobPosting(
-        external_id=job.external_id,
-        title=job.title,
-        company=job.company,
-        location=job.location,
-        url=job.url,
-        description=job.description,
-        workplace_type=job.workplace_type,
-        easy_apply=job.easy_apply,
-        posted_at=job.posted_at,
-        already_applied=job.status == JobStatus.APPLIED,
-    )
-
-
-def _as_job_analysis(result: Any) -> JobAnalysis | None:
-    if result is None:
-        return None
-    if isinstance(result, tuple) and result:
-        result = result[0]
-    if isinstance(result, JobAnalysis):
-        return result
-    if isinstance(result, dict):
-        return JobAnalysis.model_validate(result)
-    dumped = getattr(result, "model_dump", None)
-    if callable(dumped):
-        return JobAnalysis.model_validate(dumped())
-    return None
-
-
-def _as_cover_letter(result: Any) -> str | None:
-    if result is None:
-        return None
-    if isinstance(result, tuple) and result:
-        result = result[0]
-    if isinstance(result, str):
-        return result.strip() or None
-    content = getattr(result, "content", None)
-    if isinstance(content, str):
-        return content.strip() or None
-    if isinstance(result, dict):
-        value = result.get("content") or result.get("cover_letter")
-        return value.strip() if isinstance(value, str) and value.strip() else None
-    return None
-
-
-def _as_screening_answers(result: Any) -> list[ScreeningAnswer]:
-    if result is None:
-        return []
-    if isinstance(result, tuple) and result:
-        result = result[0]
-    if hasattr(result, "answers"):
-        result = result.answers
-    if isinstance(result, dict):
-        result = result.get("answers", [])
-    if not isinstance(result, Iterable):
-        return []
-    answers: list[ScreeningAnswer] = []
-    for item in result:
-        if isinstance(item, ScreeningAnswer):
-            answers.append(item)
-        elif isinstance(item, dict):
-            try:
-                answers.append(ScreeningAnswer.model_validate(item))
-            except Exception:
-                continue
-    return answers
 
 
 def _build_answers(
@@ -1640,25 +1389,6 @@ def _session_message(state: SessionState) -> str:
 
 def _normalize(value: str | None) -> str:
     return re.sub(r"\s+", " ", (value or "").strip().lower())
-
-
-# Rough language tag for the AI layer's benefit; the model does the real work.
-_PT_MARKERS = (
-    " você ",
-    " experiência",
-    " vaga",
-    " conhecimento",
-    " desenvolvedor",
-    " requisitos",
-    " atividades",
-    " salário",
-)
-
-
-def _detect_language(text: str) -> str:
-    lowered = f" {text.lower()} "
-    hits = sum(1 for marker in _PT_MARKERS if marker in lowered)
-    return "pt-BR" if hits >= 2 else "en"
 
 
 _engine: AutomationEngine | None = None
