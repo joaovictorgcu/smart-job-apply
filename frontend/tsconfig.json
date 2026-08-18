@@ -21,6 +21,10 @@
     "noUncheckedIndexedAccess": false,
     "forceConsistentCasingInFileNames": true,
 
+    // `globals: true` in the vitest config injects describe/it/expect; declaring
+    // them here keeps a test that leans on them type-checked rather than red.
+    "types": ["vitest/globals", "node"],
+
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]

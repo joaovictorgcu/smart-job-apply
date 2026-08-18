@@ -21,6 +21,22 @@ module.exports = {
       files: ["src/hooks/**/*.tsx", "src/lib/**/*.tsx"],
       rules: { "react-refresh/only-export-components": "off" },
     },
+    {
+      // Vitest injects these; the test files still import them explicitly, so
+      // this only stops no-undef from flagging the ones Testing Library uses.
+      files: ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test/**/*.{ts,tsx}"],
+      env: { node: true },
+      globals: {
+        afterAll: "readonly",
+        afterEach: "readonly",
+        beforeAll: "readonly",
+        beforeEach: "readonly",
+        describe: "readonly",
+        expect: "readonly",
+        it: "readonly",
+        vi: "readonly",
+      },
+    },
   ],
   rules: {
     "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
