@@ -90,6 +90,10 @@ class ApplicationEventType(StrEnum):
     FORM_CHANGED = "form_changed"
     QUESTION_ANSWERED = "question_answered"
     RESUME_UPLOADED = "resume_uploaded"
+    # The application's own copy of the resume was derived from the master, or
+    # derived again. Recorded so "which resume is this application using, and
+    # since when" is answerable from the trail the user already reads.
+    RESUME_ADAPTED = "resume_adapted"
     AWAITING_REVIEW = "awaiting_review"
     USER_EDITED = "user_edited"
     USER_APPROVED = "user_approved"

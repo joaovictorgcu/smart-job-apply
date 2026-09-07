@@ -30,6 +30,7 @@ from app.models.enums import (
 
 if TYPE_CHECKING:
     from app.models.automation import AutomationRun
+    from app.models.resume import ApplicationResume
     from app.models.score import JobScore
     from app.models.user import User
 
@@ -191,6 +192,13 @@ class Application(Base, TimestampMixin):
 
     user: Mapped[User] = relationship(back_populates="applications")
     job: Mapped[Job] = relationship(back_populates="application")
+    # The resume this application presents — a snapshot of the master resume as
+    # it stood when the application was created, adapted to this posting. Its
+    # independence from the master (and from every sibling application) is the
+    # point; see `app.models.resume.ApplicationResume`.
+    resume: Mapped[ApplicationResume | None] = relationship(
+        back_populates="application", cascade="all, delete-orphan", uselist=False
+    )
     events: Mapped[list[ApplicationEvent]] = relationship(
         back_populates="application",
         cascade="all, delete-orphan",

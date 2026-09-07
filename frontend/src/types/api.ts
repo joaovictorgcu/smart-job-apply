@@ -52,6 +52,7 @@ export type ApplicationEventType =
   | "form_step_completed"
   | "question_answered"
   | "resume_uploaded"
+  | "resume_adapted"
   | "awaiting_review"
   | "user_edited"
   | "user_approved"
@@ -447,6 +448,191 @@ export interface TailoredResume {
   /** True when your profile changed after this draft was generated. */
   is_stale: boolean;
   created_at: string | null;
+  updated_at: string | null;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Resumes: the master one, and one adapted copy per application              */
+/* (schemas/resume.py)                                                        */
+/* -------------------------------------------------------------------------- */
+
+export interface ResumeProject {
+  name: string;
+  description: string;
+  technologies: string[];
+}
+
+/** One position on the master resume — the only place a fact about you lives. */
+export interface Experience {
+  id: number;
+  company: string;
+  role: string;
+  employment_type: string | null;
+  location: string | null;
+  /** ISO date (YYYY-MM-DD). */
+  started_on: string | null;
+  ended_on: string | null;
+  is_current: boolean;
+  summary: string | null;
+  responsibilities: string[];
+  technologies: string[];
+  results: string[];
+  projects: ResumeProject[];
+  position: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ExperienceCreate {
+  company: string;
+  role: string;
+  employment_type?: string | null;
+  location?: string | null;
+  started_on?: string | null;
+  ended_on?: string | null;
+  is_current?: boolean;
+  summary?: string | null;
+  responsibilities?: string[];
+  technologies?: string[];
+  results?: string[];
+  projects?: ResumeProject[];
+  position?: number | null;
+}
+
+export type ExperienceUpdate = Partial<ExperienceCreate>;
+
+export interface MasterResume {
+  headline: string | null;
+  location: string | null;
+  summary: string | null;
+  years_of_experience: number | null;
+  skills: string[];
+  resume_text: string | null;
+  resume_filename: string | null;
+  experiences: Experience[];
+  /** Hash of everything above; an older snapshot compares itself against it. */
+  fingerprint: string;
+  updated_at: string | null;
+}
+
+/** A project one posting had a reason to see. */
+export interface AdaptedProject extends ResumeProject {
+  company: string;
+  role: string;
+  matched_terms: string[];
+}
+
+/**
+ * One experience as a single application presents it.
+ *
+ * Same facts as the master position, reordered: `responsibilities` and `results`
+ * lead with the sentences this posting asks about, and `technologies` leads with
+ * the matched ones. `promoted` is how many of your own lines moved up.
+ */
+export interface AdaptedExperience {
+  experience_id: number | null;
+  company: string;
+  role: string;
+  location: string | null;
+  employment_type: string | null;
+  started_on: string | null;
+  ended_on: string | null;
+  is_current: boolean;
+  summary: string;
+  responsibilities: string[];
+  technologies: string[];
+  results: string[];
+  projects: AdaptedProject[];
+  relevance: number;
+  matched_terms: string[];
+  promoted: number;
+}
+
+/** Closed set; mirrors domain/resume.py CHANGE_KINDS. */
+export type ResumeChangeKind =
+  | "experience_prioritized"
+  | "experience_refocused"
+  | "skill_highlighted"
+  | "technology_emphasized"
+  | "project_selected";
+
+export interface ResumeChange {
+  kind: ResumeChangeKind | string;
+  target: string;
+  terms: string[];
+  matched: number;
+  total: number;
+}
+
+export type FitFactorName = "technologies" | "experience" | "skills" | "seniority";
+
+export interface FitFactor {
+  factor: FitFactorName | string;
+  score: number;
+  weight_pct: number;
+  matched: number;
+  total: number;
+  terms: string[];
+}
+
+export interface ApplicationResume {
+  application_id: number;
+  job_id: number;
+  job_title: string | null;
+  job_company: string | null;
+  version: number;
+
+  headline: string | null;
+  summary: string | null;
+  skills: string[];
+  highlighted_skills: string[];
+  emphasized_technologies: string[];
+  experiences: AdaptedExperience[];
+  projects: AdaptedProject[];
+  changes: ResumeChange[];
+
+  /** Empty `fit_factors` means the posting named nothing recognisable — hide the figure. */
+  fit_score: number;
+  fit_factors: FitFactor[];
+  uncovered_requirements: string[];
+
+  model: string | null;
+  was_edited: boolean;
+  /** True when the master resume changed after this copy was derived. */
+  is_stale: boolean;
+  adapted_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+/** The parts of one adapted experience the reviewer may rewrite. */
+export interface AdaptedExperienceEdit {
+  summary: string;
+  responsibilities: string[];
+  technologies: string[];
+  results: string[];
+}
+
+export interface ApplicationResumeUpdate {
+  headline?: string | null;
+  summary?: string | null;
+  skills?: string[] | null;
+  /** Positional: must be the same length as the stored list, or the server refuses. */
+  experiences?: AdaptedExperienceEdit[] | null;
+}
+
+export interface ResumeVersionSummary {
+  application_id: number;
+  job_id: number;
+  job_title: string;
+  job_company: string;
+  application_status: ApplicationStatus;
+  version: number;
+  fit_score: number;
+  has_fit: boolean;
+  highlighted_count: number;
+  was_edited: boolean;
+  is_stale: boolean;
   updated_at: string | null;
 }
 

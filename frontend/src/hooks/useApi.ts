@@ -19,6 +19,7 @@ import * as applicationsService from "@/services/applications";
 import * as automationService from "@/services/automation";
 import * as jobsService from "@/services/jobs";
 import * as profileService from "@/services/profile";
+import * as resumesService from "@/services/resumes";
 import * as searchesService from "@/services/searches";
 import * as statsService from "@/services/stats";
 import * as tailoringService from "@/services/tailoring";
@@ -31,10 +32,17 @@ import type {
   ApplicationEvent,
   ApplicationListQuery,
   ApplicationOutcome,
+  ApplicationResume,
+  ApplicationResumeUpdate,
   ApplicationUpdate,
   AutomationRun,
   DashboardStats,
+  Experience,
+  ExperienceCreate,
+  ExperienceUpdate,
+  MasterResume,
   OutcomeStats,
+  ResumeVersionSummary,
   SegmentStats,
   Job,
   JobDetail,
@@ -59,10 +67,22 @@ export const queryKeys = {
   me: () => ["me"] as const,
 
   profile: () => ["profile"] as const,
+  // Prefix of `experiences`, so invalidating the profile also refreshes the
+  // structured half of the master resume that lives next to it.
+  experiences: () => ["profile", "experiences"] as const,
   settings: () => ["settings"] as const,
   aiStatus: () => ["ai", "status"] as const,
   tailoredResume: (jobId: number) => ["ai", "tailored-cv", jobId] as const,
   health: () => ["health"] as const,
+
+  // Prefix over the master resume, the version list and every application's
+  // copy: a master edit changes the staleness of all of them at once, so they
+  // are invalidated together.
+  resumes: () => ["resumes"] as const,
+  masterResume: () => ["resumes", "master"] as const,
+  resumeVersions: () => ["resumes", "versions"] as const,
+  applicationResume: (applicationId: number) =>
+    ["resumes", "application", applicationId] as const,
 
   searches: () => ["searches"] as const,
 
@@ -124,6 +144,10 @@ export function useUpdateProfile(
     ...options,
     onSuccess: (data, vars, context) => {
       client.setQueryData(queryKeys.profile(), data);
+      // The skills and the summary are part of the master resume, so editing
+      // them moves its fingerprint: every derived copy has to re-answer whether
+      // it is stale. It never rewrites them — that is the whole point.
+      void client.invalidateQueries({ queryKey: queryKeys.resumes() });
       options?.onSuccess?.(data, vars, context);
     },
   });
@@ -237,6 +261,156 @@ export function useUpdateTailoredResume(
     ...options,
     onSuccess: (data, vars, context) => {
       client.setQueryData(queryKeys.tailoredResume(jobId), data);
+      options?.onSuccess?.(data, vars, context);
+    },
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Resumes: the master one, and one adapted copy per application              */
+/* -------------------------------------------------------------------------- */
+
+export function useMasterResume(
+  options?: QueryOpts<MasterResume>,
+): UseQueryResult<MasterResume, ApiError> {
+  return useQuery<MasterResume, ApiError>({
+    queryKey: queryKeys.masterResume(),
+    queryFn: ({ signal }) => resumesService.fetchMasterResume(signal),
+    ...options,
+  });
+}
+
+export function useResumeVersions(
+  options?: QueryOpts<ResumeVersionSummary[]>,
+): UseQueryResult<ResumeVersionSummary[], ApiError> {
+  return useQuery<ResumeVersionSummary[], ApiError>({
+    queryKey: queryKeys.resumeVersions(),
+    queryFn: ({ signal }) => resumesService.listResumeVersions(signal),
+    ...options,
+  });
+}
+
+/**
+ * The resume one application is using.
+ *
+ * A missing copy is a normal state — an application created before this feature
+ * has no honest snapshot — so a 404 resolves to `null` rather than an error, the
+ * same way `useTailoredResume` treats an ungenerated draft.
+ */
+export function useApplicationResume(
+  applicationId: number,
+  options?: QueryOpts<ApplicationResume | null>,
+): UseQueryResult<ApplicationResume | null, ApiError> {
+  return useQuery<ApplicationResume | null, ApiError>({
+    queryKey: queryKeys.applicationResume(applicationId),
+    queryFn: async ({ signal }) => {
+      try {
+        return await resumesService.fetchApplicationResume(applicationId, signal);
+      } catch (error) {
+        if ((error as { status?: number })?.status === 404) return null;
+        throw error;
+      }
+    },
+    enabled: Number.isFinite(applicationId) && applicationId > 0,
+    ...options,
+  });
+}
+
+/** Derive this application's copy again. Touches no other application. */
+export function useAdaptApplicationResume(
+  applicationId: number,
+  options?: MutationOpts<ApplicationResume, void>,
+): UseMutationResult<ApplicationResume, ApiError, void> {
+  const client = useQueryClient();
+  return useMutation<ApplicationResume, ApiError, void>({
+    mutationFn: () => resumesService.adaptApplicationResume(applicationId),
+    ...options,
+    onSuccess: (data, vars, context) => {
+      client.setQueryData(queryKeys.applicationResume(applicationId), data);
+      void client.invalidateQueries({ queryKey: queryKeys.resumeVersions() });
+      // Adapting writes an event to the application's own trail.
+      void client.invalidateQueries({ queryKey: queryKeys.application(applicationId) });
+      void client.invalidateQueries({ queryKey: queryKeys.applicationEvents(applicationId) });
+      options?.onSuccess?.(data, vars, context);
+    },
+  });
+}
+
+/** Save edits to one application's copy. The master resume is never written. */
+export function useUpdateApplicationResume(
+  applicationId: number,
+  options?: MutationOpts<ApplicationResume, ApplicationResumeUpdate>,
+): UseMutationResult<ApplicationResume, ApiError, ApplicationResumeUpdate> {
+  const client = useQueryClient();
+  return useMutation<ApplicationResume, ApiError, ApplicationResumeUpdate>({
+    mutationFn: (payload) => resumesService.updateApplicationResume(applicationId, payload),
+    ...options,
+    onSuccess: (data, vars, context) => {
+      client.setQueryData(queryKeys.applicationResume(applicationId), data);
+      void client.invalidateQueries({ queryKey: queryKeys.resumeVersions() });
+      options?.onSuccess?.(data, vars, context);
+    },
+  });
+}
+
+export function useExperiences(
+  options?: QueryOpts<Experience[]>,
+): UseQueryResult<Experience[], ApiError> {
+  return useQuery<Experience[], ApiError>({
+    queryKey: queryKeys.experiences(),
+    queryFn: ({ signal }) => resumesService.listExperiences(signal),
+    ...options,
+  });
+}
+
+/*
+ * The three experience mutations share their cache maintenance: writing the
+ * master resume changes its fingerprint, so the version list and every open
+ * application copy have to re-answer whether they are stale. None of them
+ * rewrites a copy's content, which is the isolation rule the backend enforces.
+ */
+function invalidateMaster(client: ReturnType<typeof useQueryClient>): void {
+  void client.invalidateQueries({ queryKey: queryKeys.experiences() });
+  void client.invalidateQueries({ queryKey: queryKeys.resumes() });
+}
+
+export function useCreateExperience(
+  options?: MutationOpts<Experience, ExperienceCreate>,
+): UseMutationResult<Experience, ApiError, ExperienceCreate> {
+  const client = useQueryClient();
+  return useMutation<Experience, ApiError, ExperienceCreate>({
+    mutationFn: (payload) => resumesService.createExperience(payload),
+    ...options,
+    onSuccess: (data, vars, context) => {
+      invalidateMaster(client);
+      options?.onSuccess?.(data, vars, context);
+    },
+  });
+}
+
+export function useUpdateExperience(
+  options?: MutationOpts<Experience, { id: number; payload: ExperienceUpdate }>,
+): UseMutationResult<Experience, ApiError, { id: number; payload: ExperienceUpdate }> {
+  const client = useQueryClient();
+  return useMutation<Experience, ApiError, { id: number; payload: ExperienceUpdate }>({
+    mutationFn: ({ id, payload }) => resumesService.updateExperience(id, payload),
+    ...options,
+    onSuccess: (data, vars, context) => {
+      invalidateMaster(client);
+      options?.onSuccess?.(data, vars, context);
+    },
+  });
+}
+
+export function useDeleteExperience(
+  options?: MutationOpts<void, number>,
+): UseMutationResult<void, ApiError, number> {
+  const client = useQueryClient();
+  return useMutation<void, ApiError, number>({
+    mutationFn: (id) => resumesService.deleteExperience(id),
+    ...options,
+    onSuccess: (data, vars, context) => {
+      invalidateMaster(client);
       options?.onSuccess?.(data, vars, context);
     },
   });

@@ -23,6 +23,7 @@ from app.models.job import (
     Search,
     TailoredResume,
 )
+from app.models.resume import ApplicationResume, Experience
 
 # `JobScore` here is the persisted verdict; `app.ai.schemas.JobScore` is the
 # model's output contract. Modules needing both import this one as `JobScoreRow`.
@@ -38,12 +39,14 @@ __all__ = [
     "ApplicationEvent",
     "ApplicationEventType",
     "ApplicationOutcome",
+    "ApplicationResume",
     "ApplicationStatus",
     "AuditAction",
     "AuditEvent",
     "AutomationRun",
     "AutomationRunKind",
     "AutomationRunStatus",
+    "Experience",
     "InterviewStage",
     "Job",
     "JobScore",

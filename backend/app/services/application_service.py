@@ -34,7 +34,7 @@ from app.schemas.application import (
     ApplicationUpdate,
     MarkAppliedRequest,
 )
-from app.services import job_service
+from app.services import job_service, resume_service
 
 logger = get_logger(__name__)
 
@@ -86,6 +86,13 @@ async def get_or_create_for_job(session: AsyncSession, user: User, job_id: int) 
     )
     session.add(application)
     await session.flush()
+    # A new application gets its own copy of the resume, derived from the master
+    # as it stands *now*. Doing it here rather than lazily on first read is what
+    # makes the promise hold: the copy is pinned to the master of the day the
+    # application was created, and a master edit tomorrow cannot rewrite it.
+    # Quiet by design — an account with no experience yet must not fail to get an
+    # application.
+    await resume_service.ensure_application_resume(session, user.id, application.id)
     logger.info(
         "Application draft created.",
         extra={

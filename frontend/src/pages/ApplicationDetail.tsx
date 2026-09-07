@@ -1,6 +1,7 @@
 import { ArrowLeft, Briefcase, CircleAlert, ExternalLink } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 
+import { ApplicationResumePanel } from '@/components/ApplicationResumePanel';
 import { ApplicationReviewPanel } from '@/components/ApplicationReviewPanel';
 import { EmptyState } from '@/components/EmptyState';
 import { InterviewPanel } from '@/components/InterviewPanel';
@@ -183,7 +184,17 @@ export function ApplicationDetail() {
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <ApplicationReviewPanel application={application} className="lg:col-span-2" />
+        <div className="space-y-4 lg:col-span-2">
+          {/* Above the review panel on purpose: "which resume is this
+              application sending" is the first question the screen has to
+              answer, before the letter and the screening answers. */}
+          <ApplicationResumePanel
+            applicationId={application.id}
+            jobTitle={job?.title ?? null}
+            jobCompany={job?.company ?? null}
+          />
+          <ApplicationReviewPanel application={application} />
+        </div>
 
         <div className="space-y-4">
           <InterviewPanel

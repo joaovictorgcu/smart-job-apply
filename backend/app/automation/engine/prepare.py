@@ -195,6 +195,19 @@ class PrepareMixin(EngineBase):
             application_id = application.id
             resume_filename = profile.resume_path
             cover_letter_existing = application.cover_letter
+            # The application carries its own copy of the resume, adapted to this
+            # posting and pinned to the master resume as it stands now — the same
+            # rule the API path follows, because a draft prepared by the engine and
+            # one created by hand must present the same document. Idempotent, so
+            # re-preparing a draft keeps the copy the user may already have edited.
+            #
+            # Imported here, not at module scope: `resume_service` raises the API
+            # layer's errors, and `app.api.errors` imports `app.automation` for
+            # its exception mapping — so the module-level edge closes a cycle that
+            # only shows up as an ImportError at startup.
+            from app.services import resume_service
+
+            await resume_service.ensure_application_resume(session, user_id, application_id)
 
         await self._publish(
             user_id,
