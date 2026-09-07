@@ -9,7 +9,10 @@
 #   make dev-frontend   ->  cd frontend; npm run dev
 #   make dev            ->  run the two commands above in two terminals
 #   make build          ->  cd frontend; npm run build
+#   make demo           ->  .venv\Scripts\python scripts\demo_server.py --fresh
 #   make test           ->  .venv\Scripts\python -m pytest
+#   make e2e            ->  .venv\Scripts\python -m pytest -m e2e
+#   make e2e-frontend   ->  cd frontend; npm run e2e
 #   make lint           ->  .venv\Scripts\python -m ruff check .
 #   make format         ->  .venv\Scripts\python -m ruff format .;
 #                           .venv\Scripts\python -m ruff check . --fix
@@ -34,9 +37,9 @@ FRONTEND_DIR:= frontend
 BACKEND_PORT ?= 8000
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev dev-backend dev-frontend build test lint format \
-        typecheck migrate migration user docker-build docker-up docker-down \
-        docker-logs clean
+.PHONY: help install dev dev-backend dev-frontend build demo test e2e \
+        e2e-frontend test-all lint format typecheck migrate migration user \
+        docker-build docker-up docker-down docker-logs clean
 
 help: ## Show this help
 	@printf 'smart-job-apply — available targets\n\n'
@@ -60,8 +63,25 @@ dev-frontend: ## Run only the Vite dev server
 build: ## Build the frontend into frontend/dist
 	cd $(FRONTEND_DIR) && npm run build
 
-test: ## Run the test suite
+demo: ## Run the app self-contained: offline AI, fake job portal, seeded account
+	@printf 'Backend on :8000 with DEMO_PORTAL and the offline AI provider.\n'
+	@printf 'Run `make dev-frontend` in another terminal, then open :5173.\n\n'
+	$(PY) scripts/demo_server.py --fresh
+
+test: ## Run the test suite (the browser tests are opt-in; see e2e)
 	$(PY) -m pytest
+
+e2e: ## Run the browser tests: real Chromium against the bundled fake portal
+	$(PY) -m playwright install chromium
+	$(PY) -m pytest -m e2e
+
+e2e-frontend: ## Run the Playwright dashboard tests against a demo backend
+	cd $(FRONTEND_DIR) && npm run e2e:install && npm run e2e
+
+test-all: ## Everything: unit, browser, and the frontend suites
+	$(PY) -m pytest -m 'not e2e'
+	$(PY) -m pytest -m e2e
+	cd $(FRONTEND_DIR) && npm run test -- --run && npm run e2e
 
 lint: ## Check style and imports without changing files
 	$(PY) -m ruff check .
