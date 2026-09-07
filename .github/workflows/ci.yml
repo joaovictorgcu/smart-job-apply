@@ -54,8 +54,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      # No `playwright install` here: the test suite is fully offline and uses a
-      # fake LinkedInService, so downloading Chromium would add minutes for nothing.
+      # No `playwright install` here: the default suite is fully offline and
+      # uses a fake LinkedInService, so downloading Chromium would add minutes
+      # for nothing. The `browser` job below does need it.
 
       - name: Lint
         run: ruff check --output-format=github .
@@ -78,6 +79,65 @@ jobs:
         # to test the easy modules, and the modules that matter are the ones the
         # guards job already pins down.
         run: pytest -q --cov=backend/app --cov-report=term-missing
+
+  browser:
+    name: Browser tests
+    runs-on: ubuntu-latest
+    # These are the only tests that exercise the Playwright layer — the
+    # selectors, the step navigation, and the "fill but never submit" rule as
+    # browser behaviour. They drive a real Chromium against the fake portal
+    # bundled in `app.automation.demo_portal`, so nothing reaches the network
+    # and no real application is ever sent.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          cd frontend && npm ci
+
+      - name: Install Chromium
+        run: |
+          python -m playwright install --with-deps chromium
+          cd frontend && npx playwright install --with-deps chromium
+
+      - name: Backend browser tests
+        env:
+          SECRET_KEY: "ci-secret-key-not-used-anywhere-else"
+          ENCRYPTION_KEY: "ci-encryption-key-not-used-anywhere-else"
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+        run: pytest -m e2e -q
+
+      # Starts `scripts/demo_server.py` and the Vite dev server itself; see
+      # frontend/playwright.config.ts.
+      - name: Dashboard browser tests
+        working-directory: frontend
+        run: npm run e2e
+
+      - name: Upload failure artefacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            frontend/test-results/
+            frontend/playwright-report/
+          retention-days: 7
 
   frontend:
     name: Frontend
