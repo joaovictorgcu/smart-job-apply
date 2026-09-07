@@ -37,6 +37,16 @@ module.exports = {
         vi: "readonly",
       },
     },
+    {
+      // Playwright specs run in Node and bring their own test globals as real
+      // imports, so they need neither vitest's globals nor the React rules.
+      files: ["e2e/**/*.ts", "playwright.config.ts"],
+      env: { browser: false, node: true },
+      rules: {
+        "react-hooks/rules-of-hooks": "off",
+        "react-refresh/only-export-components": "off",
+      },
+    },
   ],
   rules: {
     "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
