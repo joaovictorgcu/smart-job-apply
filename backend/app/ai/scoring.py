@@ -12,6 +12,7 @@ the user directly.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import unicodedata
 from typing import Any
@@ -35,8 +36,11 @@ from app.ai.schemas import (
     TailoredResume,
 )
 from app.automation.contracts import FormQuestion, ProfileContext
+from app.domain.scoring import decide
 from app.models.enums import AnalysisKind, AnswerConfidence, JobStatus
 from app.models.job import AIAnalysis
+from app.models.score import SCORE_DEPTH_DEEP
+from app.models.score import JobScore as JobScoreRow
 from app.observability import get_logger
 
 logger = get_logger(__name__)
@@ -53,6 +57,34 @@ def _normalize(text: str) -> str:
     decomposed = unicodedata.normalize("NFKD", text.lower())
     stripped = "".join(char for char in decomposed if not unicodedata.combining(char))
     return _NON_ALNUM.sub(" ", stripped).strip()
+
+
+def profile_source_text(profile: ProfileContext) -> str:
+    """Everything the candidate actually provided, as one block of text.
+
+    Two consumers, one definition: the invention guard checks generated text
+    against this, and `profile_fingerprint` hashes it. Skills and the headline are
+    included so a skill the user genuinely lists is never treated as absent just
+    because it does not appear in the free-text resume body.
+    """
+    parts = [
+        profile.resume_text or "",
+        profile.summary or "",
+        profile.headline or "",
+        " ".join(profile.skills or []),
+    ]
+    return "\n".join(part for part in parts if part.strip())
+
+
+def profile_fingerprint(profile: ProfileContext) -> str:
+    """Hash of the profile a piece of AI output was produced from.
+
+    One scheme for every staleness question in the app: a tailored resume is stale
+    when its fingerprint no longer matches, and two scores with different
+    fingerprints were formed against different profiles — which is what makes "62
+    to 81 after you added Kubernetes" an attribution rather than a guess.
+    """
+    return hashlib.sha256(profile_source_text(profile).encode("utf-8")).hexdigest()
 
 
 def _persist_analysis(
@@ -152,26 +184,42 @@ async def analyze_job(
             cover_letter_language=detected,
         )
 
+    dimensions = [dimension.model_dump(mode="json") for dimension in score.breakdown]
+    gates = [gate.model_dump(mode="json") for gate in score.gates]
+
     job.score = score.score
     job.score_reasons = list(score.reasons)
     job.missing_requirements = list(score.missing_requirements)
-    job.score_breakdown = [dimension.model_dump(mode="json") for dimension in score.breakdown]
-    job.score_gates = [gate.model_dump(mode="json") for gate in score.gates]
+    job.score_breakdown = dimensions
+    job.score_gates = gates
 
-    failed_gate = next((gate for gate in score.gates if gate.status == "fail"), None)
     min_score = getattr(settings_row, "min_score", 0) or 0
-    if failed_gate is not None:
-        # A failed gate is decisive whatever the number says: skipping with the
-        # posting's own wording beats surfacing a misleading "82" the user would
-        # waste an application on.
-        job.status = JobStatus.SKIPPED
-        job.skip_reason = f"Gate {failed_gate.gate}: {failed_gate.evidence}"[:300]
-    elif score.score < min_score:
-        job.status = JobStatus.SKIPPED
-        job.skip_reason = f"Score {score.score} is below the minimum of {min_score}."
-    else:
-        job.status = JobStatus.ANALYZED
-        job.skip_reason = None
+    decision = decide(score, min_score=min_score)
+    job.status = JobStatus.SKIPPED if decision.skipped else JobStatus.ANALYZED
+    job.skip_reason = decision.skip_reason
+
+    job_id = getattr(job, "id", None)
+    if job_id is not None:
+        # Appended, never updated: the columns above are the latest verdict, this
+        # row is the verdict that was reached now. Deliberately not the same thing
+        # as the `AIAnalysis` above — that one audits a call (tokens, cost,
+        # refusals); this one is the score's history, queryable by dimension.
+        # A refusal never gets here, and rightly so: there is no verdict to record.
+        session.add(
+            JobScoreRow(
+                job_id=job_id,
+                user_id=user.id,
+                overall=score.score,
+                verdict=decision.verdict,
+                # Fresh copies: the lists above belong to the job's JSON columns,
+                # and sharing them would make one row's mutation rewrite history.
+                dimensions=list(dimensions),
+                gates=list(gates),
+                model=usage.model or ai.model,
+                depth=SCORE_DEPTH_DEEP,
+                profile_fingerprint=profile_fingerprint(profile_ctx),
+            )
+        )
 
     await session.flush()
 
@@ -597,6 +645,8 @@ __all__ = [
     "answer_screening",
     "generate_cover_letter",
     "prepare_interview",
+    "profile_fingerprint",
+    "profile_source_text",
     "review_draft",
     "tailor_resume",
 ]

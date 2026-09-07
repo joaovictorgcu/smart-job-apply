@@ -124,7 +124,13 @@ export function JobDetail() {
     );
   }
 
-  const canPrepare = job.easy_apply && job.status !== 'applied' && job.application_id === null;
+  // A posting with no Easy Apply form, or one from a portal the automation does
+  // not drive, is answered on the company's own page.
+  const isExternalJob = !job.easy_apply || job.source !== 'linkedin';
+  // Preparing works for both channels now: for an external job it drafts the
+  // letter and creates the application the user will complete themselves, which
+  // is what keeps it out of the statistics' blind spot.
+  const canPrepare = job.status !== 'applied' && job.application_id === null;
 
   return (
     <div className="space-y-4">
@@ -207,6 +213,13 @@ export function JobDetail() {
             Pular
           </Button>
 
+          {isExternalJob && job.url ? (
+            <a href={job.url} target="_blank" rel="noreferrer noopener" className="btn">
+              <ExternalLink aria-hidden className="h-4 w-4" />
+              Candidatar-se no site da empresa
+            </a>
+          ) : null}
+
           {job.application_id !== null ? (
             <Link to={`/applications/${job.application_id}`} className="btn btn-primary">
               <Send aria-hidden className="h-4 w-4" />
@@ -217,9 +230,11 @@ export function JobDetail() {
               variant="primary"
               disabled={!canPrepare}
               title={
-                canPrepare
-                  ? 'Preencher o formulário de Candidatura Simplificada e parar para revisão'
-                  : 'Só vagas de Candidatura Simplificada sem candidatura podem ser preparadas'
+                !canPrepare
+                  ? 'Só uma vaga sem candidatura pode ser preparada'
+                  : isExternalJob
+                    ? 'Gerar a carta e criar a candidatura para você enviar no site da empresa'
+                    : 'Preencher o formulário de Candidatura Simplificada e parar para revisão'
               }
               onClick={() => {
                 setDialogOpen(true);
@@ -256,7 +271,11 @@ export function JobDetail() {
             <CardHeader
               title="Veredito da IA"
               description={
-                job.score === null ? 'Ainda não analisada.' : `Nota ${job.score} de 100.`
+                job.score === null
+                  ? 'Ainda não analisada.'
+                  : job.weighted_score === null
+                    ? `Nota ${job.score} de 100.`
+                    : `Nota ${job.score} de 100 · Σ(dimensão × peso) = ${job.weighted_score}`
               }
             />
             <div className="card-body space-y-4">
@@ -286,6 +305,19 @@ export function JobDetail() {
                     </div>
                   ) : null}
 
+                  {/* A headline score its own breakdown contradicts is information
+                      about how much that judgement is worth. Saying so beats
+                      hiding it, and beats silently replacing one number with the
+                      other — we do not know which of the two is the wrong one. */}
+                  {job.score_divergence !== null && Math.abs(job.score_divergence) > 5 ? (
+                    <Note tone="warning" icon={<CircleAlert aria-hidden className="h-3.5 w-3.5" />}>
+                      <span className="font-medium">O detalhamento não fecha com a nota.</span> A
+                      soma ponderada das dimensões dá {job.weighted_score}, {Math.abs(job.score_divergence)}{' '}
+                      pontos {job.score_divergence > 0 ? 'abaixo' : 'acima'} da nota {job.score}.
+                      Leia as dimensões antes de confiar no número.
+                    </Note>
+                  ) : null}
+
                   {job.score_breakdown.length > 0 ? (
                     <div>
                       <SectionLabel>Como a nota foi composta</SectionLabel>
@@ -305,6 +337,17 @@ export function JobDetail() {
                               <span className="tabular w-8 shrink-0 text-right text-xs font-semibold text-content">
                                 {dimension.score}
                               </span>
+                              {/* The weight is what makes the number reproducible:
+                                  without it "82" cannot be argued with. Rows scored
+                                  before weights existed carry 0 and show nothing. */}
+                              {dimension.weight_pct > 0 ? (
+                                <span
+                                  className="tabular w-10 shrink-0 text-right text-2xs text-content-subtle"
+                                  title={`Peso de ${dimension.weight_pct}% na nota final`}
+                                >
+                                  ×{dimension.weight_pct}%
+                                </span>
+                              ) : null}
                               {dimension.weight === 'nice_to_have' ? (
                                 <span className={badgeClass('neutral')}>desejável</span>
                               ) : null}
@@ -378,10 +421,13 @@ export function JobDetail() {
         </div>
       </div>
 
-      {job.source !== 'linkedin' ? (
+      {isExternalJob ? (
         <Note tone="neutral">
-          Vaga de portal externo ({job.source}): a automação não preenche este formulário. Use a
-          análise, a carta e o currículo adaptado daqui — e envie você mesmo na página da empresa.
+          Esta vaga é respondida no site da empresa
+          {job.source !== 'linkedin' ? ` (vinda do portal ${job.source})` : ''}: a automação não
+          preenche este formulário e nunca vai. Prepare a candidatura aqui para ter a carta e o
+          currículo adaptado, envie você mesmo por lá e depois registre na tela da candidatura —
+          é o registro que a coloca no funil e nas estatísticas.
         </Note>
       ) : null}
 

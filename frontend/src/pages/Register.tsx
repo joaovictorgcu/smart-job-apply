@@ -97,10 +97,10 @@ export function Register() {
                 aria-hidden
                 className="grid h-9 w-9 place-items-center rounded-xl bg-accent-600 text-xs font-bold text-white shadow-glow-sm"
               >
-                LA
+                SJ
               </span>
               <span className="text-lg font-semibold tracking-tight text-content">
-                LinkedIn Auto Apply
+                Smart Job Apply
               </span>
             </div>
             <p className="text-sm leading-relaxed text-content-muted">

@@ -1,7 +1,7 @@
 import { fileURLToPath, URL } from "node:url";
 
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 
 const BACKEND_ORIGIN = "http://127.0.0.1:8000";
 
@@ -32,5 +32,21 @@ export default defineConfig({
     outDir: "dist",
     sourcemap: true,
     target: "es2022",
+  },
+  test: {
+    // jsdom, because every test here drives real DOM: modals portal into
+    // document.body and the events provider needs window/WebSocket.
+    environment: "jsdom",
+    // Globals are on so Testing Library registers its automatic cleanup;
+    // the test files still import describe/it/expect explicitly.
+    globals: true,
+    setupFiles: ["./src/test/setup.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
+    restoreMocks: true,
+    coverage: {
+      provider: "v8",
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: ["src/**/*.test.{ts,tsx}", "src/test/**"],
+    },
   },
 });

@@ -13,6 +13,7 @@ import {
   Skeleton,
   Textarea,
 } from '@/components/primitives';
+import { ExperienceListEditor } from '@/components/ExperienceListEditor';
 import { ResumeUploader } from '@/components/ResumeUploader';
 import { useToast } from '@/components/ToastProvider';
 import { useProfile, useUpdateProfile } from '@/hooks/useApi';
@@ -183,8 +184,15 @@ export function Profile() {
     <div className="space-y-5 pb-24">
       <PageHeader
         title="Perfil"
-        description="O que a IA sabe sobre você. Tudo aqui alimenta a pontuação de vagas, as cartas de apresentação e as respostas de triagem."
+        description="Este é o seu currículo principal. Tudo aqui alimenta a pontuação de vagas, as cartas de apresentação, as respostas de triagem e o currículo adaptado de cada candidatura."
       />
+
+      <Note tone="accent" icon={<Info aria-hidden className="h-3.5 w-3.5" />}>
+        Cada candidatura guarda a sua própria versão deste currículo, adaptada à vaga. Editar aqui{' '}
+        <strong>não altera</strong> candidaturas já criadas — elas passam a aparecer como
+        desatualizadas, e você decide quais quer adaptar de novo. As novas já nascem com o estado
+        mais recente daqui.
+      </Note>
 
       <Card>
         <CardHeader title="Informações básicas" />
@@ -315,6 +323,8 @@ export function Profile() {
           </div>
         </div>
       </Card>
+
+      <ExperienceListEditor />
 
       <Card>
         <CardHeader

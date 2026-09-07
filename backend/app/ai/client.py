@@ -1,15 +1,17 @@
-"""Claude integration.
+"""The capability layer: one method per thing the app asks a model to do.
 
-Everything provider-specific is confined here: SDK calls, retries, refusal
-handling, and token accounting. Callers get the provider-agnostic models from
+Provider specifics live in `app.ai.providers`; this module owns what does not
+change when the model does — prompt selection, token budgets, retries, refusal
+handling and token accounting. Callers get the provider-agnostic models from
 `app.ai.schemas` plus an `AIUsage` describing the call.
 
 Two invariants matter for the rest of the app:
 
-* A refusal is a normal outcome, not an exception. `claude-opus-5` can decline a
-  request with HTTP 200 and `stop_reason == "refusal"`; every method returns a
-  usable fallback with `AIUsage.refused` set so the caller degrades to manual
-  input instead of crashing.
+* A refusal is a normal outcome, not an exception. A model can decline a request
+  with HTTP 200 and `stop_reason == "refusal"`, and a local model can return
+  something that does not validate; every method returns a usable fallback with
+  `AIUsage.refused` set so the caller degrades to manual input instead of
+  crashing.
 * An AI failure must never abort an automation run. Transient errors are retried;
   anything that survives the retries is raised for the caller to record and move on.
 """
@@ -20,11 +22,8 @@ import asyncio
 import random
 import re
 import time
-import unicodedata
-from typing import Any
-
-import anthropic
-from anthropic import AsyncAnthropic
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from app.ai.prompts import JobLike
 from app.ai.prompts.cover_letter import (
@@ -39,6 +38,14 @@ from app.ai.prompts.review import REVIEW_SYSTEM_PROMPT, build_review_prompt
 from app.ai.prompts.scoring import SCORING_SYSTEM_PROMPT, build_scoring_prompt
 from app.ai.prompts.screening import SCREENING_SYSTEM_PROMPT, build_screening_prompt
 from app.ai.prompts.tailoring import TAILORING_SYSTEM_PROMPT, build_tailoring_prompt
+from app.ai.providers import (
+    ChatProvider,
+    ProviderError,
+    ProviderNotConfiguredError,
+    build_provider,
+    describe_provider,
+)
+from app.ai.providers.base import ProviderTransientError
 from app.ai.schemas import (
     AIUsage,
     CoverLetter,
@@ -50,6 +57,17 @@ from app.ai.schemas import (
 )
 from app.automation.contracts import FormQuestion, ProfileContext
 from app.config import get_settings
+
+# `detect_language` is re-exported: the heuristic is pure domain, but callers
+# have always reached it through this module and still do.
+from app.domain.language import detect_language, fold, squash
+from app.domain.technologies import (
+    ALNUM_TOKEN,
+    ALPHA_WORD,
+    CAMELCASE,
+    KNOWN_TECHNOLOGIES,
+    ORIG_WORD,
+)
 from app.models.enums import AnswerConfidence
 from app.observability import get_logger
 
@@ -86,115 +104,25 @@ _PRICING_USD_PER_MTOK: dict[str, tuple[float, float]] = {
     "claude-haiku-4-5": (1.0, 5.0),
 }
 
-_NUMERIC_ANSWER = re.compile(r"^-?\d+([.,]\d+)?$")
+# Models that cost nothing to call because nothing left the machine. A hosted
+# free tier is deliberately NOT listed: it is free only up to a quota, and
+# reporting 0.00 for it would be a wrong number rather than an unknown one.
+_FREE_MODELS = frozenset({"stub-offline"})
 
-# Version-compatibility shim state: SDK builds disagree on whether
-# `output_config` may accompany `output_format`. Once a build rejects the pair we
-# stop sending it and log the downgrade a single time.
-_output_config_supported = True
-_shim_logged = False
+_NUMERIC_ANSWER = re.compile(r"^-?\d+([.,]\d+)?$")
 
 
 class AINotConfiguredError(RuntimeError):
-    """No Anthropic API key is configured, so AI features are unavailable."""
+    """The selected AI provider cannot run, so AI features are unavailable."""
 
     def __init__(
         self,
         message: str = (
-            "AI features are not configured. Set ANTHROPIC_API_KEY to enable job "
-            "scoring, cover letters, and screening answers."
+            "AI features are not configured. Set AI_PROVIDER to a free provider "
+            "(ollama runs locally and needs no key), or set ANTHROPIC_API_KEY."
         ),
     ) -> None:
         super().__init__(message)
-
-
-_PORTUGUESE_MARKERS = frozenset(
-    {
-        "de", "da", "do", "das", "dos", "para", "com", "que", "nao", "voce", "como",
-        "uma", "um", "os", "as", "em", "por", "mais", "sua", "seu", "sera", "ser",
-        "tambem", "experiencia", "conhecimento", "desejavel", "requisitos",
-        "atividades", "empresa", "vaga", "area", "nossa", "nosso", "sobre",
-        "trabalho", "equipe", "anos", "salario", "beneficios", "ingles",
-    }
-)
-
-_ENGLISH_MARKERS = frozenset(
-    {
-        "the", "and", "of", "to", "in", "for", "with", "you", "your", "a", "an",
-        "are", "is", "will", "be", "or", "as", "on", "we", "our", "this", "that",
-        "have", "has", "experience", "requirements", "skills", "team", "work",
-        "role", "about", "strong", "ability", "years", "benefits", "salary",
-    }
-)
-
-_WORD = re.compile(r"[a-z]+")
-_NON_ALNUM = re.compile(r"[^a-z0-9]+")
-
-
-def _fold(text: str) -> str:
-    """Lowercase and strip accents, so `experiência` matches `experiencia`."""
-    decomposed = unicodedata.normalize("NFKD", text.lower())
-    return "".join(char for char in decomposed if not unicodedata.combining(char))
-
-
-def _squash(text: str) -> str:
-    """Fold, then reduce punctuation and runs of whitespace to single spaces."""
-    return _NON_ALNUM.sub(" ", _fold(text)).strip()
-
-
-def detect_language(text: str | None) -> str:
-    """Guess the language of a job description.
-
-    A deliberately small heuristic — stopword frequency, Portuguese versus
-    English — because the only consumers are `Job.detected_language` and the
-    "mirror the posting" cover-letter mode. Defaults to `"en"` with no signal.
-    """
-    if not text or not text.strip():
-        return "en"
-    words = _WORD.findall(_fold(text))
-    if not words:
-        return "en"
-    portuguese = sum(1 for word in words if word in _PORTUGUESE_MARKERS)
-    english = sum(1 for word in words if word in _ENGLISH_MARKERS)
-    return "pt-BR" if portuguese > english else "en"
-
-
-# Common technologies whose presence in a tailored resume but absence from the
-# source is the clearest, most checkable sign of invention. Lowercased; matched as
-# whole words. Not exhaustive by design — the structural checks below catch the
-# long tail (CamelCase and alphanumeric tokens like FastAPI, PostgreSQL, OAuth2).
-_KNOWN_TECHNOLOGIES = frozenset(
-    {
-        "python", "java", "javascript", "typescript", "golang", "rust", "ruby",
-        "php", "kotlin", "swift", "scala", "elixir", "clojure", "haskell", "perl",
-        "django", "flask", "fastapi", "rails", "laravel", "spring", "express",
-        "nestjs", "react", "angular", "vue", "svelte", "nextjs", "nuxt", "jquery",
-        "node", "deno", "bun", "graphql", "grpc", "rest", "soap", "webpack", "vite",
-        "postgresql", "postgres", "mysql", "mariadb", "sqlite", "oracle", "mongodb",
-        "redis", "cassandra", "elasticsearch", "dynamodb", "snowflake", "clickhouse",
-        "kafka", "rabbitmq", "celery", "airflow", "spark", "hadoop", "flink", "dbt",
-        "docker", "kubernetes", "terraform", "ansible", "puppet", "chef", "helm",
-        "jenkins", "gitlab", "github", "circleci", "argocd", "prometheus", "grafana",
-        "aws", "azure", "gcp", "heroku", "vercel", "netlify", "cloudflare", "lambda",
-        "tensorflow", "pytorch", "keras", "sklearn", "pandas", "numpy", "scipy",
-        "kubeflow", "mlflow", "langchain", "opencv", "huggingface", "transformers",
-        "playwright", "selenium", "cypress", "jest", "pytest", "junit", "mocha",
-        "linux", "bash", "nginx", "apache", "kong", "istio", "consul", "vault",
-        "git", "jira", "confluence", "figma", "tableau", "powerbi", "looker",
-        "sql", "nosql", "html", "css", "sass", "tailwind", "bootstrap", "wasm",
-    }
-)
-
-# CamelCase like FastAPI, PostgreSQL, JavaScript, GraphQL.
-_CAMELCASE = re.compile(r"\b[A-Za-z]*[a-z][A-Z][A-Za-z]*\b")
-# Alphanumeric tokens like S3, OAuth2, Python3, k8s, EC2, gpt4 — almost always tech.
-_ALNUM_TOKEN = re.compile(r"\b(?:[A-Za-z]+\d+[A-Za-z\d]*|\d+[A-Za-z]+[A-Za-z\d]*)\b")
-# A word token, allowing an internal `.`/`+`/`#` (node.js, asp.net) but never a
-# trailing one — otherwise "Kubernetes." captures the sentence period and no longer
-# matches a known technology.
-_ALPHA_WORD = re.compile(r"[a-z][a-z0-9]*(?:[.+#][a-z0-9]+)*")
-# Same shape, original-cased, so a flagged term keeps the casing the model wrote.
-_ORIG_WORD = re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[.+#][A-Za-z0-9]+)*")
 
 
 def flag_unsupported_skills(source_text: str, tailored_text: str) -> list[str]:
@@ -210,54 +138,53 @@ def flag_unsupported_skills(source_text: str, tailored_text: str) -> list[str]:
     design: every item is a "verify this yourself" prompt to the human, never an
     automatic block. Missing a real invention is the failure to avoid.
     """
-    source = _fold(source_text or "")
-    source_words = set(_ALPHA_WORD.findall(source))
+    source = fold(source_text or "")
+    source_words = set(ALPHA_WORD.findall(source))
 
     def supported(token: str) -> bool:
-        folded = _fold(token)
+        folded = fold(token)
         # Whole-word membership, or a substring for multi-part tokens the word
         # split would break apart (e.g. "node.js" folding to "node js").
         return folded in source_words or folded in source
 
     flagged: dict[str, str] = {}  # folded -> original casing (first seen)
-    for match in _CAMELCASE.findall(tailored_text) + _ALNUM_TOKEN.findall(tailored_text):
+    for match in CAMELCASE.findall(tailored_text) + ALNUM_TOKEN.findall(tailored_text):
         if not supported(match):
-            flagged.setdefault(_fold(match), match)
+            flagged.setdefault(fold(match), match)
 
-    for token in _ORIG_WORD.findall(tailored_text):
-        folded = _fold(token)
-        if folded in _KNOWN_TECHNOLOGIES and not supported(token):
+    for token in ORIG_WORD.findall(tailored_text):
+        folded = fold(token)
+        if folded in KNOWN_TECHNOLOGIES and not supported(token):
             flagged.setdefault(folded, token)
 
     return sorted(flagged.values(), key=str.lower)
 
 
 def _is_retryable(error: Exception) -> bool:
-    if isinstance(error, anthropic.RateLimitError):
+    """Whether a second attempt could plausibly succeed.
+
+    `ProviderTransientError` is the OpenAI-compatible providers' typed signal for
+    timeouts, 5xx and rate limits. The Anthropic SDK raises its own exception
+    types, so that judgement is delegated to the module that imports it.
+    """
+    if isinstance(error, ProviderTransientError):
         return True
-    if isinstance(error, anthropic.APIStatusError):
-        return error.status_code >= 500
-    # Covers APITimeoutError, which subclasses APIConnectionError.
-    return isinstance(error, anthropic.APIConnectionError)
+    if isinstance(error, ProviderError):
+        # Every other ProviderError is a configuration or contract problem;
+        # retrying would just repeat it three times.
+        return False
+    from app.ai.providers.anthropic_provider import is_retryable as anthropic_retryable
+
+    return anthropic_retryable(error)
 
 
-def _mentions_output_config(error: Exception) -> bool:
-    message = str(error).lower()
-    return "output_config" in message or "effort" in message
+def _is_provider_failure(error: Exception) -> bool:
+    """Errors the retry loop owns, as opposed to bugs it should let through."""
+    if isinstance(error, ProviderError):
+        return True
+    from app.ai.providers.anthropic_provider import is_provider_api_error
 
-
-def _note_shim_downgrade(error: Exception) -> None:
-    """Disable `output_config` for this process, logging the downgrade once."""
-    global _output_config_supported, _shim_logged
-    _output_config_supported = False
-    if not _shim_logged:
-        _shim_logged = True
-        logger.warning(
-            "Installed Anthropic SDK rejects output_config alongside output_format; "
-            "retrying without effort control for the rest of this process (%s).",
-            error,
-            extra={"action": "ai.output_config_downgrade", "detail": str(error)},
-        )
+    return is_provider_api_error(error)
 
 
 def _refusal_category(response: Any) -> str | None:
@@ -275,26 +202,54 @@ def _first_text(response: Any) -> str:
     return ""
 
 
-class AIClient:
-    """Async wrapper around the Anthropic Messages API."""
+# Ties a capability's empty-fallback factory to what that capability returns.
+_T = TypeVar("_T")
 
-    def __init__(self, *, model: str | None = None) -> None:
+
+class AIClient:
+    """The app's AI capabilities, over whichever provider is configured."""
+
+    def __init__(
+        self,
+        *,
+        model: str | None = None,
+        provider: ChatProvider | None = None,
+    ) -> None:
         self._settings = get_settings()
-        self.model = model or self._settings.anthropic_model
-        self._client: AsyncAnthropic | None = None
+        self._provider = provider
+        self._model_override = model
 
     @property
     def is_configured(self) -> bool:
         return self._settings.ai_enabled
 
-    def _require_client(self) -> AsyncAnthropic:
-        if not self.is_configured:
-            raise AINotConfiguredError
-        if self._client is None:
-            # The key comes from settings so a `.env` file works even when the
-            # value is not exported into the process environment.
-            self._client = AsyncAnthropic(api_key=self._settings.anthropic_api_key or None)
-        return self._client
+    @property
+    def model(self) -> str:
+        """The model that will answer, without building the provider to ask."""
+        if self._model_override:
+            return self._model_override
+        if self._provider is not None:
+            return self._provider.model
+        return describe_provider(self._settings).split("/", 1)[-1]
+
+    @property
+    def provider_name(self) -> str:
+        return describe_provider(self._settings)
+
+    def _require_provider(self) -> ChatProvider:
+        if self._provider is None:
+            if not self.is_configured:
+                raise AINotConfiguredError
+            try:
+                self._provider = build_provider(self._settings)
+            except ProviderNotConfiguredError as exc:
+                raise AINotConfiguredError(str(exc)) from exc
+        return self._provider
+
+    async def aclose(self) -> None:
+        """Release the provider's transport. Safe to call more than once."""
+        if self._provider is not None:
+            await self._provider.aclose()
 
     # --- transport -----------------------------------------------------------
 
@@ -309,38 +264,24 @@ class AIClient:
     ) -> Any:
         """One request, retried on transient failures.
 
-        `output_format` selects `messages.parse` (validated structured output)
-        over `messages.create` (free text).
+        `output_format` asks for validated structured output; the provider
+        decides how to obtain it and returns `parsed_output` either way.
         """
-        client = self._require_client()
-        base_kwargs: dict[str, Any] = {
-            "model": self.model,
-            "max_tokens": max_tokens,
-            "system": system,
-            "messages": [{"role": "user", "content": user_prompt}],
-        }
-        if output_format is not None:
-            base_kwargs["output_format"] = output_format
-
-        async def attempt() -> Any:
-            call = client.messages.parse if output_format is not None else client.messages.create
-            if effort and _output_config_supported:
-                try:
-                    return await call(**base_kwargs, output_config={"effort": effort})
-                except TypeError as exc:
-                    _note_shim_downgrade(exc)
-                except anthropic.BadRequestError as exc:
-                    if not _mentions_output_config(exc):
-                        raise
-                    _note_shim_downgrade(exc)
-            return await call(**base_kwargs)
+        provider = self._require_provider()
+        model = self._model_override or provider.model
 
         last_error: Exception | None = None
         for attempt_number in range(1, MAX_ATTEMPTS + 1):
             try:
-                return await attempt()
-            except anthropic.APIError as exc:
-                if not _is_retryable(exc):
+                return await provider.send(
+                    system=system,
+                    user_prompt=user_prompt,
+                    max_tokens=max_tokens,
+                    effort=effort,
+                    output_format=output_format,
+                )
+            except Exception as exc:
+                if not _is_provider_failure(exc) or not _is_retryable(exc):
                     raise
                 last_error = exc
                 if attempt_number == MAX_ATTEMPTS:
@@ -350,13 +291,15 @@ class AIClient:
                     _MAX_RETRY_DELAY,
                 )
                 logger.warning(
-                    "Anthropic call failed (attempt %s/%s), retrying in %.1fs: %s",
+                    "AI call failed (attempt %s/%s), retrying in %.1fs: %s",
                     attempt_number,
                     MAX_ATTEMPTS,
                     delay,
                     exc,
                     extra={
                         "action": "ai.retry",
+                        "provider": getattr(provider, "name", "unknown"),
+                        "model": model,
                         "attempt": attempt_number,
                         "max_attempts": MAX_ATTEMPTS,
                         "delay_seconds": round(delay, 2),
@@ -386,6 +329,106 @@ class AIClient:
             refusal_category=refusal_category,
         )
 
+    # --- refusal handling ----------------------------------------------------
+    #
+    # Every capability degrades the same way: a refusal or an unusable answer
+    # becomes an empty value plus a refused `AIUsage`, never an exception. The
+    # `action` and `refusal_category` strings are the audit trail — `app.ai.scoring`
+    # surfaces the category to the user as the refusal reason — so they are passed
+    # in verbatim rather than derived.
+
+    def _parsed_or_fallback(
+        self,
+        response: Any,
+        *,
+        started_at: float,
+        action: str,
+        refusal_log: str,
+        unparsed_log: str,
+        fallback: Callable[[], _T],
+        refusal_fallback: Callable[[], _T] | None = None,
+        usable: Callable[[Any], bool] | None = None,
+    ) -> tuple[_T, AIUsage]:
+        """Validated structured output, or an empty fallback.
+
+        `stop_reason` is checked before the content: on a refusal the parsed output
+        is absent and reading it would mask the reason.
+
+        `usable` is an extra check on a value the SDK did parse, for capabilities
+        whose empty answer still validates. `refusal_fallback` overrides the empty
+        value when declining and failing to answer deserve different wording.
+        """
+        if response.stop_reason == "refusal":
+            category = _refusal_category(response)
+            logger.warning(
+                refusal_log,
+                category,
+                extra={"action": f"{action}.refused", "refusal_category": category},
+            )
+            return (refusal_fallback or fallback)(), self._usage(
+                response, started_at=started_at, refused=True, refusal_category=category
+            )
+
+        parsed = response.parsed_output
+        if parsed is None or (usable is not None and not usable(parsed)):
+            logger.warning(
+                unparsed_log,
+                response.stop_reason,
+                extra={"action": f"{action}.unparsed", "stop_reason": response.stop_reason},
+            )
+            return fallback(), self._usage(
+                response,
+                started_at=started_at,
+                refused=True,
+                refusal_category=f"unparsed_output:{response.stop_reason}",
+            )
+
+        return parsed, self._usage(response, started_at=started_at)
+
+    def _text_or_fallback(
+        self,
+        response: Any,
+        *,
+        started_at: float,
+        action: str,
+        refusal_log: str,
+        empty_log: str | None = None,
+    ) -> tuple[str, AIUsage]:
+        """Free-text output, or `""` when the model refused or wrote nothing.
+
+        The caller wraps the text into whatever it returns; the empty fallback is
+        the same wrapping around `""`. `empty_log` is optional because interview
+        prep has never logged its empty case, and adding an action to the audit
+        trail is not this seam's call to make.
+        """
+        if response.stop_reason == "refusal":
+            category = _refusal_category(response)
+            logger.warning(
+                refusal_log,
+                category,
+                extra={"action": f"{action}.refused", "refusal_category": category},
+            )
+            return "", self._usage(
+                response, started_at=started_at, refused=True, refusal_category=category
+            )
+
+        content = _first_text(response).strip()
+        if not content:
+            if empty_log is not None:
+                logger.warning(
+                    empty_log,
+                    response.stop_reason,
+                    extra={"action": f"{action}.empty", "stop_reason": response.stop_reason},
+                )
+            return "", self._usage(
+                response,
+                started_at=started_at,
+                refused=True,
+                refusal_category=f"empty_output:{response.stop_reason}",
+            )
+
+        return content, self._usage(response, started_at=started_at)
+
     # --- capabilities --------------------------------------------------------
 
     async def score_job(
@@ -409,48 +452,23 @@ class AIClient:
             output_format=JobScore,
         )
 
-        # stop_reason is checked before content: on a refusal the parsed output is
-        # absent and reading it would mask the reason.
-        if response.stop_reason == "refusal":
-            category = _refusal_category(response)
-            logger.warning(
-                "Model declined to score the job (category=%s).",
-                category,
-                extra={"action": "ai.score.refused", "refusal_category": category},
-            )
-            return (
-                JobScore(
-                    score=0,
-                    recommend_apply=False,
-                    summary="The model declined to score this job; review it manually.",
-                ),
-                self._usage(
-                    response, started_at=started_at, refused=True, refusal_category=category
-                ),
-            )
-
-        parsed = response.parsed_output
-        if parsed is None:
-            logger.warning(
-                "Scoring response could not be parsed (stop_reason=%s).",
-                response.stop_reason,
-                extra={"action": "ai.score.unparsed", "stop_reason": response.stop_reason},
-            )
-            return (
-                JobScore(
-                    score=0,
-                    recommend_apply=False,
-                    summary="The model returned no usable score; review this job manually.",
-                ),
-                self._usage(
-                    response,
-                    started_at=started_at,
-                    refused=True,
-                    refusal_category=f"unparsed_output:{response.stop_reason}",
-                ),
-            )
-
-        return parsed, self._usage(response, started_at=started_at)
+        return self._parsed_or_fallback(
+            response,
+            started_at=started_at,
+            action="ai.score",
+            refusal_log="Model declined to score the job (category=%s).",
+            unparsed_log="Scoring response could not be parsed (stop_reason=%s).",
+            fallback=lambda: JobScore(
+                score=0,
+                recommend_apply=False,
+                summary="The model returned no usable score; review this job manually.",
+            ),
+            refusal_fallback=lambda: JobScore(
+                score=0,
+                recommend_apply=False,
+                summary="The model declined to score this job; review it manually.",
+            ),
+        )
 
     async def write_cover_letter(
         self,
@@ -475,41 +493,16 @@ class AIClient:
             else language.strip()
         )
 
-        if response.stop_reason == "refusal":
-            category = _refusal_category(response)
-            logger.warning(
-                "Model declined to write the cover letter (category=%s).",
-                category,
-                extra={"action": "ai.cover_letter.refused", "refusal_category": category},
-            )
-            return (
-                CoverLetter(content="", language=resolved_language),
-                self._usage(
-                    response, started_at=started_at, refused=True, refusal_category=category
-                ),
-            )
-
-        content = _first_text(response).strip()
-        if not content:
-            logger.warning(
-                "Cover letter response contained no text (stop_reason=%s).",
-                response.stop_reason,
-                extra={"action": "ai.cover_letter.empty", "stop_reason": response.stop_reason},
-            )
-            return (
-                CoverLetter(content="", language=resolved_language),
-                self._usage(
-                    response,
-                    started_at=started_at,
-                    refused=True,
-                    refusal_category=f"empty_output:{response.stop_reason}",
-                ),
-            )
-
-        return (
-            CoverLetter(content=content, language=resolved_language),
-            self._usage(response, started_at=started_at),
+        content, usage = self._text_or_fallback(
+            response,
+            started_at=started_at,
+            action="ai.cover_letter",
+            refusal_log="Model declined to write the cover letter (category=%s).",
+            empty_log="Cover letter response contained no text (stop_reason=%s).",
         )
+        # The language is reported even when the letter is empty: the caller shows
+        # it next to the "write this yourself" prompt.
+        return CoverLetter(content=content, language=resolved_language), usage
 
     async def answer_questions(
         self,
@@ -532,33 +525,16 @@ class AIClient:
             output_format=ScreeningAnswerSet,
         )
 
-        if response.stop_reason == "refusal":
-            category = _refusal_category(response)
-            logger.warning(
-                "Model declined to answer the screening questions (category=%s).",
-                category,
-                extra={"action": "ai.screening.refused", "refusal_category": category},
-            )
-            return [], self._usage(
-                response, started_at=started_at, refused=True, refusal_category=category
-            )
-
-        parsed = response.parsed_output
-        if parsed is None:
-            logger.warning(
-                "Screening response could not be parsed (stop_reason=%s).",
-                response.stop_reason,
-                extra={"action": "ai.screening.unparsed", "stop_reason": response.stop_reason},
-            )
-            return [], self._usage(
-                response,
-                started_at=started_at,
-                refused=True,
-                refusal_category=f"unparsed_output:{response.stop_reason}",
-            )
-
-        answers = [_reconcile_answer(answer, questions) for answer in parsed.answers]
-        return answers, self._usage(response, started_at=started_at)
+        # An answerless set is the empty fallback: reconciling it yields no answers.
+        parsed, usage = self._parsed_or_fallback(
+            response,
+            started_at=started_at,
+            action="ai.screening",
+            refusal_log="Model declined to answer the screening questions (category=%s).",
+            unparsed_log="Screening response could not be parsed (stop_reason=%s).",
+            fallback=ScreeningAnswerSet,
+        )
+        return [_reconcile_answer(answer, questions) for answer in parsed.answers], usage
 
     async def tailor_resume(
         self,
@@ -579,38 +555,16 @@ class AIClient:
             output_format=TailoredResume,
         )
 
-        if response.stop_reason == "refusal":
-            category = _refusal_category(response)
-            logger.warning(
-                "Model declined to tailor the resume (category=%s).",
-                category,
-                extra={"action": "ai.tailor.refused", "refusal_category": category},
-            )
-            return (
-                TailoredResume(tailored_markdown=""),
-                self._usage(
-                    response, started_at=started_at, refused=True, refusal_category=category
-                ),
-            )
-
-        parsed = response.parsed_output
-        if parsed is None or not parsed.tailored_markdown.strip():
-            logger.warning(
-                "Tailoring response was empty or unparsable (stop_reason=%s).",
-                response.stop_reason,
-                extra={"action": "ai.tailor.unparsed", "stop_reason": response.stop_reason},
-            )
-            return (
-                TailoredResume(tailored_markdown=""),
-                self._usage(
-                    response,
-                    started_at=started_at,
-                    refused=True,
-                    refusal_category=f"unparsed_output:{response.stop_reason}",
-                ),
-            )
-
-        return parsed, self._usage(response, started_at=started_at)
+        return self._parsed_or_fallback(
+            response,
+            started_at=started_at,
+            action="ai.tailor",
+            refusal_log="Model declined to tailor the resume (category=%s).",
+            unparsed_log="Tailoring response was empty or unparsable (stop_reason=%s).",
+            fallback=lambda: TailoredResume(tailored_markdown=""),
+            # A resume with no body parses fine and is still no answer.
+            usable=lambda parsed: bool(parsed.tailored_markdown.strip()),
+        )
 
     async def review_draft(
         self,
@@ -636,38 +590,14 @@ class AIClient:
             output_format=DraftReview,
         )
 
-        if response.stop_reason == "refusal":
-            category = _refusal_category(response)
-            logger.warning(
-                "Model declined to review the draft (category=%s).",
-                category,
-                extra={"action": "ai.review.refused", "refusal_category": category},
-            )
-            return (
-                DraftReview(),
-                self._usage(
-                    response, started_at=started_at, refused=True, refusal_category=category
-                ),
-            )
-
-        parsed = response.parsed_output
-        if parsed is None:
-            logger.warning(
-                "Review response could not be parsed (stop_reason=%s).",
-                response.stop_reason,
-                extra={"action": "ai.review.unparsed", "stop_reason": response.stop_reason},
-            )
-            return (
-                DraftReview(),
-                self._usage(
-                    response,
-                    started_at=started_at,
-                    refused=True,
-                    refusal_category=f"unparsed_output:{response.stop_reason}",
-                ),
-            )
-
-        return parsed, self._usage(response, started_at=started_at)
+        return self._parsed_or_fallback(
+            response,
+            started_at=started_at,
+            action="ai.review",
+            refusal_log="Model declined to review the draft (category=%s).",
+            unparsed_log="Review response could not be parsed (stop_reason=%s).",
+            fallback=DraftReview,
+        )
 
     async def interview_prep(
         self,
@@ -699,26 +629,12 @@ class AIClient:
             effort=QUALITY_EFFORT,
         )
 
-        if response.stop_reason == "refusal":
-            category = _refusal_category(response)
-            logger.warning(
-                "Model declined the interview prep (category=%s).",
-                category,
-                extra={"action": "ai.interview_prep.refused", "refusal_category": category},
-            )
-            return "", self._usage(
-                response, started_at=started_at, refused=True, refusal_category=category
-            )
-
-        content = _first_text(response).strip()
-        if not content:
-            return "", self._usage(
-                response,
-                started_at=started_at,
-                refused=True,
-                refusal_category=f"empty_output:{response.stop_reason}",
-            )
-        return content, self._usage(response, started_at=started_at)
+        return self._text_or_fallback(
+            response,
+            started_at=started_at,
+            action="ai.interview_prep",
+            refusal_log="Model declined the interview prep (category=%s).",
+        )
 
 
 def _reconcile_answer(answer: ScreeningAnswer, questions: list[FormQuestion]) -> ScreeningAnswer:
@@ -740,9 +656,9 @@ def _reconcile_answer(answer: ScreeningAnswer, questions: list[FormQuestion]) ->
         if exact is None:
             # Recover a casing/whitespace mismatch; anything else is a value the
             # form does not offer and cannot be selected.
-            folded = _fold(answer.answer.strip())
+            folded = fold(answer.answer.strip())
             recovered = next(
-                (opt for opt in question.options if _fold(opt.strip()) == folded), None
+                (opt for opt in question.options if fold(opt.strip()) == folded), None
             )
             if recovered is not None:
                 answer.answer = recovered
@@ -769,17 +685,24 @@ def _match_question(label: str, questions: list[FormQuestion]) -> FormQuestion |
     for question in questions:
         if question.label == label:
             return question
-    squashed = _squash(label)
+    squashed = squash(label)
     if not squashed:
         return None
     for question in questions:
-        if _squash(question.label) == squashed:
+        if squash(question.label) == squashed:
             return question
     return None
 
 
 def estimate_cost_usd(usage: AIUsage) -> float | None:
-    """List-price cost of a call, or `None` for a model with no known price."""
+    """List-price cost of a call, or `None` for a model with no known price.
+
+    A locally served model costs nothing, which is a real 0.00 rather than an
+    unknown. Hosted free tiers still return `None`: they are free only within a
+    quota, so any number we invented for them would be wrong.
+    """
+    if usage.model in _FREE_MODELS:
+        return 0.0
     price = _PRICING_USD_PER_MTOK.get(usage.model)
     if price is None:
         return None
@@ -792,9 +715,11 @@ def estimate_cost_usd(usage: AIUsage) -> float | None:
     )
 
 
-def get_ai_client(model: str | None = None) -> AIClient:
-    """Build a client, optionally overriding the configured model."""
-    return AIClient(model=model)
+def get_ai_client(
+    model: str | None = None, *, provider: ChatProvider | None = None
+) -> AIClient:
+    """Build a client, optionally overriding the configured model or provider."""
+    return AIClient(model=model, provider=provider)
 
 
 __all__ = [

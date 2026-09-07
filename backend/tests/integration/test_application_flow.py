@@ -11,9 +11,12 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.schemas import ScreeningAnswer
+from app.automation.errors import AutomationError
 from app.database.base import utcnow
 from app.models import (
     AIAnalysis,
@@ -25,7 +28,9 @@ from app.models import (
     JobStatus,
 )
 from app.observability.audit import record_event, to_live_event
-from tests.automation import ai_seam, application_for_job, reload_run
+from app.schemas.application import ApplicationUpdate
+from app.services import application_service
+from tests.automation import application_for_job, reload_run
 from tests.fixtures.factories import (
     create_application,
     create_job,
@@ -143,7 +148,6 @@ class TestPrepareThenSubmit:
         assert application.submitted_at is None
         assert fake_linkedin.submit_called is False
 
-    @ai_seam
     async def test_the_draft_carries_the_generated_content(
         self, session: AsyncSession, automation_engine: Any
     ) -> None:
@@ -237,6 +241,190 @@ class TestPrepareThenSubmit:
         assert stored.applications_prepared == 2
 
 
+class TestTheApprovedDraftOutlivesTheBrowser:
+    """A prepared application must be submittable later, not only right now.
+
+    Every test in this class failed before the draft was persisted. The browser
+    service holds one Easy Apply modal at a time, and preparing used to leave it
+    open and call that the draft: the next prepared job replaced it, and so did a
+    session timeout, a closed window or a restarted process — while the database
+    went on reporting an application that was awaiting approval and ready to go.
+    """
+
+    async def test_the_first_of_three_prepared_jobs_can_still_be_submitted(
+        self, session: AsyncSession, automation_engine: Any, fake_linkedin: FakeLinkedInService
+    ) -> None:
+        """Preparing a batch used to leave only the last job actually sendable."""
+        user = await create_user(session, email="batch1@example.com", settings={"dry_run": False})
+        jobs = [
+            await create_job(session, user, status=JobStatus.ANALYZED, score=88) for _ in range(3)
+        ]
+        run = await prepare_run(session, user)
+        user_id = user.id
+        job_ids = [job.id for job in jobs]
+        first_external_id = jobs[0].external_id
+
+        await automation_engine.prepare_applications(user_id, run.id, job_ids)
+
+        first = await application_for_job(session, job_ids[0])
+        assert first is not None
+        first.approved_at = utcnow()
+        await session.commit()
+
+        await automation_engine.submit_application(user_id, first.id)
+
+        submitted = await application_for_job(session, job_ids[0])
+        assert submitted is not None
+        assert submitted.status == ApplicationStatus.SUBMITTED
+        assert fake_linkedin.submitted == [first_external_id]
+
+    async def test_a_prepared_application_survives_losing_the_browser(
+        self, session: AsyncSession, automation_engine: Any, fake_linkedin: FakeLinkedInService
+    ) -> None:
+        """Reviewing tomorrow morning is the normal case, not an edge case."""
+        user = await create_user(session, email="lost1@example.com", settings={"dry_run": False})
+        job = await create_job(session, user, status=JobStatus.ANALYZED, score=88)
+        run = await prepare_run(session, user)
+        user_id, job_id = user.id, job.id
+
+        await automation_engine.prepare_applications(user_id, run.id, [job_id])
+        application = await application_for_job(session, job_id)
+        assert application is not None
+        application.approved_at = utcnow()
+        await session.commit()
+
+        # Whatever the engine was holding is gone: process restart, timeout, or
+        # the user simply closing the window.
+        automation_engine._services.clear()
+
+        await automation_engine.submit_application(user_id, application.id)
+
+        submitted = await application_for_job(session, job_id)
+        assert submitted is not None
+        assert submitted.status == ApplicationStatus.SUBMITTED
+        # Once to draft the answers, once to type them in.
+        assert fake_linkedin.call_count("open_easy_apply") == 2
+
+    async def test_a_form_that_changed_since_the_review_is_never_submitted(
+        self, session: AsyncSession, automation_engine: Any, fake_linkedin: FakeLinkedInService
+    ) -> None:
+        """The refusal the whole design exists for.
+
+        A posting that gained a question between the review and the submission is
+        a different document from the one the human approved. Sending the approved
+        answers into it would be answering a question nobody read.
+        """
+        user = await create_user(session, email="changed1@example.com", settings={"dry_run": False})
+        job = await create_job(session, user, status=JobStatus.ANALYZED, score=88)
+        run = await prepare_run(session, user)
+        user_id, job_id = user.id, job.id
+
+        await automation_engine.prepare_applications(user_id, run.id, [job_id])
+        application = await application_for_job(session, job_id)
+        assert application is not None
+        application.approved_at = utcnow()
+        await session.commit()
+        application_id = application.id
+
+        fake_linkedin.questions_on_reopen = [
+            *fake_linkedin.default_questions,
+            make_form_question(
+                "q-relocate", "Are you willing to relocate?", "radio", options=["Yes", "No"]
+            ),
+        ]
+
+        with pytest.raises(AutomationError, match="Nothing was submitted"):
+            await automation_engine.submit_application(user_id, application_id)
+
+        assert fake_linkedin.submit_called is False
+        # Refused before anything was typed, not after.
+        assert fake_linkedin.call_count("fill_and_advance") == 0
+        refused = await application_for_job(session, job_id)
+        assert refused is not None
+        assert refused.status == ApplicationStatus.AWAITING_REVIEW
+        assert refused.needs_human_input is True
+        assert refused.error_message
+        recorded = {event.event_type for event in await events_for(session, application_id)}
+        assert ApplicationEventType.FORM_CHANGED in recorded
+
+    async def test_a_form_that_never_reaches_its_review_step_is_never_submitted(
+        self, session: AsyncSession, automation_engine: Any, fake_linkedin: FakeLinkedInService
+    ) -> None:
+        """The form asked for something the approved answers do not cover."""
+        user = await create_user(session, email="unready1@example.com", settings={"dry_run": False})
+        job = await create_job(session, user, status=JobStatus.ANALYZED, score=88)
+        run = await prepare_run(session, user)
+        user_id, job_id = user.id, job.id
+
+        await automation_engine.prepare_applications(user_id, run.id, [job_id])
+        application = await application_for_job(session, job_id)
+        assert application is not None
+        application.approved_at = utcnow()
+        await session.commit()
+
+        fake_linkedin.unanswered = [
+            make_form_question("q-clearance", "Do you hold a security clearance?", "radio")
+        ]
+
+        with pytest.raises(AutomationError, match="Nothing was submitted"):
+            await automation_engine.submit_application(user_id, application.id)
+
+        assert fake_linkedin.submit_called is False
+        assert fake_linkedin.call_count("fill_and_advance") == 1
+        refused = await application_for_job(session, job_id)
+        assert refused is not None
+        assert refused.status == ApplicationStatus.AWAITING_REVIEW
+        assert refused.needs_human_input is True
+
+    async def test_the_answers_typed_in_are_the_ones_the_user_approved(
+        self, session: AsyncSession, automation_engine: Any, fake_linkedin: FakeLinkedInService
+    ) -> None:
+        """An edit made during review used to change nothing at all.
+
+        The form had already been filled at prepare time, so submitting just
+        clicked the button on the model's original answers. Now the values are
+        typed in at submit time, and they come from the row the user edited.
+        """
+        user = await create_user(session, email="edited1@example.com", settings={"dry_run": False})
+        job = await create_job(session, user, status=JobStatus.ANALYZED, score=88)
+        run = await prepare_run(session, user)
+        user_id, job_id = user.id, job.id
+
+        await automation_engine.prepare_applications(user_id, run.id, [job_id])
+        application = await application_for_job(session, job_id)
+        assert application is not None
+        assert application.screening_answers
+
+        await application_service.update_draft(
+            session,
+            user,
+            application.id,
+            ApplicationUpdate(
+                screening_answers=[
+                    ScreeningAnswer(
+                        question=record["question"],
+                        answer="9" if record["field_id"] == "q-years" else record["answer"],
+                        question_type=record["type"],
+                        confidence=record["confidence"],
+                        needs_review=False,
+                        field_id=record["field_id"],
+                    )
+                    for record in application.screening_answers
+                ]
+            ),
+        )
+        application.approved_at = utcnow()
+        await session.commit()
+
+        await automation_engine.submit_application(user_id, application.id)
+
+        assert fake_linkedin.filled, "the form has to be filled at submit time"
+        typed = {answer.field_id: answer.value for answer in fake_linkedin.filled[-1]}
+        assert typed["q-years"] == "9"
+        # The untouched answer still goes out as it was reviewed.
+        assert typed["q-auth"] == "7"
+
+
 class TestAIRefusalDegradesGracefully:
     async def test_a_refusal_still_leaves_a_draft_for_a_human(
         self,
@@ -272,7 +460,6 @@ class TestAIRefusalDegradesGracefully:
         assert not application.cover_letter
         assert application.needs_human_input is True
 
-    @ai_seam
     async def test_the_refusal_is_recorded_for_audit(
         self, session: AsyncSession, automation_engine: Any, fake_ai: FakeAIClient
     ) -> None:
@@ -368,7 +555,6 @@ class TestLowConfidenceForcesReview:
             for answer in application.screening_answers
         )
 
-    @ai_seam
     async def test_a_confident_answer_does_not_flag_the_application(
         self, session: AsyncSession, automation_engine: Any, fake_linkedin: FakeLinkedInService
     ) -> None:

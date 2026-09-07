@@ -61,6 +61,15 @@ def truncate(text: str | None, limit: int) -> str:
     return f"{stripped[:limit].rstrip()}\n\n{TRUNCATION_NOTICE}"
 
 
+def fence_untrusted(text: str) -> str:
+    """Wrap third-party text in the markers `UNTRUSTED_TEXT_RULE` refers to.
+
+    The markers sit on their own lines so a payload cannot close the fence by
+    appending to the last line of its own text.
+    """
+    return f"{UNTRUSTED_OPEN}\n{text}\n{UNTRUSTED_CLOSE}"
+
+
 def render_job_block(job: JobLike) -> str:
     """The job as the model should see it: title, company, and description."""
     lines = [
@@ -76,9 +85,7 @@ def render_job_block(job: JobLike) -> str:
 
     description = truncate(getattr(job, "description", None), MAX_DESCRIPTION_CHARS)
     lines.append("Description:")
-    lines.append(UNTRUSTED_OPEN)
-    lines.append(description or "(no description was captured for this posting)")
-    lines.append(UNTRUSTED_CLOSE)
+    lines.append(fence_untrusted(description or "(no description was captured for this posting)"))
     return "\n".join(lines)
 
 
@@ -120,6 +127,7 @@ __all__ = [
     "UNTRUSTED_OPEN",
     "UNTRUSTED_TEXT_RULE",
     "JobLike",
+    "fence_untrusted",
     "render_job_block",
     "render_profile_block",
     "truncate",

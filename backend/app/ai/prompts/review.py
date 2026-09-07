@@ -12,6 +12,7 @@ from typing import Any
 from app.ai.prompts import (
     UNTRUSTED_TEXT_RULE,
     JobLike,
+    fence_untrusted,
     render_job_block,
     render_profile_block,
 )
@@ -61,7 +62,10 @@ def _render_answers(answers: list[dict[str, Any]]) -> str:
         return "(no screening answers were drafted)"
     lines = []
     for answer in answers:
-        lines.append(f"Q: {answer.get('question', '')}")
+        # The question is the employer's form label stored verbatim, so it stays
+        # fenced here too; the answer beside it is our own draft and is not.
+        lines.append("Q:")
+        lines.append(fence_untrusted(answer.get("question", "")))
         lines.append(f"A: {answer.get('answer', '')}")
     return "\n".join(lines)
 

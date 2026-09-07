@@ -6,8 +6,10 @@
  */
 
 export const API_BASE = "/api";
-export const TOKEN_STORAGE_KEY = "laa.token";
-export const UNAUTHORIZED_EVENT = "laa:unauthorized";
+// Renaming this key logs every existing session out once: the old "laa.token"
+// entry is simply never read again.
+export const TOKEN_STORAGE_KEY = "sja.token";
+export const UNAUTHORIZED_EVENT = "sja:unauthorized";
 
 export class ApiError extends Error {
   readonly status: number;

@@ -21,6 +21,32 @@ module.exports = {
       files: ["src/hooks/**/*.tsx", "src/lib/**/*.tsx"],
       rules: { "react-refresh/only-export-components": "off" },
     },
+    {
+      // Vitest injects these; the test files still import them explicitly, so
+      // this only stops no-undef from flagging the ones Testing Library uses.
+      files: ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test/**/*.{ts,tsx}"],
+      env: { node: true },
+      globals: {
+        afterAll: "readonly",
+        afterEach: "readonly",
+        beforeAll: "readonly",
+        beforeEach: "readonly",
+        describe: "readonly",
+        expect: "readonly",
+        it: "readonly",
+        vi: "readonly",
+      },
+    },
+    {
+      // Playwright specs run in Node and bring their own test globals as real
+      // imports, so they need neither vitest's globals nor the React rules.
+      files: ["e2e/**/*.ts", "playwright.config.ts"],
+      env: { browser: false, node: true },
+      rules: {
+        "react-hooks/rules-of-hooks": "off",
+        "react-refresh/only-export-components": "off",
+      },
+    },
   ],
   rules: {
     "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],

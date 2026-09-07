@@ -18,7 +18,6 @@ other object in the test emitting IO from synchronous attribute access.
 
 from __future__ import annotations
 
-import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,26 +25,6 @@ from app.automation.contracts import SearchFilters
 from app.models import Application, AutomationRun, Job
 
 FILTERS = SearchFilters(keywords="python backend", location="Remote", max_results=5)
-
-# The engine resolves the AI layer by importing a name and binding the parameters
-# it recognises. Those names do not line up, so every AI call from the engine is
-# dropped and the run continues without model output:
-#
-#   app/automation/engine.py `_call_ai` offers user_id / posting / profile /
-#   settings, while app/ai/scoring.py requires user / profile_ctx / settings_row —
-#   and `_SCREENING_TARGETS` never names `answer_screening`, the function that
-#   actually exists.
-#
-# Both modules belong to other agents. These xfails are non-strict, so the tests
-# report as xpass the moment either side of the seam is corrected.
-AI_SEAM_REASON = (
-    "AI seam not wired: app/automation/engine.py `_call_ai` binds user_id/posting/"
-    "profile/settings, but app/ai/scoring.py requires user/profile_ctx/settings_row "
-    "(and `_SCREENING_TARGETS` omits `answer_screening`), so the engine drops every "
-    "AI call and produces no model output. Owned by other agents."
-)
-
-ai_seam = pytest.mark.xfail(reason=AI_SEAM_REASON, strict=False)
 
 
 async def reload_run(session: AsyncSession, run_id: int) -> AutomationRun:

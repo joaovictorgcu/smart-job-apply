@@ -55,11 +55,11 @@ export function Sidebar({ alwaysShowLabels = false, onNavigate, className }: Sid
           aria-hidden
           className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-accent-600 text-xs font-bold text-white shadow-glow-sm"
         >
-          LA
+          SJ
         </span>
         <span className={cn('min-w-0', labelClass)}>
           <span className="block truncate text-sm font-semibold leading-tight text-content">
-            Auto Apply
+            Smart Job Apply
           </span>
           <span className="block truncate text-2xs leading-tight text-content-subtle">
             modo assistido

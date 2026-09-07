@@ -10,8 +10,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    image: linkedin-auto-apply:latest
-    container_name: linkedin-auto-apply
+    image: smart-job-apply:latest
+    container_name: smart-job-apply
 
     # Every setting lives in .env (copy it from .env.example first).
     # SECRET_KEY and ENCRYPTION_KEY may be left empty: the entrypoint generates
@@ -65,4 +65,4 @@ services:
 
 volumes:
   app-data:
-    name: linkedin-auto-apply-data
+    name: smart-job-apply-data

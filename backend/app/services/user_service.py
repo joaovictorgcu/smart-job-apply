@@ -19,8 +19,8 @@ from app.auth.security import hash_password, verify_password
 from app.automation.contracts import ProfileContext
 from app.config import get_settings
 from app.database.base import utcnow
-from app.models import LinkedInAccount, Profile, User, UserSettings
-from app.observability import get_logger
+from app.models import AuditAction, AuditEvent, LinkedInAccount, Profile, User, UserSettings
+from app.observability import get_logger, record_audit_event
 from app.schemas.user import ProfileUpdate, UserSettingsUpdate
 
 logger = get_logger(__name__)
@@ -133,9 +133,27 @@ async def get_or_create_profile(session: AsyncSession, user: User) -> Profile:
 
 async def update_profile(session: AsyncSession, user: User, payload: ProfileUpdate) -> Profile:
     profile = await get_or_create_profile(session, user)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    changed = sorted(field for field, value in changes.items() if getattr(profile, field) != value)
+
+    for field, value in changes.items():
         setattr(profile, field, value)
     await session.flush()
+
+    if changed:
+        # Names only, never values: the resume text, the summary, the phone number
+        # and the answer bank are the user's personal data, and an append-only
+        # table nobody can edit is the worst possible place to copy it into. That
+        # a field changed is all an audit needs to know.
+        await record_audit_event(
+            session,
+            user_id=user.id,
+            action=AuditAction.PROFILE_UPDATED,
+            subject_type="profile",
+            subject_id=profile.id,
+            after={"fields": changed},
+        )
+
     logger.info(
         "Profile updated.", extra={"action": "profile.update", "status": "ok", "user_id": user.id}
     )
@@ -163,6 +181,10 @@ async def update_settings(
     """
     user_settings = await get_or_create_settings(session, user)
     changes = payload.model_dump(exclude_unset=True)
+    # Read the old values before `setattr` overwrites them; the audit record is
+    # written only after validation, so a rejected change never enters the trail
+    # as if it had happened.
+    previous = {field: getattr(user_settings, field) for field in changes}
 
     if changes.get("require_manual_approval") is False and get_settings().assisted_mode_only:
         raise ValidationError(
@@ -178,6 +200,20 @@ async def update_settings(
         raise ValidationError("apply_delay_min cannot be greater than apply_delay_max.")
     if user_settings.working_hour_start >= user_settings.working_hour_end:
         raise ValidationError("working_hour_start must be smaller than working_hour_end.")
+
+    before = {field: old for field, old in previous.items() if changes[field] != old}
+    if before:
+        # A request that re-sends the values already stored changed nothing, and an
+        # audit trail full of no-ops is one nobody reads.
+        await record_audit_event(
+            session,
+            user_id=user.id,
+            action=AuditAction.SETTINGS_UPDATED,
+            subject_type="user_settings",
+            subject_id=user_settings.id,
+            before=before,
+            after={field: changes[field] for field in before},
+        )
 
     await session.flush()
     logger.info(
@@ -273,6 +309,14 @@ async def save_resume_file(
             extracted_chars = len(extracted)
 
     await session.flush()
+    await record_audit_event(
+        session,
+        user_id=user.id,
+        action=AuditAction.RESUME_UPLOADED,
+        subject_type="profile",
+        subject_id=profile.id,
+        after={"filename": stored_name, "bytes": len(content)},
+    )
     logger.info(
         "Resume stored.",
         extra={
@@ -284,6 +328,24 @@ async def save_resume_file(
         },
     )
     return profile
+
+
+async def list_audit_events(
+    session: AsyncSession, user: User, *, limit: int = 50
+) -> list[AuditEvent]:
+    """The account's recorded changes, newest first.
+
+    Scoped in the query itself, not by filtering afterwards: this is the only way
+    the trail is read, and one forgotten filter would expose another account's.
+    The id breaks ties, since two events written in the same call share a timestamp.
+    """
+    result = await session.execute(
+        select(AuditEvent)
+        .where(AuditEvent.user_id == user.id)
+        .order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc())
+        .limit(limit)
+    )
+    return list(result.scalars().all())
 
 
 async def build_profile_context(session: AsyncSession, user: User) -> ProfileContext:

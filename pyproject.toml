@@ -1,7 +1,7 @@
 [project]
-name = "linkedin-auto-apply"
+name = "smart-job-apply"
 version = "0.1.0"
-description = "LinkedIn application assistant: finds jobs, scores them with AI and fills the Easy Apply form for you to review and approve."
+description = "AI-powered career application assistant: finds jobs, scores them against your resume and fills the application form for you to review and approve."
 requires-python = ">=3.11"
 readme = "README.md"
 license = { text = "MIT" }
@@ -10,6 +10,10 @@ dependencies = [
     "fastapi>=0.115,<0.116",
     "uvicorn[standard]>=0.34,<0.35",
     "anthropic>=0.40",
+    # Transport for every OpenAI-compatible provider (ollama, groq, gemini,
+    # openrouter, cerebras). Runtime, not just test-time, since those are the
+    # providers that let the app run without a paid key.
+    "httpx>=0.28",
     "playwright>=1.49,<2",
     "sqlalchemy[asyncio]>=2.0.36,<2.1",
     "alembic>=1.14,<2",
@@ -39,6 +43,8 @@ dev = [
     "httpx>=0.28",
     "ruff>=0.8",
     "mypy>=1.14",
+    "pytest-cov>=6.0",
+    "hypothesis>=6.100",
 ]
 
 [tool.setuptools.packages.find]
@@ -62,8 +68,43 @@ asyncio_mode = "auto"
 testpaths = ["backend/tests"]
 pythonpath = ["backend"]
 filterwarnings = ["ignore::DeprecationWarning"]
+markers = [
+    "e2e: drives a real Chromium against the fake portal (needs `playwright install chromium`)",
+]
+# The browser tests are opt-in: they need a browser binary and take seconds each,
+# so `make test` stays fast and runnable on a bare checkout. `make e2e` runs them
+# with `-m e2e`, and `make test-all` runs everything.
+addopts = "-m 'not e2e'"
+
+[tool.coverage.run]
+source = ["backend/app"]
+branch = true
+omit = [
+    # Playwright drivers: nothing here executes without a real browser and a live
+    # LinkedIn session, so measuring them only reports a floor that can never move.
+    # Their behaviour is exercised by the fixture-based tests in backend/tests instead.
+    "backend/app/automation/linkedin/*",
+    "backend/app/automation/browser.py",
+]
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    # Protocol and overload bodies are declarations, not statements to execute.
+    "^\\s*\\.\\.\\.$",
+]
 
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = true
 plugins = ["pydantic.mypy"]
+
+# Strict only where it is cheap to keep clean: modules that are new, pure or small.
+# The rest of the package stays advisory while app/automation and app/services are
+# being restructured; their pre-existing errors are a baseline, not a target.
+[[tool.mypy.overrides]]
+module = ["app.domain.*", "app.ai.port", "app.observability.*", "app.schemas.*"]
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+warn_return_any = true
+no_implicit_optional = true

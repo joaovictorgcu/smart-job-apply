@@ -12,6 +12,7 @@ import json
 from app.ai.prompts import (
     UNTRUSTED_TEXT_RULE,
     JobLike,
+    fence_untrusted,
     render_job_block,
     render_profile_block,
 )
@@ -96,6 +97,11 @@ def build_screening_prompt(
     rendered = "\n".join(
         _render_question(index, question) for index, question in enumerate(questions, start=1)
     )
+    # Labels and select options are authored by the employer in the Easy Apply form,
+    # so they are third-party text exactly like the description — and here the drafted
+    # answer is typed into a real form under the candidate's name. Only the questions
+    # go inside the fence; the instruction lines around it are ours.
+    questions_block = fence_untrusted(rendered)
     contact = "\n".join(
         (
             f"Email: {profile.email or 'not provided'}",
@@ -112,7 +118,7 @@ def build_screening_prompt(
         "=== JOB POSTING (context only — never evidence about the candidate) ===\n"
         f"{render_job_block(job)}\n\n"
         "=== QUESTIONS (one JSON object per line) ===\n"
-        f"{rendered}\n\n"
+        f"{questions_block}\n\n"
         f"Return exactly {len(questions)} answer(s), one per question, with "
         "`question` copied verbatim. Where the profile does not contain the answer, "
         "flag it for review instead of inventing a value."

@@ -1,0 +1,22 @@
+{
+  // The Playwright specs are a separate program from the app: they run in Node,
+  // import from @playwright/test rather than react, and must not inherit
+  // vitest's injected globals (Playwright ships its own `test`/`expect`).
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "types": ["node"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["e2e", "playwright.config.ts"]
+}

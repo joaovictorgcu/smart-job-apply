@@ -272,6 +272,7 @@ const ENUM_LABELS: Record<string, string> = {
   prepared: "Preparada",
   user_edited: "Editada por você",
   user_approved: "Aprovada por você",
+  resume_adapted: "Currículo adaptado",
   submitted: "Enviada",
   discarded: "Descartada",
   outcome_changed: "Desfecho alterado",
@@ -280,6 +281,74 @@ const ENUM_LABELS: Record<string, string> = {
 
 export function enumLabel(value: string): string {
   return ENUM_LABELS[value] ?? humanizeSnakeCase(value);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Resume adaptation                                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * "mar 2022 — atual" for one position.
+ *
+ * Composed here rather than on the backend: the API stores plain ISO dates, so
+ * the wording and the locale stay in the one place the rest of the UI keeps them.
+ */
+export function experiencePeriod(
+  startedOn: string | null,
+  endedOn: string | null,
+  isCurrent: boolean,
+): string {
+  const monthYear = (value: string | null): string | null => {
+    const date = toDate(value);
+    if (!date) return null;
+    return date.toLocaleDateString("pt-BR", { month: "short", year: "numeric" });
+  };
+
+  const start = monthYear(startedOn);
+  const end = isCurrent ? "atual" : monthYear(endedOn);
+  if (start && end) return `${start} — ${end}`;
+  if (start) return start;
+  if (end) return end;
+  return "—";
+}
+
+/**
+ * Section headings for the change report, one per `ResumeChangeKind`.
+ *
+ * The backend emits the kind and the terms; the wording lives here because the
+ * derivation is local and deterministic — generating Portuguese prose there
+ * would leave the product with two vocabularies to keep in step.
+ */
+const RESUME_CHANGE_LABELS: Record<string, string> = {
+  experience_prioritized: "Experiências priorizadas",
+  experience_refocused: "Descrições reordenadas",
+  skill_highlighted: "Competências destacadas",
+  technology_emphasized: "Tecnologias enfatizadas",
+  project_selected: "Projetos relevantes",
+};
+
+/** The order the review screen reads them in: biggest structural change first. */
+export const RESUME_CHANGE_ORDER: readonly string[] = [
+  "experience_prioritized",
+  "experience_refocused",
+  "skill_highlighted",
+  "technology_emphasized",
+  "project_selected",
+];
+
+export function resumeChangeLabel(kind: string): string {
+  return RESUME_CHANGE_LABELS[kind] ?? humanizeSnakeCase(kind);
+}
+
+const FIT_FACTOR_LABELS: Record<string, string> = {
+  technologies: "Tecnologias pedidas",
+  experience: "Experiência mais próxima",
+  skills: "Competências do perfil",
+  seniority: "Tempo de experiência",
+};
+
+export function fitFactorLabel(factor: string): string {
+  return FIT_FACTOR_LABELS[factor] ?? humanizeSnakeCase(factor);
 }
 
 /** Score colour ramp for badges, bars and chart marks. */

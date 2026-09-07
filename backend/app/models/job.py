@@ -21,6 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import Base, TimestampMixin
 from app.models.enums import (
     AnalysisKind,
+    ApplicationChannel,
     ApplicationEventType,
     ApplicationOutcome,
     ApplicationStatus,
@@ -29,6 +30,8 @@ from app.models.enums import (
 
 if TYPE_CHECKING:
     from app.models.automation import AutomationRun
+    from app.models.resume import ApplicationResume
+    from app.models.score import JobScore
     from app.models.user import User
 
 
@@ -86,7 +89,19 @@ class Job(Base, TimestampMixin):
     detected_language: Mapped[str | None] = mapped_column(String(20), default=None)
     posted_at: Mapped[datetime | None] = mapped_column(default=None)
 
+    # When applications close. Comes from the portal when one publishes it, and is
+    # otherwise the user's own note — no adapter reports it today (Gupy's search
+    # payload carries none), so in practice it is user-entered until one does.
+    deadline: Mapped[datetime | None] = mapped_column(default=None)
+    # When discovery last found the posting gone. Set by `expire_missing`, never
+    # cleared: a posting that came back is a new posting to the portal too.
+    expired_at: Mapped[datetime | None] = mapped_column(default=None)
+
     status: Mapped[JobStatus] = mapped_column(String(30), default=JobStatus.DISCOVERED, index=True)
+    # The denormalised *latest* score. It stays a column on purpose: listing filters
+    # (`min_score`) and the default ordering run off it, and neither can afford a
+    # correlated subquery over `job_scores` on every page. The history lives in
+    # `JobScore` — see `scores` below — and this is deliberately its duplicate head.
     score: Mapped[int | None] = mapped_column(Integer, default=None, index=True)
     score_reasons: Mapped[list[str]] = mapped_column(JSON, default=list)
     missing_requirements: Mapped[list[str]] = mapped_column(JSON, default=list)
@@ -107,6 +122,12 @@ class Job(Base, TimestampMixin):
     )
     analyses: Mapped[list[AIAnalysis]] = relationship(
         back_populates="job", cascade="all, delete-orphan"
+    )
+    # Every verdict this job ever received, newest last. The head of this list and
+    # `score` above hold the same number by construction; that duplication is the
+    # point, not an oversight to tidy up.
+    scores: Mapped[list[JobScore]] = relationship(
+        back_populates="job", cascade="all, delete-orphan", order_by="JobScore.created_at"
     )
     tailored_resume: Mapped[TailoredResume | None] = relationship(
         back_populates="job", cascade="all, delete-orphan", uselist=False
@@ -131,12 +152,28 @@ class Application(Base, TimestampMixin):
     status: Mapped[ApplicationStatus] = mapped_column(
         String(30), default=ApplicationStatus.DRAFT, index=True
     )
+    # Which of the two mutually exclusive completion paths this application may
+    # take: the engine's reviewed Easy Apply submission, or a human applying on
+    # the company's own site and recording it afterwards. Decided from the job at
+    # preparation time, never from the request. Rows written before this existed
+    # default to `easy_apply`, which is what every one of them was.
+    channel: Mapped[ApplicationChannel] = mapped_column(
+        String(20), default=ApplicationChannel.EASY_APPLY, index=True
+    )
     cover_letter: Mapped[str | None] = mapped_column(Text, default=None)
     # [{"question", "answer", "type", "options", "confidence", "needs_review", "field_id"}]
     screening_answers: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     resume_filename: Mapped[str | None] = mapped_column(String(255), default=None)
     total_steps: Mapped[int | None] = mapped_column(Integer, default=None)
     current_step: Mapped[int | None] = mapped_column(Integer, default=None)
+    # SHA-256 of the *shape* of the Easy Apply form the user reviewed — field ids,
+    # labels, options and required flags. Submission re-opens the posting and
+    # refuses unless the freshly read form hashes to the same value: a posting
+    # that changed its questions in between means the human approved a different
+    # document than the one about to be sent. Computed server-side from what the
+    # browser returned, never from `screening_answers`, which the review UI
+    # overwrites. Null for dry runs and for drafts prepared before this existed.
+    form_fingerprint: Mapped[str | None] = mapped_column(String(64), default=None)
     needs_human_input: Mapped[bool] = mapped_column(Boolean, default=False)
     was_dry_run: Mapped[bool] = mapped_column(Boolean, default=False)
     approved_at: Mapped[datetime | None] = mapped_column(default=None)
@@ -155,6 +192,13 @@ class Application(Base, TimestampMixin):
 
     user: Mapped[User] = relationship(back_populates="applications")
     job: Mapped[Job] = relationship(back_populates="application")
+    # The resume this application presents — a snapshot of the master resume as
+    # it stood when the application was created, adapted to this posting. Its
+    # independence from the master (and from every sibling application) is the
+    # point; see `app.models.resume.ApplicationResume`.
+    resume: Mapped[ApplicationResume | None] = relationship(
+        back_populates="application", cascade="all, delete-orphan", uselist=False
+    )
     events: Mapped[list[ApplicationEvent]] = relationship(
         back_populates="application",
         cascade="all, delete-orphan",

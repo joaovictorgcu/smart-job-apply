@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.ai.schemas import CoverLetter
+from app.ai.schemas import CoverLetter, ScoreDimension
 from app.api.errors import NotFoundError, PreconditionFailedError, UpstreamError
 from app.automation.contracts import JobPosting
-from app.models import Job, JobStatus, User
+from app.database.base import utcnow
+from app.domain.language import detect_language
+from app.domain.scoring import verdict_for, weighted_score
+from app.models import Job, JobScore, JobStatus, User
 from app.observability import EventName, get_logger, make_event
-from app.schemas.job import JobDetail, JobRead
+from app.schemas.job import JobDetail, JobRead, JobScoreRead, JobUpdate
 from app.services import user_service
 from app.websocket.manager import manager
 
@@ -74,25 +79,30 @@ async def get_jobs_by_ids(session: AsyncSession, user: User, job_ids: list[int])
 
 async def upsert_job_from_posting(
     session: AsyncSession,
-    user: User,
+    user_id: int,
     posting: JobPosting,
     *,
     search_id: int | None = None,
 ) -> tuple[Job, bool]:
     """Insert or refresh a job, deduplicating on `(user_id, external_id)`.
 
+    The single ingestion rule for every discovery path — the API and the
+    automation engine both come through here, so a posting is refreshed the same
+    way whoever found it. Takes a `user_id` because the engine works from ids and
+    holds no `User` row.
+
     Returns `(job, created)`. An already-applied job is never pushed back to an
     earlier state, so re-running a search cannot resurrect finished work.
     """
     result = await session.execute(
-        _job_query().where(Job.user_id == user.id, Job.external_id == posting.external_id)
+        _job_query().where(Job.user_id == user_id, Job.external_id == posting.external_id)
     )
     job = result.scalar_one_or_none()
     created = job is None
 
     if job is None:
         job = Job(
-            user_id=user.id,
+            user_id=user_id,
             external_id=posting.external_id,
             title=posting.title,
             company=posting.company,
@@ -106,16 +116,98 @@ async def upsert_job_from_posting(
     job.url = posting.url or job.url
     if posting.description:
         job.description = posting.description
+        job.detected_language = detect_language(posting.description)
     job.workplace_type = posting.workplace_type or job.workplace_type
     job.easy_apply = posting.easy_apply or job.easy_apply
     job.posted_at = posting.posted_at or job.posted_at
-    if search_id is not None:
+    # Credit the search that first found the posting; a later run that happens to
+    # return it again must not re-attribute it.
+    if search_id is not None and job.search_id is None:
         job.search_id = search_id
     if posting.already_applied and job.status != JobStatus.APPLIED:
         job.status = JobStatus.APPLIED
+        job.skip_reason = "LinkedIn reports this application was already sent."
 
     await session.flush()
     return job, created
+
+
+def stale_reason(job: Job, *, now: datetime | None = None) -> str | None:
+    """Why this posting can no longer be applied to, or None if it still can.
+
+    Two ways a posting dies: discovery found it gone (`expired_at`), or its own
+    published deadline has passed. Both are computed against the clock rather than
+    stored as a status, so a job does not need a sweep to become correct.
+    """
+    if job.expired_at is not None:
+        return "This posting is no longer published."
+    deadline = job.deadline
+    if deadline is not None and deadline <= (now or utcnow()):
+        return f"Applications closed on {deadline.date().isoformat()}."
+    return None
+
+
+def is_stale(job: Job, *, now: datetime | None = None) -> bool:
+    """Whether preparation must refuse this job. See `stale_reason` for why."""
+    return stale_reason(job, now=now) is not None
+
+
+async def update_job(session: AsyncSession, user: User, job_id: int, payload: JobUpdate) -> Job:
+    """Apply the user's edits. Only `deadline` is editable — see `JobUpdate`."""
+    job = await get_job(session, user, job_id)
+    if "deadline" in payload.model_fields_set:
+        # Explicit `null` clears the deadline; an absent key is not an edit at all,
+        # which a plain `payload.deadline` read could not tell apart.
+        job.deadline = payload.deadline
+    await session.flush()
+    logger.info(
+        "Job updated.",
+        extra={
+            "action": "job.update",
+            "status": "ok",
+            "user_id": user.id,
+            "job_id": job.id,
+            "has_deadline": job.deadline is not None,
+        },
+    )
+    return job
+
+
+async def expire_missing(
+    session: AsyncSession, user: User, job_id: int, *, reason: str | None = None
+) -> Job:
+    """Record that discovery could not find this posting any more.
+
+    Idempotent: the first sighting of the absence is the one that counts, so a
+    second sweep does not push the timestamp forward. An already-applied job is
+    stamped but never re-statused — postings routinely vanish after a successful
+    application, and rewriting that history would lose the application.
+    """
+    job = await get_job(session, user, job_id)
+    if job.expired_at is not None:
+        return job
+
+    job.expired_at = utcnow()
+    if job.status != JobStatus.APPLIED:
+        job.status = JobStatus.SKIPPED
+        job.skip_reason = reason or "The posting is no longer published."
+    await session.flush()
+    logger.info(
+        "Job expired.",
+        extra={"action": "job.expire", "status": "ok", "user_id": user.id, "job_id": job.id},
+    )
+    return job
+
+
+async def list_scores(session: AsyncSession, user: User, job_id: int) -> list[JobScore]:
+    """The job's scoring history, newest first. Raises if the job is not the user's."""
+    job = await get_job(session, user, job_id)
+    result = await session.execute(
+        select(JobScore)
+        .where(JobScore.job_id == job.id, JobScore.user_id == user.id)
+        .order_by(JobScore.created_at.desc(), JobScore.id.desc())
+    )
+    return list(result.scalars().all())
 
 
 async def skip_job(
@@ -286,7 +378,16 @@ def to_posting(job: Job) -> JobPosting:
 
 
 def to_job_read(job: Job) -> JobRead:
-    """Build the response model, filling the `application_id` the ORM cannot map."""
+    """Build the response model, filling in what the ORM cannot map.
+
+    `application_id`, and the three fields derived from the stored score: the
+    verdict band, the score recomputed from the breakdown's own weights, and the
+    gap between the two. Deriving them here keeps them impossible to leave stale,
+    and costs no migration. A job scored before dimensions carried weights has
+    nothing to recompute from and reports `None` rather than a made-up number.
+    """
+    breakdown = [ScoreDimension.model_validate(row) for row in job.score_breakdown or []]
+    weighted = weighted_score(breakdown)
     return JobRead(
         id=job.id,
         external_id=job.external_id,
@@ -301,11 +402,19 @@ def to_job_read(job: Job) -> JobRead:
         score=job.score,
         score_reasons=list(job.score_reasons or []),
         missing_requirements=list(job.missing_requirements or []),
-        score_breakdown=list(job.score_breakdown or []),
+        score_breakdown=breakdown,
         score_gates=list(job.score_gates or []),
+        verdict=None if job.score is None else verdict_for(job.score),
+        weighted_score=weighted,
+        score_divergence=(
+            None if weighted is None or job.score is None else job.score - weighted
+        ),
         skip_reason=job.skip_reason,
         detected_language=job.detected_language,
         posted_at=job.posted_at,
+        deadline=job.deadline,
+        expired_at=job.expired_at,
+        is_stale=is_stale(job),
         created_at=job.created_at,
         search_id=job.search_id,
         application_id=job.application.id if job.application else None,
@@ -314,3 +423,24 @@ def to_job_read(job: Job) -> JobRead:
 
 def to_job_detail(job: Job) -> JobDetail:
     return JobDetail(**to_job_read(job).model_dump(), description=job.description)
+
+
+def to_job_score_read(row: JobScore) -> JobScoreRead:
+    """Build one history entry.
+
+    The stored dimensions are re-validated rather than passed through: rows written
+    before a field existed read back with its default, exactly as `to_job_read`
+    treats `Job.score_breakdown`.
+    """
+    return JobScoreRead(
+        id=row.id,
+        job_id=row.job_id,
+        overall=row.overall,
+        verdict=row.verdict,
+        dimensions=[ScoreDimension.model_validate(item) for item in row.dimensions or []],
+        gates=list(row.gates or []),
+        model=row.model,
+        depth=row.depth,
+        profile_fingerprint=row.profile_fingerprint,
+        created_at=row.created_at,
+    )
