@@ -74,7 +74,11 @@ Windows sem WSL. O comando bruto está na terceira coluna quando você precisar.
 | Rodar os dois processos | `make dev` | `bash scripts/dev.sh` |
 | Só o backend | `make dev-backend` | `.venv/bin/python -m uvicorn app.main:app --reload --app-dir backend --port 8000` |
 | Só o frontend | `make dev-frontend` | `cd frontend && npm run dev` |
-| Testes | `make test` | `pytest` |
+| App autônomo (IA offline, portal falso) | `make demo` | `python scripts/demo_server.py --fresh` |
+| Testes | `make test` | `pytest` (os de navegador ficam de fora) |
+| Testes de navegador (backend) | `make e2e` | `pytest -m e2e` |
+| Testes de navegador (dashboard) | `make e2e-frontend` | `cd frontend && npm run e2e` |
+| Tudo | `make test-all` | — |
 | Lint | `make lint` | `ruff check .` |
 | Format + correções seguras | `make format` | `ruff format . && ruff check . --fix` |
 | Tipos (backend) | `make typecheck` | `mypy backend/app` |
@@ -271,9 +275,41 @@ pytest --lf                # reroda as últimas falhas
 pytest -k "checkpoint"     # por nome
 ```
 
-Os testes são agrupados pelo que exercitam: `tests/unit/` (schemas, crypto, security, throttle, scoring),
-`tests/api/` (rotas, auth, isolamento entre usuários), `tests/automation/` (dry run, botão de parada, detecção de
-verificação) e `tests/integration/` (o fluxo inteiro da aplicação, dedup, stats).
+Os testes são agrupados pelo que exercitam: `tests/unit/` (schemas, crypto, security, throttle, scoring,
+provedores de IA), `tests/api/` (rotas, auth, isolamento entre usuários), `tests/automation/` (dry run, botão de
+parada, detecção de verificação), `tests/integration/` (o fluxo inteiro da aplicação, dedup, stats) e
+`tests/e2e/` (navegador real — veja abaixo).
+
+### Testes de navegador
+
+Todo o resto da suíte substitui o navegador por `FakeLinkedInService`, o que é certo para testar o engine mas
+deixa a camada Playwright — `browser.py`, `search.py`, `job.py`, `apply.py` — sem cobertura nenhuma. É por isso
+que `pyproject.toml` exclui esses módulos do coverage.
+
+`tests/e2e/` fecha essa lacuna: um Chromium real dirige os seletores reais contra
+[`app/automation/demo_portal.py`](../backend/app/automation/demo_portal.py), um portal falso com a marcação que
+`selectors.py` procura. Não há socket — `install()` registra uma rota Playwright e serve cada requisição a
+`https://www.linkedin.com/**` de dentro do Python, então a página mantém a URL do LinkedIn e a detecção de
+checkpoint por fragmento de URL é exercitada exatamente como em produção. Tudo o que não é o portal é abortado.
+
+**O portal nunca pode ser apontado para o LinkedIn.** Dirigir o site real num laço de teste violaria os termos
+dele e queimaria a conta.
+
+```bash
+playwright install chromium
+pytest -m e2e              # ou: make e2e
+```
+
+São opt-in (`addopts = "-m 'not e2e'"`): precisam do binário do navegador e levam segundos cada, então
+`make test` continua rápido num checkout novo.
+
+A asserção que mais importa é `portal.submitted == []` depois de preparar um rascunho. O portal registra um
+envio só quando o navegador realmente clica em "Submit application", então essa lista é um fio-terra: se
+qualquer refatoração fizer o código de preenchimento alcançar aquele botão, o teste falha e diz isso.
+
+O dashboard tem a sua própria suíte Playwright em `frontend/e2e/`, que sobe
+[`scripts/demo_server.py`](../scripts/demo_server.py) e o servidor Vite e dirige a UI de verdade — login, busca,
+preparo, gate de aprovação, envio (`npm run e2e`, ou `make e2e-frontend`).
 
 ### Fixtures
 
@@ -287,6 +323,14 @@ querendo ou não:
 | `cap_sleep` | autouse | Limita `asyncio.sleep`, para que os atrasos aleatórios de 45–120 s de candidatura não façam a suíte levar uma hora |
 | `sleep_spy` | — | Registra as durações que *teriam* sido dormidas, para que a temporização das salvaguardas seja assertável |
 | `wire_fakes` | autouse | Injeta `FakeLinkedInService` e `FakeAIClient` no lugar dos adaptadores reais |
+
+`block_network` bloqueia o construtor do `AsyncAnthropic` (agora em `app.ai.providers.anthropic_provider`) e o
+`OpenAICompatProvider._new_client`. É o construtor, não o acessor `_http`, para que um teste ainda possa injetar
+um cliente com `MockTransport` — o que `tests/unit/test_ai_providers.py` faz. O provedor `stub` não tem
+transporte nenhum, e é por isso que a suíte pode usá-lo à vontade.
+
+`backend/tests/e2e/conftest.py` sobrescreve `block_network` com um no-op: é o único lugar autorizado a subir um
+Chromium. A contenção vem da interceptação de rotas em vez disso, então esses testes continuam offline.
 | `fake_linkedin` / `fake_ai` | — | As instâncias falsas, para configurar e fazer asserts |
 | `engine` / `sessionmaker` / `session` | — | SQLite em memória com o schema criado, descartado no teardown para que o engine de nível de módulo não vaze |
 | `user` / `other_user` | — | Duas contas — `other_user` é como o isolamento entre usuários é testado |

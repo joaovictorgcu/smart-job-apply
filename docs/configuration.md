@@ -46,11 +46,32 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 | Variável | Tipo | Padrão | O que faz |
 |---|---|---|---|
-| `ANTHROPIC_API_KEY` | string | `""` | A sua chave de API da Anthropic. Vazia significa que `Settings.ai_enabled` é `false`: pontuação, cartas de apresentação e sugestões de triagem ficam indisponíveis e `GET /api/ai/status` reporta `configured: false`. Todo o resto ainda funciona; você preenche os formulários você mesmo. |
-| `ANTHROPIC_MODEL` | string | `claude-opus-5` | O modelo usado para pontuação, cartas de apresentação e respostas de triagem. |
-| `SCORING_EFFORT` | string | `low` | Esforço de raciocínio para pontuação em massa, em que muitas vagas são avaliadas e o custo domina. A geração de cartas de apresentação usa `high` de qualquer forma. Valores válidos são `low`, `medium`, `high`, `xhigh`, `max`. |
+| `AI_PROVIDER` | string | `""` | Quem responde. Vazio decide sozinho: `anthropic` quando `ANTHROPIC_API_KEY` está definida, senão `stub`. Valores: `ollama`, `llamacpp`, `groq`, `gemini`, `openrouter`, `cerebras`, `openai_compat`, `anthropic`, `stub`. Um nome desconhecido levanta `ProviderNotConfiguredError` nomeando as alternativas — nunca é lido como "IA desligada". |
+| `AI_API_KEY` | string | `""` | Credencial dos provedores compatíveis com OpenAI. Não usada por `ollama`, `llamacpp`, `stub` nem `anthropic`. |
+| `AI_BASE_URL` | string | do provedor | Sobrescreve o endpoint do provedor. Obrigatório para `openai_compat`. |
+| `AI_MODEL` | string | do provedor | Sobrescreve o modelo. Obrigatório para `openai_compat`. |
+| `AI_STUB_SCORE` | int \| null | `null` | Fixa a nota do provedor offline, para testes que precisam de um lado específico de um limiar. Ignorado pelos outros. |
+| `ANTHROPIC_API_KEY` | string | `""` | Chave da Anthropic, usada por `AI_PROVIDER=anthropic`. |
+| `ANTHROPIC_MODEL` | string | `claude-opus-5` | O modelo usado quando o provedor é `anthropic`. |
+| `SCORING_EFFORT` | string | `low` | Esforço de raciocínio para pontuação em massa, em que muitas vagas são avaliadas e o custo domina. A geração de cartas de apresentação usa `high` de qualquer forma. Valores válidos são `low`, `medium`, `high`, `xhigh`, `max`. Nos provedores compatíveis com OpenAI é mapeado para a temperatura de amostragem. |
 
-Um usuário pode sobrescrever o modelo para a própria conta com `UserSettings.ai_model`; quando isso é nulo, `ANTHROPIC_MODEL` se aplica.
+Um usuário pode sobrescrever o modelo para a própria conta com `UserSettings.ai_model`; quando isso é nulo, o modelo do provedor se aplica.
+
+**`Settings.ai_enabled` agora depende do provedor resolvido**, não só da chave da Anthropic: `stub`, `ollama` e
+`llamacpp` não precisam de nada, os hospedados precisam de `AI_API_KEY`, e `anthropic` precisa de
+`ANTHROPIC_API_KEY`. Um clone novo sem nenhuma configuração resolve para `stub` e roda de ponta a ponta — o
+provedor offline rotula a própria saída como um placeholder, então ninguém confunde com uma avaliação real.
+
+**Saída estruturada.** Cada capacidade valida a resposta contra um schema Pydantic. Os servidores compatíveis com
+OpenAI param de suportar isso em pontos diferentes, então
+[`openai_compat.py`](../backend/app/ai/providers/openai_compat.py) desce por três modos e lembra até onde aquele
+servidor chegou: `response_format: json_schema` (estrito), depois `json_object` com o schema no prompt do
+sistema, depois texto puro com o JSON extraído da resposta. Uma resposta que ainda não valida é reportada como
+recusa, não levantada — é essa invariante que faz o usuário receber o fallback manual em vez de uma tela de erro.
+
+**Privacidade.** Currículos e respostas de triagem são dados pessoais. `ollama` é a recomendação por isso: um
+modelo local não manda nada para fora. Os tiers grátis hospedados são uma conveniência, e os termos deles —
+inclusive se os prompts são usados para treinamento — são uma decisão sua.
 
 ### Banco de dados
 
@@ -66,6 +87,7 @@ O driver precisa ser async: `sqlite+aiosqlite://…` ou `postgresql+asyncpg://�
 | Variável | Tipo | Padrão | O que faz |
 |---|---|---|---|
 | `HEADLESS` | bool | `false` | Se o Chromium roda sem janela. Mantenha `false`: você precisa ver o navegador para fazer login no LinkedIn, e um navegador visível é como você percebe que algo está dando errado. No Docker o navegador roda dentro de um display virtual que você acessa por noVNC, então `false` ainda é o correto lá. |
+| `DEMO_PORTAL` | bool | `false` | Serve o portal de vagas falso embutido ([`demo_portal.py`](../backend/app/automation/demo_portal.py)) em vez do site real, para que o fluxo inteiro seja demonstrável sem uma conta do LinkedIn e sem candidatura nenhuma sair da máquina. Ligado, o app é uma demo de si mesmo e não se candidata a nada real; a sessão do navegador registra um `WARNING` dizendo exatamente isso. `make demo` liga por você junto com o provedor offline. |
 | `MAX_CONCURRENT_SESSIONS` | int | `1` | Sessões de navegador permitidas ao mesmo tempo. |
 | `ASSISTED_MODE_ONLY` | bool | `true` | A garantia rígida de que nada é enviado sem uma ação explícita, separada e confirmada pelo usuário. |
 | `DEFAULT_DAILY_CAP` | int | `15` | Semeia `UserSettings.daily_cap`. |
@@ -98,15 +120,21 @@ O driver precisa ser async: `sqlite+aiosqlite://…` ou `postgresql+asyncpg://�
 
 ```dotenv
 # --- Required ---
-ANTHROPIC_API_KEY=sk-ant-...
 SECRET_KEY=<python -c "import secrets; print(secrets.token_urlsafe(48))">
 ENCRYPTION_KEY=<a second, different value from the same command>
 
+# --- AI: pick one ---
+AI_PROVIDER=ollama                  # local, no key, nothing leaves the machine
+# AI_PROVIDER=groq
+# AI_API_KEY=gsk_...
+# AI_PROVIDER=anthropic
+# ANTHROPIC_API_KEY=sk-ant-...
+
 # --- Common ---
-ANTHROPIC_MODEL=claude-opus-5
 SCORING_EFFORT=low
 DATABASE_URL=
 HEADLESS=false
+DEMO_PORTAL=false
 CORS_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173"]
 
 # --- Guard-rail seeds (per-user values override these once a user exists) ---

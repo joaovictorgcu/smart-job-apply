@@ -144,14 +144,55 @@ o seu e-mail, o seu telefone e o conteúdo do seu currículo aparecem nessas tel
 
 ---
 
+## Experimente primeiro, sem configurar nada
+
+Antes de qualquer instalação: um comando roda o produto inteiro contra um **portal de vagas falso** embutido,
+com um **provedor de IA offline**. Nenhuma chave, nenhuma conta do LinkedIn, nenhuma candidatura sai da sua
+máquina.
+
+```bash
+pip install -e ".[dev]" && playwright install chromium
+python scripts/demo_server.py --fresh      # ou: make demo
+cd frontend && npm ci && npm run dev       # em outro terminal
+```
+
+Abra <http://localhost:5173> e entre com `demo@example.com` / `demo-password-123`. Rode uma busca, prepare uma
+candidatura, revise e aprove: o fluxo é o mesmo do produto real, incluindo o gate de aprovação. O "LinkedIn" que
+a automação dirige é servido pelo próprio processo da API
+([`app/automation/demo_portal.py`](backend/app/automation/demo_portal.py)).
+
+O modo de demo desliga o modo de teste (senão o formulário nunca é aberto) mas **nunca** desliga
+`require_manual_approval` — é justamente essa garantia que a demo existe para mostrar.
+
+---
+
 ## Início rápido
 
 Dois caminhos. Escolha um.
 
 ### Pré-requisitos (ambos os caminhos)
 
-Uma **chave de API da Anthropic** em [console.anthropic.com](https://console.anthropic.com/) → API keys. O app
-funciona sem uma — você só preenche os formulários você mesmo, sem pontuação e sem cartas geradas.
+**Um provedor de IA.** Ele pontua as vagas, escreve as cartas e rascunha as respostas de triagem. Você escolhe
+qual — inclusive gratuitos:
+
+| `AI_PROVIDER` | Custo | Precisa de chave? |
+|---|---|---|
+| `ollama` | grátis, roda local | não |
+| `groq` | tier grátis | sim — [console.groq.com/keys](https://console.groq.com/keys) |
+| `gemini` | tier grátis | sim — [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
+| `openrouter` | modelos `:free` | sim — [openrouter.ai/keys](https://openrouter.ai/keys) |
+| `cerebras` | tier grátis | sim — [cloud.cerebras.ai](https://cloud.cerebras.ai/) |
+| `anthropic` | pago | sim — [console.anthropic.com](https://console.anthropic.com/) |
+| `stub` | grátis, offline | não |
+
+Deixe `AI_PROVIDER` vazio e o app decide: Anthropic se `ANTHROPIC_API_KEY` estiver definida, senão o provedor
+offline — então um clone novo funciona de ponta a ponta sem você se cadastrar em nada.
+
+**O seu currículo e as suas respostas de triagem são dados pessoais.** Por isso a recomendação é `ollama`: um
+modelo local não manda nada para fora. Instale de [ollama.com](https://ollama.com), rode
+`ollama pull qwen2.5:7b-instruct`, e ponha `AI_PROVIDER=ollama` no `.env`. Os tiers grátis hospedados são uma
+conveniência — leia os termos deles, inclusive se os seus prompts são usados para treinamento, antes de mandar
+um currículo.
 
 Dois segredos importam, e o caminho do Docker os gera para você:
 
@@ -179,10 +220,14 @@ cd smart-job-apply
 cp .env.example .env
 ```
 
-Abra `.env` e defina a sua chave de API:
+Abra `.env` e escolha o provedor de IA — um destes basta:
 
 ```dotenv
-ANTHROPIC_API_KEY=sk-ant-...
+AI_PROVIDER=ollama                  # local, sem chave, nada sai da máquina
+# AI_PROVIDER=groq                  # tier grátis
+# AI_API_KEY=gsk_...
+# AI_PROVIDER=anthropic             # pago
+# ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 Você pode deixar `SECRET_KEY` e `ENCRYPTION_KEY` vazios aqui — o entrypoint do contêiner os gera no
@@ -266,7 +311,7 @@ source .venv/bin/activate                    # PowerShell: .\.venv\Scripts\Activ
 pip install -e ".[dev]"
 playwright install chromium                  # Debian/Ubuntu: adicione --with-deps
 cd frontend && npm ci && cd ..
-cp .env.example .env                         # depois defina ANTHROPIC_API_KEY, SECRET_KEY, ENCRYPTION_KEY
+cp .env.example .env                         # depois defina AI_PROVIDER, SECRET_KEY, ENCRYPTION_KEY
 cd backend && alembic upgrade head && cd ..
 python scripts/create_user.py --email you@example.com --name "Your Name"
 ```
@@ -374,11 +419,16 @@ semeiam as configurações de um novo usuário; depois disso os valores por usu�
 
 | Variável | Padrão | O que faz |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | — | Habilita pontuação, cartas e sugestões de respostas. Vazio é válido; você preenche os formulários |
+| `AI_PROVIDER` | decide sozinho | Quem responde: `ollama`, `groq`, `gemini`, `openrouter`, `cerebras`, `llamacpp`, `anthropic`, `stub` |
+| `AI_API_KEY` | — | Chave dos provedores compatíveis com OpenAI. Não usada por `ollama`, `llamacpp` nem `stub` |
+| `AI_BASE_URL` | do provedor | Sobrescreve o endpoint. Ex.: `http://localhost:11434/v1` |
+| `AI_MODEL` | do provedor | Sobrescreve o modelo. Ex.: `qwen2.5:14b-instruct` |
+| `ANTHROPIC_API_KEY` | — | Só para `AI_PROVIDER=anthropic`. Definir isto sem `AI_PROVIDER` seleciona o caminho pago |
 | `SECRET_KEY` | aleatório por processo | Assina os JWTs. **Defina**, ou reinícios deslogam você |
 | `ENCRYPTION_KEY` | recorre a `SECRET_KEY` | Criptografa a sessão do LinkedIn. Mudá-la torna as sessões armazenadas ilegíveis |
-| `ANTHROPIC_MODEL` | `claude-opus-5` | Modelo usado para pontuação e geração de texto |
+| `ANTHROPIC_MODEL` | `claude-opus-5` | Modelo usado quando o provedor é `anthropic` |
 | `SCORING_EFFORT` | `low` | Esforço de raciocínio para pontuação em massa. Cartas sempre usam `high` |
+| `DEMO_PORTAL` | `false` | Dirige o portal de vagas falso embutido em vez do site real. `make demo` liga por você |
 | `DATABASE_URL` | *(vazio → SQLite)* | `postgresql+asyncpg://…` para trocar de backend |
 | `HEADLESS` | `false` | Mantenha false. Você precisa ver o navegador |
 | `ASSISTED_MODE_ONLY` | `true` | A garantia de nenhum-envio-sem-confirmação |
@@ -473,8 +523,9 @@ docs/  scripts/  Makefile  docker-compose.yml
 As fronteiras de camadas, o modelo de dados completo e por que cada tabela existe, o fluxo de eventos do engine até a aba do navegador,
 e os trade-offs de projeto: **[docs/architecture.md](docs/architecture.md)**.
 
-**Stack** — Python 3.11+, FastAPI, SQLAlchemy 2 async, Alembic, Playwright, o SDK da Anthropic, JWT + bcrypt +
-Fernet; React, Vite, Tailwind CSS.
+**Stack** — Python 3.11+, FastAPI, SQLAlchemy 2 async, Alembic, Playwright, um provedor de IA plugável
+(qualquer servidor compatível com OpenAI, ou o SDK da Anthropic), JWT + bcrypt + Fernet; React, Vite,
+Tailwind CSS.
 
 ---
 

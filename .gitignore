@@ -106,6 +106,9 @@ Desktop.ini
 # Claude Code: the shared project settings are committed, the personal grants are
 # not — settings.local.json is per-developer and holds machine-specific paths.
 .claude/settings.local.json
+# Git worktrees created for parallel work. Each is a full checkout of this same
+# repository; committing one would nest the repo inside itself.
+.claude/worktrees/
 
 # TypeScript incremental build cache
 *.tsbuildinfo
