@@ -54,6 +54,13 @@ from app.config import get_settings
 # `detect_language` is re-exported: the heuristic is pure domain, but callers
 # have always reached it through this module and still do.
 from app.domain.language import detect_language, fold, squash
+from app.domain.technologies import (
+    ALNUM_TOKEN,
+    ALPHA_WORD,
+    CAMELCASE,
+    KNOWN_TECHNOLOGIES,
+    ORIG_WORD,
+)
 from app.models.enums import AnswerConfidence
 from app.observability import get_logger
 
@@ -112,44 +119,6 @@ class AINotConfiguredError(RuntimeError):
         super().__init__(message)
 
 
-# Common technologies whose presence in a tailored resume but absence from the
-# source is the clearest, most checkable sign of invention. Lowercased; matched as
-# whole words. Not exhaustive by design — the structural checks below catch the
-# long tail (CamelCase and alphanumeric tokens like FastAPI, PostgreSQL, OAuth2).
-_KNOWN_TECHNOLOGIES = frozenset(
-    {
-        "python", "java", "javascript", "typescript", "golang", "rust", "ruby",
-        "php", "kotlin", "swift", "scala", "elixir", "clojure", "haskell", "perl",
-        "django", "flask", "fastapi", "rails", "laravel", "spring", "express",
-        "nestjs", "react", "angular", "vue", "svelte", "nextjs", "nuxt", "jquery",
-        "node", "deno", "bun", "graphql", "grpc", "rest", "soap", "webpack", "vite",
-        "postgresql", "postgres", "mysql", "mariadb", "sqlite", "oracle", "mongodb",
-        "redis", "cassandra", "elasticsearch", "dynamodb", "snowflake", "clickhouse",
-        "kafka", "rabbitmq", "celery", "airflow", "spark", "hadoop", "flink", "dbt",
-        "docker", "kubernetes", "terraform", "ansible", "puppet", "chef", "helm",
-        "jenkins", "gitlab", "github", "circleci", "argocd", "prometheus", "grafana",
-        "aws", "azure", "gcp", "heroku", "vercel", "netlify", "cloudflare", "lambda",
-        "tensorflow", "pytorch", "keras", "sklearn", "pandas", "numpy", "scipy",
-        "kubeflow", "mlflow", "langchain", "opencv", "huggingface", "transformers",
-        "playwright", "selenium", "cypress", "jest", "pytest", "junit", "mocha",
-        "linux", "bash", "nginx", "apache", "kong", "istio", "consul", "vault",
-        "git", "jira", "confluence", "figma", "tableau", "powerbi", "looker",
-        "sql", "nosql", "html", "css", "sass", "tailwind", "bootstrap", "wasm",
-    }
-)
-
-# CamelCase like FastAPI, PostgreSQL, JavaScript, GraphQL.
-_CAMELCASE = re.compile(r"\b[A-Za-z]*[a-z][A-Z][A-Za-z]*\b")
-# Alphanumeric tokens like S3, OAuth2, Python3, k8s, EC2, gpt4 — almost always tech.
-_ALNUM_TOKEN = re.compile(r"\b(?:[A-Za-z]+\d+[A-Za-z\d]*|\d+[A-Za-z]+[A-Za-z\d]*)\b")
-# A word token, allowing an internal `.`/`+`/`#` (node.js, asp.net) but never a
-# trailing one — otherwise "Kubernetes." captures the sentence period and no longer
-# matches a known technology.
-_ALPHA_WORD = re.compile(r"[a-z][a-z0-9]*(?:[.+#][a-z0-9]+)*")
-# Same shape, original-cased, so a flagged term keeps the casing the model wrote.
-_ORIG_WORD = re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[.+#][A-Za-z0-9]+)*")
-
-
 def flag_unsupported_skills(source_text: str, tailored_text: str) -> list[str]:
     """Technologies present in the tailored resume but absent from the source.
 
@@ -164,7 +133,7 @@ def flag_unsupported_skills(source_text: str, tailored_text: str) -> list[str]:
     automatic block. Missing a real invention is the failure to avoid.
     """
     source = fold(source_text or "")
-    source_words = set(_ALPHA_WORD.findall(source))
+    source_words = set(ALPHA_WORD.findall(source))
 
     def supported(token: str) -> bool:
         folded = fold(token)
@@ -173,13 +142,13 @@ def flag_unsupported_skills(source_text: str, tailored_text: str) -> list[str]:
         return folded in source_words or folded in source
 
     flagged: dict[str, str] = {}  # folded -> original casing (first seen)
-    for match in _CAMELCASE.findall(tailored_text) + _ALNUM_TOKEN.findall(tailored_text):
+    for match in CAMELCASE.findall(tailored_text) + ALNUM_TOKEN.findall(tailored_text):
         if not supported(match):
             flagged.setdefault(fold(match), match)
 
-    for token in _ORIG_WORD.findall(tailored_text):
+    for token in ORIG_WORD.findall(tailored_text):
         folded = fold(token)
-        if folded in _KNOWN_TECHNOLOGIES and not supported(token):
+        if folded in KNOWN_TECHNOLOGIES and not supported(token):
             flagged.setdefault(folded, token)
 
     return sorted(flagged.values(), key=str.lower)

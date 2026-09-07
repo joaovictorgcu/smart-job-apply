@@ -7,14 +7,12 @@ fabricated technology is surfaced to the user even if the model ignored the rule
 
 from __future__ import annotations
 
-import hashlib
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.client import flag_unsupported_skills
+from app.ai.scoring import profile_fingerprint, profile_source_text
 from app.api.errors import NotFoundError, PreconditionFailedError, UpstreamError
-from app.automation.contracts import ProfileContext
 from app.config import get_settings
 from app.models import TailoredResume, User
 from app.observability import get_logger
@@ -24,28 +22,14 @@ from app.services import job_service, user_service
 logger = get_logger(__name__)
 
 
-def _source_text(profile: ProfileContext) -> str:
-    """Everything the candidate actually provided, for the invention guard.
-
-    Skills and the headline are included so a skill the user genuinely lists is
-    never flagged just because it is absent from the free-text resume body.
-    """
-    parts = [
-        profile.resume_text or "",
-        profile.summary or "",
-        profile.headline or "",
-        " ".join(profile.skills or []),
-    ]
-    return "\n".join(part for part in parts if part.strip())
-
-
-def _fingerprint(profile: ProfileContext) -> str:
-    return hashlib.sha256(_source_text(profile).encode("utf-8")).hexdigest()
-
-
 async def current_fingerprint(session: AsyncSession, user: User) -> str:
-    """Fingerprint of the user's profile as it stands now (for staleness checks)."""
-    return _fingerprint(await user_service.build_profile_context(session, user))
+    """Fingerprint of the user's profile as it stands now (for staleness checks).
+
+    The hashing itself lives in `app.ai.scoring` because the score history needs
+    the same scheme: a resume draft and a score both go stale against the same
+    profile edit, and two fingerprint schemes could not be compared.
+    """
+    return profile_fingerprint(await user_service.build_profile_context(session, user))
 
 
 async def get_tailored_resume(
@@ -90,7 +74,7 @@ async def create_tailored_resume(session: AsyncSession, user: User, job_id: int)
             "The AI did not return a tailored resume. Try again, or edit your resume by hand."
         )
 
-    flags = flag_unsupported_skills(_source_text(profile), result.tailored_markdown)
+    flags = flag_unsupported_skills(profile_source_text(profile), result.tailored_markdown)
     row = await get_tailored_resume(session, user, job_id)
     if row is None:
         row = TailoredResume(user_id=user.id, job_id=job.id)
@@ -103,7 +87,7 @@ async def create_tailored_resume(session: AsyncSession, user: User, job_id: int)
     row.stretch_flags = [flag.model_dump(mode="json") for flag in result.stretch_flags]
     row.summary = result.summary
     row.model = settings_row.ai_model or get_settings().anthropic_model
-    row.source_fingerprint = _fingerprint(profile)
+    row.source_fingerprint = profile_fingerprint(profile)
     row.was_edited = False
     await session.flush()
 
@@ -133,7 +117,7 @@ async def update_tailored_resume(
     row.content = content
     row.was_edited = True
     # Re-guard the edited text: the user can introduce a claim too.
-    row.invention_flags = flag_unsupported_skills(_source_text(profile), content)
+    row.invention_flags = flag_unsupported_skills(profile_source_text(profile), content)
     await session.flush()
 
     logger.info(

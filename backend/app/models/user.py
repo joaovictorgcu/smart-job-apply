@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from app.models.audit import AuditEvent
     from app.models.automation import AutomationRun
     from app.models.job import Application, Job, Search
+    from app.models.resume import Experience
 
 
 class User(Base, TimestampMixin):
@@ -42,6 +43,14 @@ class User(Base, TimestampMixin):
     )
     linkedin_account: Mapped[LinkedInAccount | None] = relationship(
         back_populates="user", cascade="all, delete-orphan", uselist=False
+    )
+    # The structured half of the master resume. `Profile` keeps the free text and
+    # the answer bank; the positions live here because the per-application
+    # derivation has to reason about them one at a time.
+    experiences: Mapped[list[Experience]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="Experience.position",
     )
     searches: Mapped[list[Search]] = relationship(
         back_populates="user", cascade="all, delete-orphan"

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Query
 from app.api.deps import CurrentUser, LimitDep, OffsetDep, SessionDep
 from app.models import JobStatus
 from app.schemas.common import Page
-from app.schemas.job import JobDetail, JobRead
+from app.schemas.job import JobDetail, JobRead, JobScoreRead, JobUpdate
 from app.services import job_service
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -48,6 +48,29 @@ async def read_job(job_id: int, user: CurrentUser, session: SessionDep) -> JobDe
     """Return one job including its full description."""
     job = await job_service.get_job(session, user, job_id)
     return job_service.to_job_detail(job)
+
+
+@router.patch("/{job_id}", response_model=JobRead)
+async def update_job(
+    job_id: int, payload: JobUpdate, user: CurrentUser, session: SessionDep
+) -> JobRead:
+    """Edit the job's application deadline — the only field a user owns here."""
+    job = await job_service.update_job(session, user, job_id, payload)
+    return job_service.to_job_read(job)
+
+
+@router.get("/{job_id}/scores", response_model=list[JobScoreRead])
+async def list_job_scores(
+    job_id: int, user: CurrentUser, session: SessionDep
+) -> list[JobScoreRead]:
+    """Every verdict this job received, newest first.
+
+    `job.score` is only the latest one. This is the history behind it: what the
+    score was, which dimensions produced it, and which profile it was formed
+    against — so a jump after a profile edit can be shown rather than asserted.
+    """
+    scores = await job_service.list_scores(session, user, job_id)
+    return [job_service.to_job_score_read(row) for row in scores]
 
 
 @router.post("/{job_id}/skip", response_model=JobRead)

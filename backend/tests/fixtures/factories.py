@@ -8,9 +8,10 @@ application's own default.
 from __future__ import annotations
 
 import itertools
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.security import hash_password
@@ -24,6 +25,7 @@ from app.models import (
     AutomationRun,
     AutomationRunKind,
     AutomationRunStatus,
+    Experience,
     Job,
     JobStatus,
     LinkedInAccount,
@@ -296,3 +298,244 @@ def make_profile_context(**overrides: Any) -> ProfileContext:
 
 def days_ago(days: int) -> datetime:
     return utcnow() - timedelta(days=days)
+
+
+# --------------------------------------------------------------------------- #
+# The structured master resume
+# --------------------------------------------------------------------------- #
+
+# A coherent career, not four unrelated rows. Each position leans on a different
+# stack, so the same history genuinely reorders itself per posting instead of the
+# tests having to assert on a difference that was staged. Written in Portuguese
+# because that is what a user of this app writes — and because it exercises the
+# accent folding the term matching depends on.
+RESUME_HISTORY: tuple[dict[str, Any], ...] = (
+    {
+        "company": "Globalthings",
+        "role": "Engenheiro de Software Senior",
+        "employment_type": "full_time",
+        "location": "Recife, PE",
+        "started_on": date(2022, 3, 1),
+        "ended_on": None,
+        "is_current": True,
+        "summary": (
+            "Responsavel pelas APIs corporativas e pelo portal web de gestao de acessos, "
+            "de ponta a ponta."
+        ),
+        "responsibilities": [
+            "Projetei e mantive APIs REST em C# e ASP.NET Core consumidas por 12 sistemas.",
+            "Modelei e otimizei o banco PostgreSQL do gerenciador de acessos.",
+            "Construi telas do portal em React e TypeScript integradas as APIs internas.",
+            "Escrevi testes de integracao com xUnit cobrindo os fluxos de autenticacao.",
+            "Conduzi revisoes de codigo e defini a arquitetura em camadas adotada pelo time.",
+        ],
+        "technologies": [
+            "C#",
+            ".NET",
+            "ASP.NET Core",
+            "PostgreSQL",
+            "React",
+            "TypeScript",
+            "Docker",
+            "Azure DevOps",
+            "xUnit",
+        ],
+        "results": [
+            "Reduzi o tempo de resposta medio das APIs de 800 ms para 210 ms.",
+            "Levei a cobertura de testes do modulo de acesso de 18% para 74%.",
+        ],
+        "projects": [
+            {
+                "name": "Gerenciador de Acessos",
+                "description": (
+                    "Portal de gestao de acessos corporativos, API em .NET e front em React."
+                ),
+                "technologies": ["C#", ".NET", "React", "PostgreSQL"],
+            }
+        ],
+        "position": 0,
+    },
+    {
+        "company": "Nuvem Retail",
+        "role": "Desenvolvedor Full Stack",
+        "employment_type": "full_time",
+        "location": "Remoto",
+        "started_on": date(2020, 1, 6),
+        "ended_on": date(2022, 2, 28),
+        "is_current": False,
+        "summary": "Frente de loja e checkout de um e-commerce com trafego nacional.",
+        "responsibilities": [
+            "Desenvolvi a vitrine e o checkout do e-commerce em React com Redux.",
+            "Integrei o frontend a APIs REST de pagamento e logistica de terceiros.",
+            "Implementei componentes acessiveis e responsivos no design system, em CSS.",
+            "Mantive servicos Node que agregavam dados de estoque para a vitrine.",
+        ],
+        "technologies": ["React", "TypeScript", "Node", "JavaScript", "REST", "CSS", "Jest"],
+        "results": [
+            "Aumentei a conversao do checkout em 9% ao reescrever o fluxo em tres etapas.",
+        ],
+        "projects": [
+            {
+                "name": "Checkout em tres etapas",
+                "description": "Reescrita do checkout em React, com testes em Jest.",
+                "technologies": ["React", "TypeScript", "Jest"],
+            }
+        ],
+        "position": 1,
+    },
+    {
+        "company": "Instituto Dados Abertos",
+        "role": "Engenheiro de Dados",
+        "employment_type": "contract",
+        "location": "Remoto",
+        "started_on": date(2018, 6, 1),
+        "ended_on": date(2019, 12, 20),
+        "is_current": False,
+        "summary": "Consolidacao de bases publicas em um painel aberto de gastos.",
+        "responsibilities": [
+            "Construi pipelines de ETL em Python com pandas para consolidar bases publicas.",
+            "Automatizei as coletas com Airflow e publiquei os dados em PostgreSQL.",
+            "Escrevi testes com pytest para as transformacoes mais sensiveis.",
+        ],
+        "technologies": ["Python", "pandas", "Airflow", "PostgreSQL", "pytest", "Docker"],
+        "results": ["Reduzi de 6 horas para 25 minutos a consolidacao mensal."],
+        "projects": [
+            {
+                "name": "Painel de gastos publicos",
+                "description": "Painel aberto alimentado por pipelines em Python.",
+                "technologies": ["Python", "pandas", "PostgreSQL"],
+            }
+        ],
+        "position": 2,
+    },
+    {
+        "company": "Auditar Sistemas",
+        "role": "Analista de Qualidade de Software",
+        "employment_type": "full_time",
+        "location": "Recife, PE",
+        "started_on": date(2016, 2, 1),
+        "ended_on": date(2018, 5, 30),
+        "is_current": False,
+        "summary": "Qualidade e manutencao de sistemas legados de auditoria.",
+        "responsibilities": [
+            "Defini a estrategia de testes automatizados de regressao com Selenium.",
+            "Refatorei modulos legados em Java para reduzir acoplamento.",
+            "Documentei a arquitetura dos sistemas criticos e os critérios de qualidade.",
+        ],
+        "technologies": ["Java", "Selenium", "JUnit", "SQL", "Git"],
+        "results": ["Cortei em 40% o retrabalho por defeitos encontrados em producao."],
+        "projects": [],
+        "position": 3,
+    },
+)
+
+# The skills the profile lists, kept consistent with the history above so a
+# highlighted skill is always something the experience can actually back.
+RESUME_SKILLS: list[str] = [
+    "C#",
+    ".NET",
+    "PostgreSQL",
+    "React",
+    "TypeScript",
+    "Python",
+    "Docker",
+    "SQL",
+    "Node",
+    "Java",
+]
+
+# Four postings that lean on four different parts of the same history. These are
+# the example vacancies the feature is meant to tell apart.
+JOB_POSTINGS: dict[str, dict[str, str]] = {
+    "dotnet": {
+        "title": "Desenvolvedor Backend .NET Senior",
+        "company": "Banco Meridiano",
+        "description": (
+            "Buscamos pessoa desenvolvedora backend com 5+ anos de experiencia em C# e "
+            ".NET. Voce vai manter APIs REST em ASP.NET Core, modelar dados em "
+            "PostgreSQL e cuidar das pipelines no Azure DevOps."
+        ),
+    },
+    "fullstack": {
+        "title": "Pessoa Desenvolvedora Full Stack",
+        "company": "Trilha Educacao",
+        "description": (
+            "Time de produto procurando alguem confortavel no frontend: React, "
+            "TypeScript e CSS, consumindo APIs REST. Ha tambem servicos em Node "
+            "para manter. Desejavel experiencia com Jest."
+        ),
+    },
+    "python": {
+        "title": "Engenheiro de Dados Python",
+        "company": "Agro Insights",
+        "description": (
+            "Vaga para engenharia de dados: Python e pandas no dia a dia, orquestracao "
+            "com Airflow e cargas em PostgreSQL. Minimo de 3 anos na area."
+        ),
+    },
+    "engineering": {
+        "title": "Engenheiro de Software - Arquitetura e Qualidade",
+        "company": "Consorcio Atlas",
+        "description": (
+            "Foco em arquitetura, manutenibilidade e testes. Sistemas legados em Java, "
+            "regressao automatizada com Selenium e testes de unidade com JUnit. "
+            "Esperamos 4+ anos de experiencia."
+        ),
+    },
+}
+
+
+async def create_experience(session: AsyncSession, user: User, **overrides: Any) -> Experience:
+    values: dict[str, Any] = {
+        "company": "Globalthings",
+        "role": "Engenheiro de Software Senior",
+        "employment_type": "full_time",
+        "location": "Recife, PE",
+        "started_on": date(2022, 3, 1),
+        "ended_on": None,
+        "is_current": True,
+        "summary": "APIs corporativas e portal web de gestao de acessos.",
+        "responsibilities": ["Mantive APIs REST em C# e ASP.NET Core."],
+        "technologies": ["C#", ".NET", "PostgreSQL"],
+        "results": ["Reduzi a latencia media das APIs em 70%."],
+        "projects": [],
+        "position": 0,
+    }
+    values.update(overrides)
+    experience = Experience(user_id=user.id, **values)
+    session.add(experience)
+    await session.flush()
+    await session.commit()
+    await session.refresh(experience)
+    return experience
+
+
+async def create_resume_history(session: AsyncSession, user: User) -> list[Experience]:
+    """Seed the full four-position history and the matching profile skills.
+
+    Both halves together: an adaptation reads the profile's skills and the
+    positions, and seeding one without the other would make the highlighted
+    skills disagree with the experience backing them.
+    """
+    rows = [Experience(user_id=user.id, **dict(entry)) for entry in RESUME_HISTORY]
+    session.add_all(rows)
+
+    profile = (
+        await session.execute(select(Profile).where(Profile.user_id == user.id))
+    ).scalar_one_or_none()
+    if profile is not None:
+        profile.skills = list(RESUME_SKILLS)
+
+    await session.flush()
+    await session.commit()
+    for row in rows:
+        await session.refresh(row)
+    return rows
+
+
+async def create_posting_job(session: AsyncSession, user: User, kind: str, **overrides: Any) -> Job:
+    """A job row for one of the four example vacancies in `JOB_POSTINGS`."""
+    posting = JOB_POSTINGS[kind]
+    values: dict[str, Any] = {**posting, "detected_language": "pt-BR"}
+    values.update(overrides)
+    return await create_job(session, user, **values)

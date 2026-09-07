@@ -76,8 +76,16 @@ class TestBreakdownIsPersisted:
 
         payload = (await client.get(f"/api/jobs/{job.id}", headers=auth_headers)).json()
 
+        # A row stored before `weight_pct` existed reads back with a zero weight,
+        # which is what "no weight was ever stated" looks like on the wire.
         assert payload["score_breakdown"] == [
-            {"dimension": "seniority", "score": 75, "weight": "hard", "evidence": "Senior."}
+            {
+                "dimension": "seniority",
+                "score": 75,
+                "weight": "hard",
+                "weight_pct": 0,
+                "evidence": "Senior.",
+            }
         ]
 
     async def test_a_job_scored_before_the_feature_reads_back_empty(

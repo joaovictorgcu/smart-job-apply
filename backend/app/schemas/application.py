@@ -8,7 +8,12 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from app.ai.schemas import ScreeningAnswer
-from app.models.enums import ApplicationEventType, ApplicationOutcome, ApplicationStatus
+from app.models.enums import (
+    ApplicationChannel,
+    ApplicationEventType,
+    ApplicationOutcome,
+    ApplicationStatus,
+)
 from app.schemas.common import ORMModel
 from app.schemas.job import JobRead
 
@@ -17,6 +22,10 @@ class ApplicationRead(ORMModel):
     id: int
     job_id: int
     status: ApplicationStatus
+    # Which completion path this application may take. The review screen reads it
+    # to decide whether to offer "approve and submit" or "apply on the company's
+    # site, then record it".
+    channel: ApplicationChannel = ApplicationChannel.EASY_APPLY
     cover_letter: str | None = None
     screening_answers: list[dict[str, Any]] = Field(default_factory=list)
     resume_filename: str | None = None
@@ -102,3 +111,19 @@ class ApplicationUpdate(BaseModel):
 
     cover_letter: str | None = None
     screening_answers: list[ScreeningAnswer] | None = None
+
+
+class MarkAppliedRequest(BaseModel):
+    """The user's record that they applied on the company's own site.
+
+    `confirm` mirrors `SubmitRequest.confirm` so this can never fire as a side
+    effect of another call — but it consents to *writing something down*, not to
+    sending anything. Nothing here reaches a form.
+    """
+
+    confirm: bool = Field(description="Must be true; this is the record that you applied.")
+    note: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Optional note kept with the outcome (where and when you applied).",
+    )

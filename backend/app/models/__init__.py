@@ -5,6 +5,7 @@ from app.models.automation import AutomationRun
 from app.models.enums import (
     AnalysisKind,
     AnswerConfidence,
+    ApplicationChannel,
     ApplicationEventType,
     ApplicationOutcome,
     ApplicationStatus,
@@ -22,6 +23,11 @@ from app.models.job import (
     Search,
     TailoredResume,
 )
+from app.models.resume import ApplicationResume, Experience
+
+# `JobScore` here is the persisted verdict; `app.ai.schemas.JobScore` is the
+# model's output contract. Modules needing both import this one as `JobScoreRow`.
+from app.models.score import JobScore
 from app.models.user import LinkedInAccount, Profile, User, UserSettings
 
 __all__ = [
@@ -29,17 +35,21 @@ __all__ = [
     "AnalysisKind",
     "AnswerConfidence",
     "Application",
+    "ApplicationChannel",
     "ApplicationEvent",
     "ApplicationEventType",
     "ApplicationOutcome",
+    "ApplicationResume",
     "ApplicationStatus",
     "AuditAction",
     "AuditEvent",
     "AutomationRun",
     "AutomationRunKind",
     "AutomationRunStatus",
+    "Experience",
     "InterviewStage",
     "Job",
+    "JobScore",
     "JobStatus",
     "LinkedInAccount",
     "Profile",

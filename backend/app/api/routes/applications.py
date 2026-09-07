@@ -17,6 +17,7 @@ from app.schemas.application import (
     InterviewStageCreate,
     InterviewStageRead,
     InterviewStageUpdate,
+    MarkAppliedRequest,
     OutcomeUpdate,
 )
 from app.schemas.automation import SubmitRequest
@@ -133,6 +134,37 @@ async def submit_application(
     await automation_service.submit_application(
         session, user, application_id, payload, background=background
     )
+    application = await application_service.get_application(session, user, application_id)
+    return application_service.to_application_detail(application)
+
+
+@router.post("/{application_id}/mark-applied", response_model=ApplicationDetail)
+async def mark_application_applied(
+    application_id: int,
+    payload: MarkAppliedRequest,
+    user: CurrentUser,
+    session: SessionDep,
+) -> ApplicationDetail:
+    """Record that you applied yourself, on the company's own site.
+
+    **This is not an automated submission and must never become one.** It does not
+    call the automation engine, it does not touch `LinkedInService`, and it is not
+    reachable from any path that could: it writes down a human act that already
+    happened somewhere else, so an application made with the letter and CV
+    prepared here stops being invisible to the pipeline board and to every
+    statistic.
+
+    Requires `confirm: true`, an application that is awaiting review, and the
+    EXTERNAL channel — an Easy Apply draft has a real submission path and cannot
+    be closed out this way.
+
+    Dry run does not apply here, because nothing is being sent. Neither do the
+    daily cap and the working-hour window: those exist to pace what this app
+    sends to LinkedIn, so enforcing them on a manual record would be theatre —
+    and it would suppress exactly the data the statistics are supposed to
+    measure. That choice is deliberate, not an omission.
+    """
+    await application_service.mark_applied(session, user, application_id, payload)
     application = await application_service.get_application(session, user, application_id)
     return application_service.to_application_detail(application)
 
