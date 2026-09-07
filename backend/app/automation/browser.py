@@ -97,6 +97,9 @@ class BrowserSession:
         self._context: BrowserContext | None = None
         self._page: Page | None = None
         self._blocked_reason: str | None = None
+        # Set only in demo mode; holds what the fake site recorded, so a demo run
+        # can be inspected the same way a test inspects it.
+        self.demo_portal: Any | None = None
 
     # --- Lifecycle --------------------------------------------------------
 
@@ -151,6 +154,11 @@ class BrowserSession:
             self._context.pages[0] if self._context.pages else await self._context.new_page()
         )
         self._blocked_reason = None
+
+        demo = get_settings().demo_portal
+        if demo:
+            await self._install_demo_portal()
+
         logger.info(
             "Browser session started.",
             extra={
@@ -158,6 +166,29 @@ class BrowserSession:
                 "status": "ok",
                 "user_id": self.user_id,
                 "headless": self.headless,
+                "demo_portal": demo,
+            },
+        )
+
+    async def _install_demo_portal(self) -> None:
+        """Serve the bundled fake site instead of the live one.
+
+        Imported here rather than at module scope so the demo fixture is not
+        loaded by a normal run. The warning is deliberately loud: with this on,
+        every "application" goes to a page served from this process, and nobody
+        should be able to mistake a demo run for a real one.
+        """
+        from app.automation.demo_portal import FakePortal, install
+
+        self.demo_portal = FakePortal()
+        await install(self.context, self.demo_portal)
+        logger.warning(
+            "DEMO_PORTAL is on: serving a bundled fake site. No real application "
+            "will be sent anywhere.",
+            extra={
+                "action": "browser.demo_portal",
+                "status": "enabled",
+                "user_id": self.user_id,
             },
         )
 
