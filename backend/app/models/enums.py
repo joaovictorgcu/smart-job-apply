@@ -32,6 +32,35 @@ class ApplicationStatus(StrEnum):
     FAILED = "failed"
 
 
+class ApplicationChannel(StrEnum):
+    """How an application reaches the employer.
+
+    `EASY_APPLY` is the LinkedIn form the engine fills in and sends after the
+    human approves it. `EXTERNAL` is a posting whose form lives on the company's
+    own site — the app prepares the content, the *user* submits it there, and
+    then records that it happened. The two are mutually exclusive doors: an
+    external application is never sent by the engine, and an Easy Apply one is
+    never written down as a manual act.
+    """
+
+    EASY_APPLY = "easy_apply"
+    EXTERNAL = "external"
+
+    @classmethod
+    def for_job(cls, *, source: str, easy_apply: bool) -> ApplicationChannel:
+        """Which channel a job's application has to use.
+
+        Derived from the posting rather than asked of the user: a job with no
+        Easy Apply button, or one discovered on a portal the automation cannot
+        drive, can only be applied to on the company's own site. The app already
+        knows both facts, so making the user restate them would be a question
+        with exactly one correct answer.
+        """
+        if easy_apply and source == "linkedin":
+            return cls.EASY_APPLY
+        return cls.EXTERNAL
+
+
 class ApplicationOutcome(StrEnum):
     """Real-world result of an application, tracked after it was submitted.
 

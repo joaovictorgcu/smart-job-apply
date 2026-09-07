@@ -348,14 +348,20 @@ async def build_preview(session: AsyncSession, user: User, job_ids: list[int]) -
     missing = [job_id for job_id in job_ids if job_id not in found_ids]
 
     already_applied = [job for job in jobs if job.status == JobStatus.APPLIED]
+    # A posting that is gone or past its deadline cannot be applied to, so it is
+    # excluded here for the same reason an applied one is — and `start_prepare_run`
+    # refuses it again, because the preview is advice and the refusal is the rule.
+    stale = [job for job in jobs if job.status != JobStatus.APPLIED and job_service.is_stale(job)]
+    stale_ids = {job.id for job in stale}
     below_threshold = [
         job
         for job in jobs
         if job.status != JobStatus.APPLIED
+        and job.id not in stale_ids
         and job.score is not None
         and job.score < user_settings.min_score
     ]
-    excluded = {job.id for job in already_applied} | {job.id for job in below_threshold}
+    excluded = {job.id for job in already_applied} | stale_ids | {job.id for job in below_threshold}
     selected = [job for job in jobs if job.id not in excluded]
 
     submitted_today = await application_service.count_submitted_today(session, user)
@@ -389,6 +395,13 @@ async def build_preview(session: AsyncSession, user: User, job_ids: list[int]) -
     elif len(selected) > remaining:
         warnings.append(
             f"{len(selected)} jobs selected but only {remaining} submissions remain today."
+        )
+    if stale:
+        expired = sum(1 for job in stale if job.expired_at is not None)
+        detail = f"{expired} no longer published" if expired else "past their deadline"
+        warnings.append(
+            f"{len(stale)} of the selected jobs can no longer be applied to "
+            f"({detail}) and were excluded."
         )
     unscored = [job for job in selected if job.score is None]
     if unscored:
@@ -487,7 +500,12 @@ async def start_prepare_run(
         )
 
     jobs = await job_service.get_jobs_by_ids(session, user, payload.job_ids)
-    eligible = [job for job in jobs if job.status != JobStatus.APPLIED]
+    # Same two refusals: an application already sent, and a posting that no longer
+    # accepts one. Filtering rather than raising per job keeps a batch usable when
+    # only part of it went stale between the preview and the confirmation.
+    eligible = [
+        job for job in jobs if job.status != JobStatus.APPLIED and not job_service.is_stale(job)
+    ]
     if not eligible:
         raise ValidationError("None of the selected jobs can be prepared.")
     _ensure_engine_free(user.id)

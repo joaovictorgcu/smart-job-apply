@@ -15,6 +15,7 @@ from app.api.errors import NotFoundError, PreconditionFailedError
 from app.database.base import utcnow
 from app.models import (
     Application,
+    ApplicationChannel,
     ApplicationEvent,
     ApplicationEventType,
     ApplicationOutcome,
@@ -31,6 +32,7 @@ from app.schemas.application import (
     ApplicationEventOut,
     ApplicationRead,
     ApplicationUpdate,
+    MarkAppliedRequest,
 )
 from app.services import job_service
 
@@ -181,6 +183,15 @@ async def approve(
             "Only an application awaiting review can be approved "
             f"(current status: '{application.status}')."
         )
+    # The approval this records is consent for the engine to send an Easy Apply
+    # form. An external application has no form here to send, so approving it
+    # would authorize an action that cannot exist; the engine refuses it again on
+    # its own side, but refusing here keeps the request from ever being scheduled.
+    if application.channel == ApplicationChannel.EXTERNAL:
+        raise PreconditionFailedError(
+            "This application is for a posting on the company's own site, so there is "
+            "nothing here to submit. Apply there and record it with 'mark applied'."
+        )
     application.approved_at = utcnow()
     await session.flush()
     await record_event(
@@ -195,22 +206,22 @@ async def approve(
     return application
 
 
-async def mark_submitted(
-    session: AsyncSession,
-    user: User,
-    application_id: int,
-    *,
-    was_dry_run: bool = False,
-    run_id: int | None = None,
-) -> Application:
-    """Flag the application (and its job) as submitted."""
-    application = await get_application(session, user, application_id)
+def _freeze_submission(application: Application, *, was_dry_run: bool) -> None:
+    """Move an application to SUBMITTED and freeze the record of what went out.
+
+    Shared by the two ways an application can leave this app — the engine's
+    reviewed Easy Apply submission and the user's own record of having applied on
+    the company's site. Both mean "this one is out there", so the snapshot, the
+    starting outcome and the job's status have to mean exactly the same thing
+    whichever door it came through; anything less and the pipeline board and the
+    statistics would only ever describe half of the user's applications.
+    """
     application.status = ApplicationStatus.SUBMITTED
     application.submitted_at = utcnow()
     application.was_dry_run = was_dry_run
     application.error_message = None
-    # Freeze what actually went out: postings vanish from LinkedIn quickly, and
-    # later edits to the draft must not rewrite the record of what was sent.
+    # Postings vanish from LinkedIn quickly, and later edits to the draft must not
+    # rewrite the record of what was sent.
     job = application.job
     application.submitted_snapshot = {
         "job_title": job.title if job else None,
@@ -226,8 +237,21 @@ async def mark_submitted(
     if application.outcome is None:
         application.outcome = ApplicationOutcome.APPLIED
         application.outcome_updated_at = utcnow()
-    if application.job is not None:
-        application.job.status = JobStatus.APPLIED
+    if job is not None:
+        job.status = JobStatus.APPLIED
+
+
+async def mark_submitted(
+    session: AsyncSession,
+    user: User,
+    application_id: int,
+    *,
+    was_dry_run: bool = False,
+    run_id: int | None = None,
+) -> Application:
+    """Flag the application (and its job) as submitted."""
+    application = await get_application(session, user, application_id)
+    _freeze_submission(application, was_dry_run=was_dry_run)
     await session.flush()
     await record_event(
         session,
@@ -238,6 +262,70 @@ async def mark_submitted(
         run_id=run_id,
         job_id=application.job_id,
         user_id=user.id,
+    )
+    return application
+
+
+async def mark_applied(
+    session: AsyncSession, user: User, application_id: int, payload: MarkAppliedRequest
+) -> Application:
+    """Write down that the user applied by hand, on the company's own site.
+
+    This sends nothing and must never be made to. It is the bookkeeping half of
+    the one channel this app deliberately does not automate: the content was
+    prepared here, the human submitted it there, and without this the whole
+    application would stay invisible to the board and to every statistic.
+
+    Refused unless the user confirmed, the application really is awaiting review,
+    and its channel is EXTERNAL — an Easy Apply draft has a real submission path
+    and may not be marked done by hand while it is still sitting unsent.
+
+    Deliberately not subject to dry run, the daily cap or the working hours:
+    those pace what *this app* sends to LinkedIn, and nothing is being sent. A
+    cap that blocked writing down an application the user already made would be
+    theatre, and it would falsify the very numbers it pretends to protect.
+    """
+    if payload.confirm is not True:
+        raise PreconditionFailedError(
+            "Recording a manual application requires explicit confirmation: send "
+            "'confirm': true."
+        )
+
+    application = await get_application(session, user, application_id)
+    if application.channel != ApplicationChannel.EXTERNAL:
+        raise PreconditionFailedError(
+            "Only an application to a posting on the company's own site can be recorded "
+            "as applied by hand. This one has a LinkedIn Easy Apply form; approve and "
+            "submit it instead."
+        )
+    if application.status != ApplicationStatus.AWAITING_REVIEW:
+        raise PreconditionFailedError(
+            "Only an application awaiting review can be recorded as applied "
+            f"(current status: '{application.status}')."
+        )
+
+    if payload.note:
+        application.outcome_note = payload.note
+    _freeze_submission(application, was_dry_run=False)
+    await session.flush()
+    await record_event(
+        session,
+        application_id=application.id,
+        event_type=ApplicationEventType.SUBMITTED,
+        message="The user applied on the company's own site and recorded it here.",
+        payload={"channel": ApplicationChannel.EXTERNAL.value},
+        job_id=application.job_id,
+        user_id=user.id,
+    )
+    logger.info(
+        "Manual application recorded.",
+        extra={
+            "action": "application.mark_applied",
+            "status": "ok",
+            "user_id": user.id,
+            "application_id": application.id,
+            "job_id": application.job_id,
+        },
     )
     return application
 

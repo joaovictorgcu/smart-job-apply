@@ -1,13 +1,14 @@
 import { ArrowLeft, Briefcase, CircleAlert, ExternalLink } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 
+import { ApplicationResumePanel } from '@/components/ApplicationResumePanel';
 import { ApplicationReviewPanel } from '@/components/ApplicationReviewPanel';
 import { EmptyState } from '@/components/EmptyState';
 import { InterviewPanel } from '@/components/InterviewPanel';
 import { Card, CardHeader, MetaRow, Note, Skeleton } from '@/components/primitives';
 import { ScoreBadge } from '@/components/ScoreBadge';
 import { StatusBadge } from '@/components/StatusBadge';
-import { useApplication } from '@/hooks/useApi';
+import { useApplication, useSessionStatus } from '@/hooks/useApi';
 import { badgeClass, enumLabel, formatDateTime, formatTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { ApplicationEvent } from '@/types/api';
@@ -66,6 +67,7 @@ export function ApplicationDetail() {
   const params = useParams<{ id: string }>();
   const applicationId = Number(params.id);
   const { data: application, isLoading, isError } = useApplication(applicationId);
+  const { data: session } = useSessionStatus();
 
   if (isLoading) {
     return (
@@ -148,7 +150,12 @@ export function ApplicationDetail() {
 
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
               <StatusBadge kind="application" status={application.status} />
-              {application.was_dry_run ? (
+              {application.channel === 'external' ? (
+                <span className={badgeClass('info')}>no site da empresa</span>
+              ) : null}
+              {/* Dry run describes a form that was not filled in. There is no
+                  form on the external channel, so the badge would only mislead. */}
+              {application.was_dry_run && application.channel !== 'external' ? (
                 <span className={badgeClass('neutral')}>preenchida em modo de teste</span>
               ) : null}
               {showSteps ? (
@@ -178,7 +185,17 @@ export function ApplicationDetail() {
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <ApplicationReviewPanel application={application} className="lg:col-span-2" />
+        <div className="space-y-4 lg:col-span-2">
+          <ApplicationReviewPanel application={application} />
+          {/* This application's own version of the resume. It sits beside the
+              review panel because both answer "what exactly is going out for
+              this vacancy" — and unlike the letter, this one has a master
+              document elsewhere that it must be distinguishable from. */}
+          <ApplicationResumePanel
+            applicationId={application.id}
+            aiConfigured={Boolean(session?.ai_configured)}
+          />
+        </div>
 
         <div className="space-y-4">
           <InterviewPanel

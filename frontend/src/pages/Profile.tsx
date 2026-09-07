@@ -1,7 +1,7 @@
 import { Info, Plus, Save, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import type { KeyboardEvent } from 'react';
 
+import { MasterResumeEditor } from '@/components/MasterResumeEditor';
 import {
   Button,
   Card,
@@ -14,10 +14,17 @@ import {
   Textarea,
 } from '@/components/primitives';
 import { ResumeUploader } from '@/components/ResumeUploader';
+import { TagEditor } from '@/components/TagEditor';
 import { useToast } from '@/components/ToastProvider';
 import { useProfile, useUpdateProfile } from '@/hooks/useApi';
+import { stripTemporaryIds } from '@/lib/masterResume';
 import { errorMessage } from '@/services/client';
-import type { Profile as ProfileType } from '@/types/api';
+import type {
+  Profile as ProfileType,
+  ResumeEducationEntry,
+  ResumeExperience,
+  ResumeProject,
+} from '@/types/api';
 
 interface AnswerRow {
   id: number;
@@ -33,6 +40,10 @@ interface Draft {
   summary: string;
   resumeText: string;
   skills: string[];
+  experiences: ResumeExperience[];
+  projects: ResumeProject[];
+  education: ResumeEducationEntry[];
+  certifications: string[];
   languages: string[];
   answers: AnswerRow[];
 }
@@ -49,76 +60,18 @@ function draftFrom(profile: ProfileType): Draft {
     summary: profile.summary ?? '',
     resumeText: profile.resume_text ?? '',
     skills: profile.skills,
+    // Defaulted rather than assumed present: a profile fetched from a server
+    // that predates these fields, or a cached response, has none of them.
+    experiences: profile.experiences ?? [],
+    projects: profile.projects ?? [],
+    education: profile.education ?? [],
+    certifications: profile.certifications ?? [],
     languages: profile.preferred_languages,
     answers: Object.entries(profile.answer_bank).map(([key, value]) => {
       answerRowId += 1;
       return { id: answerRowId, key, value: value === null ? '' : String(value) };
     }),
   };
-}
-
-function TagEditor({
-  id,
-  tags,
-  onChange,
-  placeholder,
-}: {
-  id: string;
-  tags: string[];
-  onChange: (tags: string[]) => void;
-  placeholder: string;
-}) {
-  const [value, setValue] = useState('');
-
-  const add = () => {
-    const parts = value
-      .split(',')
-      .map((part) => part.trim())
-      .filter((part) => part.length > 0 && !tags.includes(part));
-    if (parts.length > 0) onChange([...tags, ...parts]);
-    setValue('');
-  };
-
-  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter' || event.key === ',') {
-      event.preventDefault();
-      add();
-    } else if (event.key === 'Backspace' && value === '' && tags.length > 0) {
-      onChange(tags.slice(0, -1));
-    }
-  };
-
-  return (
-    <div>
-      {tags.length > 0 ? (
-        <ul className="mb-2 flex flex-wrap gap-1.5">
-          {tags.map((tag) => (
-            <li key={tag}>
-              <span className="inline-flex items-center gap-1 rounded-full border border-accent-500/35 bg-accent-500/12 py-0.5 pl-2.5 pr-1 text-xs font-medium text-accent-400">
-                {tag}
-                <button
-                  type="button"
-                  onClick={() => onChange(tags.filter((entry) => entry !== tag))}
-                  aria-label={`Remover ${tag}`}
-                  className="rounded-full p-0.5 hover:bg-accent-500/20"
-                >
-                  <X aria-hidden className="h-3 w-3" />
-                </button>
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      <Input
-        id={id}
-        value={value}
-        placeholder={placeholder}
-        onChange={(event) => setValue(event.target.value)}
-        onKeyDown={onKeyDown}
-        onBlur={add}
-      />
-    </div>
-  );
 }
 
 export function Profile() {
@@ -174,6 +127,12 @@ export function Profile() {
       summary: draft.summary.trim() || null,
       resume_text: draft.resumeText.trim() || null,
       skills: draft.skills,
+      // Entries without a real id yet get one from the server, derived from
+      // their content so it survives reordering.
+      experiences: stripTemporaryIds(draft.experiences),
+      projects: stripTemporaryIds(draft.projects),
+      education: stripTemporaryIds(draft.education),
+      certifications: draft.certifications,
       preferred_languages: draft.languages,
       answer_bank: answerBank,
     });
@@ -183,7 +142,7 @@ export function Profile() {
     <div className="space-y-5 pb-24">
       <PageHeader
         title="Perfil"
-        description="O que a IA sabe sobre você. Tudo aqui alimenta a pontuação de vagas, as cartas de apresentação e as respostas de triagem."
+        description="Este é o seu currículo principal. Cada candidatura cria a sua própria versão dele, adaptada à vaga — e o que você editar aqui vale para as próximas, sem mexer nas versões já revisadas."
       />
 
       <Card>
@@ -315,6 +274,17 @@ export function Profile() {
           </div>
         </div>
       </Card>
+
+      <MasterResumeEditor
+        experiences={draft.experiences}
+        projects={draft.projects}
+        education={draft.education}
+        certifications={draft.certifications}
+        onExperiencesChange={(experiences) => patch({ experiences })}
+        onProjectsChange={(projects) => patch({ projects })}
+        onEducationChange={(education) => patch({ education })}
+        onCertificationsChange={(certifications) => patch({ certifications })}
+      />
 
       <Card>
         <CardHeader

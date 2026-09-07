@@ -59,7 +59,18 @@ class User(Base, TimestampMixin):
 
 
 class Profile(Base, TimestampMixin):
-    """Resume as text plus the answer bank used by the AI."""
+    """The **master resume**: free text, structured history, and the answer bank.
+
+    This is the one resume the user maintains. Every application derives its own
+    version from it (`TailoredResume`), and editing it here can never reach back
+    into a version that was already derived — see `TailoredResume.base_snapshot`.
+
+    `resume_text` came first and stays authoritative for the AI path and for the
+    invention guard. The structured lists below are what make a *demonstrably*
+    per-job resume possible: reordering experiences and re-describing them needs
+    experiences as data, not as one blob of prose. A profile with none of them
+    behaves exactly as it did before they existed.
+    """
 
     __tablename__ = "profiles"
 
@@ -76,6 +87,23 @@ class Profile(Base, TimestampMixin):
     resume_text: Mapped[str | None] = mapped_column(Text, default=None)
     resume_filename: Mapped[str | None] = mapped_column(String(255), default=None)
     skills: Mapped[list[str]] = mapped_column(JSON, default=list)
+
+    # --- Structured master resume (parsed by `app.domain.resume`) ---
+    #
+    # [{"id", "role", "company", "start", "end", "location", "summary",
+    #   "technologies": [...], "highlights": [{"text", "technologies": [...]}]}]
+    #
+    # `highlights` is the field the whole feature turns on. One experience holds
+    # several achievements the user wrote, each tagged with what it is about, so
+    # a .NET posting and a React posting can honestly lead with different
+    # sentences from the same job — without a model inventing either.
+    experiences: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    # [{"id", "name", "description", "outcome", "technologies": [...]}]
+    projects: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    # [{"id", "degree", "institution", "start", "end", "detail"}]
+    education: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    certifications: Mapped[list[str]] = mapped_column(JSON, default=list)
+
     preferred_languages: Mapped[list[str]] = mapped_column(JSON, default=list)
     # Default answers for recurring screening questions, e.g.:
     # {"salary_expectation": "15,000", "notice_period": "30 days",

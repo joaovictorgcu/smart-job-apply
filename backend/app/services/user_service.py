@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import io
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +20,7 @@ from app.auth.security import hash_password, verify_password
 from app.automation.contracts import ProfileContext
 from app.config import get_settings
 from app.database.base import utcnow
+from app.domain.language import slugify
 from app.models import AuditAction, AuditEvent, LinkedInAccount, Profile, User, UserSettings
 from app.observability import get_logger, record_audit_event
 from app.schemas.user import ProfileUpdate, UserSettingsUpdate
@@ -131,9 +133,51 @@ async def get_or_create_profile(session: AsyncSession, user: User) -> Profile:
     return profile
 
 
+# Structured master-resume lists whose entries carry a stable `id`. The id is
+# what lets a derived version point back at the entry it came from, and what
+# keeps the frontend's list keys steady across a save.
+_KEYED_RESUME_LISTS = ("experiences", "projects", "education")
+
+
+def _assign_entry_ids(entries: list[dict[str, Any]], prefix: str) -> list[dict[str, Any]]:
+    """Give every entry a stable id, deriving one from its content when absent.
+
+    Derived rather than sequential so an id survives reordering: `exp-3` would
+    silently come to mean a different job the moment the user drags a row, and
+    every version that referenced it would then be pointing at the wrong one. A
+    content slug only changes when the content it names changes. Duplicates get
+    a numeric suffix, because two spells at one company with one title are a
+    real thing and a collision would merge them.
+    """
+    seen: set[str] = set()
+    result: list[dict[str, Any]] = []
+    for index, entry in enumerate(entries):
+        candidate = str(entry.get("id") or "").strip()
+        if not candidate:
+            basis = " ".join(
+                str(entry.get(key) or "")
+                for key in ("role", "company", "name", "degree", "institution")
+            )
+            candidate = f"{prefix}-{slugify(basis) or index + 1}"
+        unique = candidate
+        suffix = 2
+        while unique in seen:
+            unique = f"{candidate}-{suffix}"
+            suffix += 1
+        seen.add(unique)
+        result.append({**entry, "id": unique})
+    return result
+
+
 async def update_profile(session: AsyncSession, user: User, payload: ProfileUpdate) -> Profile:
     profile = await get_or_create_profile(session, user)
-    changes = payload.model_dump(exclude_unset=True)
+    # `mode="json"` so nested resume models land in the JSON columns as plain
+    # dicts and lists — a `BaseModel` instance would not survive serialisation.
+    changes = payload.model_dump(exclude_unset=True, mode="json")
+    for field in _KEYED_RESUME_LISTS:
+        if isinstance(changes.get(field), list):
+            changes[field] = _assign_entry_ids(changes[field], field[:3])
+
     changed = sorted(field for field, value in changes.items() if getattr(profile, field) != value)
 
     for field, value in changes.items():
@@ -366,6 +410,14 @@ async def build_profile_context(session: AsyncSession, user: User) -> ProfileCon
         resume_text=profile.resume_text,
         resume_path=path,
         skills=list(profile.skills or []),
+        # Copied, not referenced: a derivation freezes this snapshot, and a
+        # shared list would let a later profile edit mutate it in place.
+        experiences=[
+            dict(entry) for entry in (profile.experiences or []) if isinstance(entry, dict)
+        ],
+        projects=[dict(entry) for entry in (profile.projects or []) if isinstance(entry, dict)],
+        education=[dict(entry) for entry in (profile.education or []) if isinstance(entry, dict)],
+        certifications=list(profile.certifications or []),
         answer_bank=dict(profile.answer_bank or {}),
         preferred_languages=list(profile.preferred_languages or []),
     )

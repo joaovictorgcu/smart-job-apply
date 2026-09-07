@@ -31,6 +31,7 @@ import type {
   ApplicationEvent,
   ApplicationListQuery,
   ApplicationOutcome,
+  ApplicationResume,
   ApplicationUpdate,
   AutomationRun,
   DashboardStats,
@@ -45,6 +46,7 @@ import type {
   PreviewResponse,
   Profile,
   ProfileUpdate,
+  ResumeStrategy,
   Search,
   SearchCreate,
   SearchRunRequest,
@@ -75,6 +77,9 @@ export const queryKeys = {
     ["applications", "list", query] as const,
   application: (id: number) => ["applications", "detail", id] as const,
   applicationEvents: (id: number) => ["applications", "events", id] as const,
+  // Scoped by application id: N open applications, N independent entries, so a
+  // write to one can never invalidate another's version.
+  applicationResume: (id: number) => ["applications", "resume", id] as const,
   board: () => ["applications", "board"] as const,
   outcomeStats: () => ["stats", "outcomes"] as const,
   segmentStats: () => ["stats", "segments"] as const,
@@ -237,6 +242,75 @@ export function useUpdateTailoredResume(
     ...options,
     onSuccess: (data, vars, context) => {
       client.setQueryData(queryKeys.tailoredResume(jobId), data);
+      options?.onSuccess?.(data, vars, context);
+    },
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* One application's own resume                                               */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * Every key here is scoped by application id, so N open applications hold N
+ * independent cache entries and writing one can never invalidate another's.
+ * The job-scoped `tailoredResume` key is refreshed alongside, because both
+ * address the same stored version and a stale job screen would contradict the
+ * application screen the user just edited.
+ */
+
+/**
+ * This application's version of the resume. A missing version is a normal state
+ * — the application may predate the feature, or simply not have one yet — so a
+ * 404 resolves to `null` rather than an error.
+ */
+export function useApplicationResume(
+  applicationId: number,
+  options?: QueryOpts<ApplicationResume | null>,
+): UseQueryResult<ApplicationResume | null, ApiError> {
+  return useQuery<ApplicationResume | null, ApiError>({
+    queryKey: queryKeys.applicationResume(applicationId),
+    queryFn: async ({ signal }) => {
+      try {
+        return await tailoringService.fetchApplicationResume(applicationId, signal);
+      } catch (error) {
+        if ((error as { status?: number })?.status === 404) return null;
+        throw error;
+      }
+    },
+    ...options,
+  });
+}
+
+export function useDeriveApplicationResume(
+  applicationId: number,
+  options?: MutationOpts<ApplicationResume, ResumeStrategy | void>,
+): UseMutationResult<ApplicationResume, ApiError, ResumeStrategy | void> {
+  const client = useQueryClient();
+  return useMutation<ApplicationResume, ApiError, ResumeStrategy | void>({
+    mutationFn: (strategy) =>
+      tailoringService.createApplicationResume(applicationId, strategy || "deterministic"),
+    ...options,
+    onSuccess: (data, vars, context) => {
+      client.setQueryData(queryKeys.applicationResume(applicationId), data);
+      void client.invalidateQueries({ queryKey: queryKeys.tailoredResume(data.job_id) });
+      options?.onSuccess?.(data, vars, context);
+    },
+  });
+}
+
+export function useUpdateApplicationResume(
+  applicationId: number,
+  options?: MutationOpts<ApplicationResume, string>,
+): UseMutationResult<ApplicationResume, ApiError, string> {
+  const client = useQueryClient();
+  return useMutation<ApplicationResume, ApiError, string>({
+    mutationFn: (content) =>
+      tailoringService.updateApplicationResume(applicationId, content),
+    ...options,
+    onSuccess: (data, vars, context) => {
+      client.setQueryData(queryKeys.applicationResume(applicationId), data);
+      void client.invalidateQueries({ queryKey: queryKeys.tailoredResume(data.job_id) });
       options?.onSuccess?.(data, vars, context);
     },
   });
@@ -436,6 +510,32 @@ export function useSubmitApplication(
       void client.invalidateQueries({ queryKey: queryKeys.applications() });
       void client.invalidateQueries({ queryKey: queryKeys.jobs() });
       void client.invalidateQueries({ queryKey: queryKeys.session() });
+      void client.invalidateQueries({ queryKey: queryKeys.stats() });
+      options?.onSuccess?.(data, vars, context);
+    },
+  });
+}
+
+/**
+ * Record an application the user made on the company's own site.
+ *
+ * Not a submission and not a quieter route to one: it writes down what already
+ * happened elsewhere. It invalidates the same caches as a submission because the
+ * *consequences* are the same — the application joins the board and the stats.
+ */
+export function useMarkApplied(
+  options?: MutationOpts<ApplicationDetail, { id: number; note?: string | null }>,
+): UseMutationResult<ApplicationDetail, ApiError, { id: number; note?: string | null }> {
+  const client = useQueryClient();
+  return useMutation<ApplicationDetail, ApiError, { id: number; note?: string | null }>({
+    mutationFn: ({ id, note }) => applicationsService.markApplicationApplied(id, note),
+    ...options,
+    onSuccess: (data, vars, context) => {
+      client.setQueryData(queryKeys.application(data.id), data);
+      void client.invalidateQueries({ queryKey: queryKeys.applications() });
+      void client.invalidateQueries({ queryKey: queryKeys.jobs() });
+      // `stats()` is the prefix of the outcome and segment keys, so this covers
+      // the analytics that only now start seeing this application.
       void client.invalidateQueries({ queryKey: queryKeys.stats() });
       options?.onSuccess?.(data, vars, context);
     },

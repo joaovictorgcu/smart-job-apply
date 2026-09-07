@@ -18,6 +18,8 @@
 #   make migration m=.. ->  cd backend; ..\.venv\Scripts\alembic revision
 #                             --autogenerate -m "..."
 #   make user           ->  .venv\Scripts\python scripts\create_user.py
+#   make seed-demo      ->  .venv\Scripts\python scripts\seed_demo.py
+#   make seed-demo n=10 ->  ... --applications 10
 #   make docker-*       ->  the same docker compose commands, unchanged
 #   make clean          ->  Remove-Item -Recurse -Force .venv, frontend\node_modules,
 #                             frontend\dist, .pytest_cache, .ruff_cache, .mypy_cache
@@ -35,8 +37,8 @@ BACKEND_PORT ?= 8000
 
 .DEFAULT_GOAL := help
 .PHONY: help install dev dev-backend dev-frontend build test lint format \
-        typecheck migrate migration user docker-build docker-up docker-down \
-        docker-logs clean
+        typecheck migrate migration user seed-demo docker-build docker-up \
+        docker-down docker-logs clean
 
 help: ## Show this help
 	@printf 'smart-job-apply — available targets\n\n'
@@ -85,6 +87,9 @@ migration: ## Autogenerate a migration from the models (usage: make migration m=
 
 user: ## Create an application account (prompts for the password)
 	$(PY) scripts/create_user.py
+
+seed-demo: ## Seed one candidate, five vacancies and five per-application resumes
+	$(PY) scripts/seed_demo.py $(if $(n),--applications $(n),)
 
 docker-build: ## Build the Docker image
 	docker compose build

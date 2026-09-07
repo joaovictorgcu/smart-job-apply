@@ -8,9 +8,13 @@
 
 import type {
   ApplicationDetail,
+  ApplicationResume,
   Job,
   PreviewResponse,
+  ResumeFocus,
+  ResumeSections,
   ScreeningAnswer,
+  TailoredExperience,
   UserSettings,
 } from "@/types/api";
 import type { AppEvent } from "@/types/events";
@@ -32,6 +36,11 @@ export function buildJob(overrides: Partial<Job> = {}): Job {
     missing_requirements: [],
     score_breakdown: [],
     score_gates: [],
+    // Derived server-side from the score and its breakdown; an empty breakdown
+    // has no arithmetic to report, which is exactly what an old job looks like.
+    verdict: "strong",
+    weighted_score: null,
+    score_divergence: null,
     skip_reason: null,
     detected_language: "pt",
     posted_at: "2026-08-01T09:00:00Z",
@@ -65,6 +74,7 @@ export function buildApplicationDetail(
     id: 5,
     job_id: 10,
     status: "awaiting_review",
+    channel: "easy_apply",
     cover_letter: "Prezada equipe, tenho interesse nesta vaga.",
     screening_answers: [buildScreeningAnswer()],
     resume_filename: "curriculo.pdf",
@@ -117,6 +127,109 @@ export function buildPreview(overrides: Partial<PreviewResponse> = {}): PreviewR
     requires_confirmation: true,
     jobs: [buildJob()],
     warnings: [],
+    ...overrides,
+  };
+}
+
+export function buildTailoredExperience(
+  overrides: Partial<TailoredExperience> = {},
+): TailoredExperience {
+  return {
+    id: "exp-globalthings",
+    role: "Tech Lead",
+    company: "Globalthings",
+    period: "2023 — atual",
+    location: "Recife, PE",
+    description:
+      "Desenvolvimento e manutenção de aplicações backend em C# e .NET 8, com ASP.NET Core e Entity Framework sobre PostgreSQL.",
+    highlights: [
+      "Desenvolvimento e manutenção de aplicações backend em C# e .NET 8, com ASP.NET Core e Entity Framework sobre PostgreSQL.",
+    ],
+    technologies: [".NET", "C#", "PostgreSQL", "React"],
+    matched: [".NET", "C#", "PostgreSQL"],
+    relevance: 100,
+    emphasis: "lead",
+    omitted: ["Condução de code reviews semanais e mentoria de três desenvolvedores."],
+    ...overrides,
+  };
+}
+
+export function buildResumeSections(overrides: Partial<ResumeSections> = {}): ResumeSections {
+  return {
+    full_name: "Alex Moreira",
+    headline: "Desenvolvimento de software — .NET, Python, React e APIs",
+    location: "Recife, PE",
+    summary: "Dez anos construindo software de ponta a ponta.",
+    years_of_experience: 10,
+    prioritized_skills: [".NET", "C#", "PostgreSQL"],
+    other_skills: ["React", "Python"],
+    experiences: [buildTailoredExperience()],
+    projects: [
+      {
+        id: "proj-gateway",
+        name: "Gateway de APIs de parceiros",
+        description: "Camada em ASP.NET Core.",
+        outcome: "Integração de um novo parceiro passou de semanas para dias.",
+        technologies: ["C#", "ASP.NET Core"],
+        matched: ["C#"],
+        relevance: 100,
+      },
+    ],
+    education: [
+      {
+        id: "edu-ufpe",
+        degree: "Bacharelado em Ciência da Computação",
+        institution: "UFPE",
+        start: "2011",
+        end: "2015",
+        detail: "",
+      },
+    ],
+    certifications: ["Microsoft AZ-204"],
+    language: "pt",
+    ...overrides,
+  };
+}
+
+export function buildResumeFocus(overrides: Partial<ResumeFocus> = {}): ResumeFocus {
+  return {
+    title: "Desenvolvedor Backend .NET",
+    company: "Meridian Software",
+    level: null,
+    keywords: [".NET", "C#", "PostgreSQL"],
+    unsupported: ["Elixir"],
+    ...overrides,
+  };
+}
+
+export function buildApplicationResume(
+  overrides: Partial<ApplicationResume> = {},
+): ApplicationResume {
+  return {
+    application_id: 5,
+    job_id: 10,
+    job_title: "Desenvolvedor Backend .NET",
+    job_company: "Meridian Software",
+    content: "# Alex Moreira\n\n## Foco desta versão\n.NET, C#, PostgreSQL",
+    changes: [
+      {
+        section: "Competências",
+        action: "reordered",
+        detail: "3 competência(s) pedidas pelo anúncio passaram para o início.",
+      },
+    ],
+    unsupported_requirements: ["Elixir"],
+    invention_flags: [],
+    stretch_flags: [],
+    summary: "Seu próprio currículo reorganizado para Desenvolvedor Backend .NET.",
+    model: null,
+    was_edited: false,
+    is_stale: false,
+    strategy: "deterministic",
+    sections: buildResumeSections(),
+    focus: buildResumeFocus(),
+    created_at: "2026-09-07T10:00:00Z",
+    updated_at: "2026-09-07T10:00:00Z",
     ...overrides,
   };
 }

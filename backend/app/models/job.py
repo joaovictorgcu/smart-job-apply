@@ -21,6 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import Base, TimestampMixin
 from app.models.enums import (
     AnalysisKind,
+    ApplicationChannel,
     ApplicationEventType,
     ApplicationOutcome,
     ApplicationStatus,
@@ -29,6 +30,7 @@ from app.models.enums import (
 
 if TYPE_CHECKING:
     from app.models.automation import AutomationRun
+    from app.models.score import JobScore
     from app.models.user import User
 
 
@@ -86,7 +88,19 @@ class Job(Base, TimestampMixin):
     detected_language: Mapped[str | None] = mapped_column(String(20), default=None)
     posted_at: Mapped[datetime | None] = mapped_column(default=None)
 
+    # When applications close. Comes from the portal when one publishes it, and is
+    # otherwise the user's own note — no adapter reports it today (Gupy's search
+    # payload carries none), so in practice it is user-entered until one does.
+    deadline: Mapped[datetime | None] = mapped_column(default=None)
+    # When discovery last found the posting gone. Set by `expire_missing`, never
+    # cleared: a posting that came back is a new posting to the portal too.
+    expired_at: Mapped[datetime | None] = mapped_column(default=None)
+
     status: Mapped[JobStatus] = mapped_column(String(30), default=JobStatus.DISCOVERED, index=True)
+    # The denormalised *latest* score. It stays a column on purpose: listing filters
+    # (`min_score`) and the default ordering run off it, and neither can afford a
+    # correlated subquery over `job_scores` on every page. The history lives in
+    # `JobScore` — see `scores` below — and this is deliberately its duplicate head.
     score: Mapped[int | None] = mapped_column(Integer, default=None, index=True)
     score_reasons: Mapped[list[str]] = mapped_column(JSON, default=list)
     missing_requirements: Mapped[list[str]] = mapped_column(JSON, default=list)
@@ -107,6 +121,12 @@ class Job(Base, TimestampMixin):
     )
     analyses: Mapped[list[AIAnalysis]] = relationship(
         back_populates="job", cascade="all, delete-orphan"
+    )
+    # Every verdict this job ever received, newest last. The head of this list and
+    # `score` above hold the same number by construction; that duplication is the
+    # point, not an oversight to tidy up.
+    scores: Mapped[list[JobScore]] = relationship(
+        back_populates="job", cascade="all, delete-orphan", order_by="JobScore.created_at"
     )
     tailored_resume: Mapped[TailoredResume | None] = relationship(
         back_populates="job", cascade="all, delete-orphan", uselist=False
@@ -130,6 +150,14 @@ class Application(Base, TimestampMixin):
 
     status: Mapped[ApplicationStatus] = mapped_column(
         String(30), default=ApplicationStatus.DRAFT, index=True
+    )
+    # Which of the two mutually exclusive completion paths this application may
+    # take: the engine's reviewed Easy Apply submission, or a human applying on
+    # the company's own site and recording it afterwards. Decided from the job at
+    # preparation time, never from the request. Rows written before this existed
+    # default to `easy_apply`, which is what every one of them was.
+    channel: Mapped[ApplicationChannel] = mapped_column(
+        String(20), default=ApplicationChannel.EASY_APPLY, index=True
     )
     cover_letter: Mapped[str | None] = mapped_column(Text, default=None)
     # [{"question", "answer", "type", "options", "confidence", "needs_review", "field_id"}]
@@ -260,12 +288,27 @@ class AIAnalysis(Base, TimestampMixin):
 
 
 class TailoredResume(Base, TimestampMixin):
-    """A resume adapted to one job — reorganized and re-emphasized, never invented.
+    """**One application's own resume** — reorganized and re-emphasized, never invented.
 
-    One per (user, job): re-tailoring the same job overwrites the draft. `content`
-    starts as the model's output and becomes the user's once they edit it.
-    `invention_flags` holds the invention-guard's output — technologies present in
-    the tailored text but absent from the source — for the user to verify.
+    Keyed on `job_id`, and reached from an application through its job. That is
+    not an accident of history: `Application` is unique per job
+    (`uq_application_job`), so "one resume per job" and "one resume per
+    application" are the same constraint, and a second FK duplicating a relation
+    the schema already forces would be one more thing that can disagree with
+    itself. `GET /applications/{id}/resume` resolves through `Application.job`.
+
+    Isolation between applications is therefore structural: N applications are N
+    jobs are N rows, and no request can address two of them at once. Isolation
+    from the *master* resume is what `base_snapshot` is for — it freezes the
+    profile this version was derived from, so a later profile edit changes the
+    master and every future derivation while leaving this one exactly as the user
+    reviewed it. `source_fingerprint` then reports the divergence as `is_stale`
+    instead of silently rewriting anything.
+
+    `content` starts as the derivation's Markdown and becomes the user's once
+    they edit it. `invention_flags` holds the invention-guard's output —
+    technologies present in the tailored text but absent from the source — for
+    the user to verify.
     """
 
     __tablename__ = "tailored_resumes"
@@ -291,5 +334,23 @@ class TailoredResume(Base, TimestampMixin):
     # after the user edits their profile.
     source_fingerprint: Mapped[str | None] = mapped_column(String(64), default=None)
     was_edited: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # --- The per-application derivation (see `app.domain.resume`) ---
+    #
+    # The structured resume this application presents: prioritised skills, the
+    # experiences in their chosen order with their adapted descriptions, the
+    # relevant projects first. Empty for rows written before this existed, which
+    # the API reports as a legacy row and the UI renders from `content` alone.
+    sections: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # {"title", "company", "level", "keywords": [...], "unsupported": [...]} —
+    # the posting reduced to what was matched, so the UI can say *why* this
+    # version looks the way it does and which vacancy it was built for.
+    focus: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # The master resume as it stood when this version was derived. The isolation
+    # guarantee, and the only way to answer "what did this version start from".
+    base_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    # "deterministic" (structure only, no model call) or "ai" (a model wrote the
+    # Markdown on top of the same structure).
+    strategy: Mapped[str] = mapped_column(String(20), default="deterministic")
 
     job: Mapped[Job] = relationship(back_populates="tailored_resume")
