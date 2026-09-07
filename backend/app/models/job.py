@@ -21,6 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database.base import Base, TimestampMixin
 from app.models.enums import (
     AnalysisKind,
+    ApplicationChannel,
     ApplicationEventType,
     ApplicationOutcome,
     ApplicationStatus,
@@ -29,6 +30,7 @@ from app.models.enums import (
 
 if TYPE_CHECKING:
     from app.models.automation import AutomationRun
+    from app.models.score import JobScore
     from app.models.user import User
 
 
@@ -86,7 +88,19 @@ class Job(Base, TimestampMixin):
     detected_language: Mapped[str | None] = mapped_column(String(20), default=None)
     posted_at: Mapped[datetime | None] = mapped_column(default=None)
 
+    # When applications close. Comes from the portal when one publishes it, and is
+    # otherwise the user's own note — no adapter reports it today (Gupy's search
+    # payload carries none), so in practice it is user-entered until one does.
+    deadline: Mapped[datetime | None] = mapped_column(default=None)
+    # When discovery last found the posting gone. Set by `expire_missing`, never
+    # cleared: a posting that came back is a new posting to the portal too.
+    expired_at: Mapped[datetime | None] = mapped_column(default=None)
+
     status: Mapped[JobStatus] = mapped_column(String(30), default=JobStatus.DISCOVERED, index=True)
+    # The denormalised *latest* score. It stays a column on purpose: listing filters
+    # (`min_score`) and the default ordering run off it, and neither can afford a
+    # correlated subquery over `job_scores` on every page. The history lives in
+    # `JobScore` — see `scores` below — and this is deliberately its duplicate head.
     score: Mapped[int | None] = mapped_column(Integer, default=None, index=True)
     score_reasons: Mapped[list[str]] = mapped_column(JSON, default=list)
     missing_requirements: Mapped[list[str]] = mapped_column(JSON, default=list)
@@ -107,6 +121,12 @@ class Job(Base, TimestampMixin):
     )
     analyses: Mapped[list[AIAnalysis]] = relationship(
         back_populates="job", cascade="all, delete-orphan"
+    )
+    # Every verdict this job ever received, newest last. The head of this list and
+    # `score` above hold the same number by construction; that duplication is the
+    # point, not an oversight to tidy up.
+    scores: Mapped[list[JobScore]] = relationship(
+        back_populates="job", cascade="all, delete-orphan", order_by="JobScore.created_at"
     )
     tailored_resume: Mapped[TailoredResume | None] = relationship(
         back_populates="job", cascade="all, delete-orphan", uselist=False
@@ -130,6 +150,14 @@ class Application(Base, TimestampMixin):
 
     status: Mapped[ApplicationStatus] = mapped_column(
         String(30), default=ApplicationStatus.DRAFT, index=True
+    )
+    # Which of the two mutually exclusive completion paths this application may
+    # take: the engine's reviewed Easy Apply submission, or a human applying on
+    # the company's own site and recording it afterwards. Decided from the job at
+    # preparation time, never from the request. Rows written before this existed
+    # default to `easy_apply`, which is what every one of them was.
+    channel: Mapped[ApplicationChannel] = mapped_column(
+        String(20), default=ApplicationChannel.EASY_APPLY, index=True
     )
     cover_letter: Mapped[str | None] = mapped_column(Text, default=None)
     # [{"question", "answer", "type", "options", "confidence", "needs_review", "field_id"}]

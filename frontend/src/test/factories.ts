@@ -32,6 +32,11 @@ export function buildJob(overrides: Partial<Job> = {}): Job {
     missing_requirements: [],
     score_breakdown: [],
     score_gates: [],
+    // Derived server-side from the score and its breakdown; an empty breakdown
+    // has no arithmetic to report, which is exactly what an old job looks like.
+    verdict: "strong",
+    weighted_score: null,
+    score_divergence: null,
     skip_reason: null,
     detected_language: "pt",
     posted_at: "2026-08-01T09:00:00Z",
@@ -65,6 +70,7 @@ export function buildApplicationDetail(
     id: 5,
     job_id: 10,
     status: "awaiting_review",
+    channel: "easy_apply",
     cover_letter: "Prezada equipe, tenho interesse nesta vaga.",
     screening_answers: [buildScreeningAnswer()],
     resume_filename: "curriculo.pdf",

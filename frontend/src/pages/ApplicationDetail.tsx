@@ -148,7 +148,12 @@ export function ApplicationDetail() {
 
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
               <StatusBadge kind="application" status={application.status} />
-              {application.was_dry_run ? (
+              {application.channel === 'external' ? (
+                <span className={badgeClass('info')}>no site da empresa</span>
+              ) : null}
+              {/* Dry run describes a form that was not filled in. There is no
+                  form on the external channel, so the badge would only mislead. */}
+              {application.was_dry_run && application.channel !== 'external' ? (
                 <span className={badgeClass('neutral')}>preenchida em modo de teste</span>
               ) : null}
               {showSteps ? (

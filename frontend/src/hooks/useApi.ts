@@ -442,6 +442,32 @@ export function useSubmitApplication(
   });
 }
 
+/**
+ * Record an application the user made on the company's own site.
+ *
+ * Not a submission and not a quieter route to one: it writes down what already
+ * happened elsewhere. It invalidates the same caches as a submission because the
+ * *consequences* are the same — the application joins the board and the stats.
+ */
+export function useMarkApplied(
+  options?: MutationOpts<ApplicationDetail, { id: number; note?: string | null }>,
+): UseMutationResult<ApplicationDetail, ApiError, { id: number; note?: string | null }> {
+  const client = useQueryClient();
+  return useMutation<ApplicationDetail, ApiError, { id: number; note?: string | null }>({
+    mutationFn: ({ id, note }) => applicationsService.markApplicationApplied(id, note),
+    ...options,
+    onSuccess: (data, vars, context) => {
+      client.setQueryData(queryKeys.application(data.id), data);
+      void client.invalidateQueries({ queryKey: queryKeys.applications() });
+      void client.invalidateQueries({ queryKey: queryKeys.jobs() });
+      // `stats()` is the prefix of the outcome and segment keys, so this covers
+      // the analytics that only now start seeing this application.
+      void client.invalidateQueries({ queryKey: queryKeys.stats() });
+      options?.onSuccess?.(data, vars, context);
+    },
+  });
+}
+
 export function useDiscardApplication(
   options?: MutationOpts<ApplicationDetail, number>,
 ): UseMutationResult<ApplicationDetail, ApiError, number> {

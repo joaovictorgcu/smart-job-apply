@@ -12,6 +12,11 @@ to keep a draft the user may only look at tomorrow — and because the service
 holds exactly one open modal, so leaving it open meant only the last job of a
 batch was ever really submittable. `SubmitMixin` re-opens, fills and sends in
 one uninterrupted sequence once the human has approved.
+
+A job on the EXTERNAL channel — a portal posting, or any job without an Easy
+Apply button — has no form on this side at all, so preparing it is content only:
+the letter is drafted and the draft waits for the user to apply on the company's
+own page and record it. The channel is read off the job, never asked for.
 """
 
 from __future__ import annotations
@@ -36,6 +41,7 @@ from app.database.session import session_scope
 from app.models import (
     AnswerConfidence,
     Application,
+    ApplicationChannel,
     ApplicationEventType,
     ApplicationStatus,
     AutomationRunStatus,
@@ -162,6 +168,9 @@ class PrepareMixin(EngineBase):
             job_title = job.title
             job_company = job.company
             easy_apply = job.easy_apply
+            # Read off the posting, not off the request: the app already knows
+            # whether there is a form here it can drive.
+            channel = ApplicationChannel.for_job(source=job.source, easy_apply=job.easy_apply)
 
             application = await session.scalar(
                 select(Application).where(Application.job_id == job_id)
@@ -182,6 +191,7 @@ class PrepareMixin(EngineBase):
             application.status = ApplicationStatus.PREPARING
             application.error_message = None
             application.was_dry_run = dry_run
+            application.channel = channel
             application_id = application.id
             resume_filename = profile.resume_path
             cover_letter_existing = application.cover_letter
@@ -203,6 +213,30 @@ class PrepareMixin(EngineBase):
                 # reads `generate_cover_letter` from the same settings row.
                 cover_letter = await self._ai_cover_letter(user_id, job_id, profile)
 
+            if channel is ApplicationChannel.EXTERNAL:
+                # There is no form on this side to inspect: the posting is applied
+                # to on the company's own page. So preparing is content only —
+                # the letter (and the tailored CV, drafted elsewhere) are what the
+                # user carries over there by hand.
+                #
+                # Kept as its own branch rather than folded into the dry-run one
+                # below. They do the same work today, but they answer different
+                # questions: dry run is a setting the user can switch off, while
+                # this is a permanent property of the posting. Merging them would
+                # make turning dry run off look like it enabled something here.
+                await self._store_draft(
+                    user_id=user_id,
+                    run_id=run_id,
+                    job_id=job_id,
+                    application_id=application_id,
+                    cover_letter=cover_letter,
+                    screening=[],
+                    resume_filename=resume_filename,
+                    dry_run=dry_run,
+                    channel=channel,
+                )
+                return application_id
+
             if dry_run:
                 await self._store_draft(
                     user_id=user_id,
@@ -217,6 +251,9 @@ class PrepareMixin(EngineBase):
                 return application_id
 
             if not easy_apply:
+                # Unreachable while `for_job` sends every non-Easy-Apply posting
+                # down the external branch, and kept anyway: this is the engine's
+                # own last word on never opening a form that is not there.
                 raise EasyApplyUnavailableError(
                     f"Job {external_id} does not offer Easy Apply; apply manually on LinkedIn."
                 )
@@ -276,6 +313,7 @@ class PrepareMixin(EngineBase):
         resume_filename: str | None,
         dry_run: bool,
         fingerprint: str | None = None,
+        channel: ApplicationChannel = ApplicationChannel.EASY_APPLY,
     ) -> None:
         """Persist the drafted content and park the application in AWAITING_REVIEW.
 
@@ -323,12 +361,18 @@ class PrepareMixin(EngineBase):
             if job is not None and job.status not in {JobStatus.APPLIED, JobStatus.SKIPPED}:
                 job.status = JobStatus.QUEUED
 
-            message = (
-                "Dry run: content generated without opening the LinkedIn form."
-                if dry_run
-                else "Form inspected and closed. The answers are saved here and are "
-                "typed into LinkedIn only when you approve the submission."
-            )
+            if channel is ApplicationChannel.EXTERNAL:
+                message = (
+                    "Content prepared for a posting that is applied to on the company's "
+                    "own site. Nothing is sent from here — apply there, then record it."
+                )
+            elif dry_run:
+                message = "Dry run: content generated without opening the LinkedIn form."
+            else:
+                message = (
+                    "Form inspected and closed. The answers are saved here and are "
+                    "typed into LinkedIn only when you approve the submission."
+                )
             event = await self._record(
                 session,
                 user_id=user_id,
@@ -339,6 +383,7 @@ class PrepareMixin(EngineBase):
                 message=message,
                 payload={
                     "dry_run": dry_run,
+                    "channel": channel.value,
                     "unanswered": unanswered,
                     "needs_review": low_confidence,
                     # Nothing is filled in yet, so nothing is ready to send, and

@@ -42,9 +42,63 @@ class ScoreDimension(BaseModel):
         default="hard",
         description="Whether the posting states this as a requirement or a preference.",
     )
+    # Deliberately kept alongside `weight`: "is this a hard requirement" and "how
+    # much did it move the number" are different questions. A nice-to-have the
+    # posting dwells on can carry more weight than a hard requirement mentioned once.
+    #
+    # Defaults to 0 rather than being required, because this field is also how
+    # breakdowns persisted before it existed are read back: `Job.score_breakdown`
+    # is a JSON column of dumped `ScoreDimension`s, so every stored row is
+    # re-validated through this model. 0 therefore means "no weight was stated",
+    # which is exactly what a pre-existing row knows about itself.
+    weight_pct: int = Field(
+        default=0,
+        ge=0,
+        le=100,
+        description=(
+            "Share of the overall score this dimension carries; the emitted "
+            "values sum to 100 across the breakdown."
+        ),
+    )
     evidence: str = Field(
         description="What in the posting and the candidate's profile produced this number."
     )
+
+
+def _rescaled_to_100(weights: list[int]) -> list[int]:
+    """Scale non-negative weights so they sum to exactly 100.
+
+    Largest-remainder apportionment: floor every scaled share, then hand the
+    leftover points to the largest fractional remainders, ties broken by
+    position. That keeps the result deterministic — the same input always
+    produces the same output — which matters because these numbers end up
+    persisted and rendered as the explanation of a score.
+
+    An all-zero input carries no information about relative importance, so the
+    weight is split evenly rather than left at zero: the model did choose to
+    emit those dimensions, and an even split says "all of them, equally", which
+    is the least-assuming reading of silence.
+    """
+    if not weights:
+        return []
+
+    total = sum(weights)
+    if total == 0:
+        # Nothing to be proportional to; see the docstring for why even beats zero.
+        shares = [100 / len(weights)] * len(weights)
+    else:
+        shares = [weight * 100 / total for weight in weights]
+
+    floored = [int(share) for share in shares]
+    leftover = 100 - sum(floored)
+    if leftover > 0:
+        ranked = sorted(
+            range(len(shares)),
+            key=lambda index: (-(shares[index] - floored[index]), index),
+        )
+        for index in ranked[:leftover]:
+            floored[index] += 1
+    return floored
 
 
 # Decisive checks evaluated before the score. A failed gate means the score is
@@ -92,6 +146,26 @@ class JobScore(BaseModel):
     @classmethod
     def _clamp(cls, value: int) -> int:
         return max(0, min(100, value))
+
+    # Normalise rather than reject. The prompt asks for weights summing to 100,
+    # but models are unreliable at arithmetic, and a `ValidationError` here would
+    # throw away an entire scoring call — every gate, reason and dimension — over
+    # a rounding error the model made in the last field it wrote. The relative
+    # importance it expressed (30 vs 10) survives rescaling intact; only the
+    # arithmetic is repaired, and repairing it is deterministic. Rejecting would
+    # cost a paid retry to obtain the same judgement with tidier numbers.
+    #
+    # Only `JobScore` normalises. Stored breakdowns are read back as bare
+    # `ScoreDimension` lists, so rows written before `weight_pct` existed keep
+    # their zeros instead of being handed invented even weights on read.
+    @model_validator(mode="after")
+    def _normalize_breakdown_weights(self) -> JobScore:
+        if not self.breakdown:
+            return self
+        rescaled = _rescaled_to_100([dimension.weight_pct for dimension in self.breakdown])
+        for dimension, weight_pct in zip(self.breakdown, rescaled, strict=True):
+            dimension.weight_pct = weight_pct
+        return self
 
 
 # Where an answer came from. The distinction that matters to the reviewer is

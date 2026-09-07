@@ -26,6 +26,15 @@ export type ApplicationStatus =
   | "discarded"
   | "failed";
 
+/**
+ * How an application reaches the employer.
+ *
+ * "easy_apply" is the LinkedIn form the automation fills and sends after you
+ * approve it. "external" is a posting on the company's own site: the app
+ * prepares the content, you submit it there, and then record that you did.
+ */
+export type ApplicationChannel = "easy_apply" | "external";
+
 /** Real-world result after an application was submitted (the pipeline board). */
 export type ApplicationOutcome =
   | "applied"
@@ -275,6 +284,12 @@ export interface Job {
   missing_requirements: string[];
   score_breakdown: ScoreDimension[];
   score_gates: ScoreGate[];
+  /** Band the score falls in, derived on read: strong, good, moderate, weak, poor. */
+  verdict: string | null;
+  /** The score recomputed from the breakdown's own weights, or null when it cannot be. */
+  weighted_score: number | null;
+  /** Overall score minus the weighted one. Reported, never applied. */
+  score_divergence: number | null;
   skip_reason: string | null;
   detected_language: string | null;
   posted_at: string | null;
@@ -309,6 +324,11 @@ export interface ScoreDimension {
   dimension: ScoreDimensionName;
   score: number;
   weight: "hard" | "nice_to_have";
+  /**
+   * How much this dimension moved the overall score. Sums to 100 across a
+   * breakdown scored after the field existed; 0 on every row stored before it.
+   */
+  weight_pct: number;
   evidence: string;
 }
 
@@ -438,6 +458,8 @@ export interface Application {
   id: number;
   job_id: number;
   status: ApplicationStatus;
+  /** Which completion path this application may take. */
+  channel: ApplicationChannel;
   cover_letter: string | null;
   /** Persisted as loose JSON; shaped like ScreeningAnswer. */
   screening_answers: ScreeningAnswer[];
@@ -545,6 +567,17 @@ export interface ApplicationListQuery extends Paginated {
 /** Explicit consent for a single, already-reviewed application. */
 export interface SubmitRequest {
   confirm: true;
+}
+
+/**
+ * The record that you applied on the company's own site.
+ *
+ * `confirm` mirrors SubmitRequest so this cannot fire by accident — but it
+ * consents to writing something down, not to sending anything.
+ */
+export interface MarkAppliedRequest {
+  confirm: true;
+  note?: string | null;
 }
 
 /* -------------------------------------------------------------------------- */
