@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, EmailStr, Field, model_validator
 
+from app.domain.resume import ResumeEducation, ResumeExperience, ResumeProject
 from app.schemas.common import ORMModel
 
 
@@ -29,6 +30,13 @@ class ProfileRead(ORMModel):
     resume_text: str | None = None
     resume_filename: str | None = None
     skills: list[str] = Field(default_factory=list)
+    # The structured master resume. Validated on the way out too, so a client
+    # never has to guess whether a stored entry has the shape it expects.
+    technologies: list[str] = Field(default_factory=list)
+    experiences: list[ResumeExperience] = Field(default_factory=list)
+    projects: list[ResumeProject] = Field(default_factory=list)
+    education: list[ResumeEducation] = Field(default_factory=list)
+    certifications: list[str] = Field(default_factory=list)
     preferred_languages: list[str] = Field(default_factory=list)
     answer_bank: dict[str, Any] = Field(default_factory=dict)
     updated_at: datetime | None = None
@@ -42,6 +50,14 @@ class ProfileUpdate(BaseModel):
     summary: str | None = None
     resume_text: str | None = None
     skills: list[str] | None = None
+    # Editing the master here changes what the *next* application derives from.
+    # It deliberately does not touch an application that already has its own
+    # version — see `TailoredResume.base_document`.
+    technologies: list[str] | None = None
+    experiences: list[ResumeExperience] | None = None
+    projects: list[ResumeProject] | None = None
+    education: list[ResumeEducation] | None = None
+    certifications: list[str] | None = None
     preferred_languages: list[str] | None = None
     answer_bank: dict[str, Any] | None = None
 

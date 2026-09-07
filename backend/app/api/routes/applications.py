@@ -7,6 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Query, Response
 
 from app.api.deps import CurrentUser, LimitDep, OffsetDep, SessionDep
+from app.api.errors import NotFoundError
 from app.models import ApplicationStatus
 from app.schemas.application import (
     ApplicationCard,
@@ -17,11 +18,13 @@ from app.schemas.application import (
     InterviewStageCreate,
     InterviewStageRead,
     InterviewStageUpdate,
+    MarkAppliedRequest,
     OutcomeUpdate,
 )
 from app.schemas.automation import SubmitRequest
 from app.schemas.common import Page
-from app.services import application_service, automation_service
+from app.schemas.tailoring import ApplicationResumeRead, ApplicationResumeUpdate
+from app.services import application_service, automation_service, resume_service
 
 router = APIRouter(prefix="/applications", tags=["applications"])
 
@@ -137,6 +140,37 @@ async def submit_application(
     return application_service.to_application_detail(application)
 
 
+@router.post("/{application_id}/mark-applied", response_model=ApplicationDetail)
+async def mark_application_applied(
+    application_id: int,
+    payload: MarkAppliedRequest,
+    user: CurrentUser,
+    session: SessionDep,
+) -> ApplicationDetail:
+    """Record that you applied yourself, on the company's own site.
+
+    **This is not an automated submission and must never become one.** It does not
+    call the automation engine, it does not touch `LinkedInService`, and it is not
+    reachable from any path that could: it writes down a human act that already
+    happened somewhere else, so an application made with the letter and CV
+    prepared here stops being invisible to the pipeline board and to every
+    statistic.
+
+    Requires `confirm: true`, an application that is awaiting review, and the
+    EXTERNAL channel — an Easy Apply draft has a real submission path and cannot
+    be closed out this way.
+
+    Dry run does not apply here, because nothing is being sent. Neither do the
+    daily cap and the working-hour window: those exist to pace what this app
+    sends to LinkedIn, so enforcing them on a manual record would be theatre —
+    and it would suppress exactly the data the statistics are supposed to
+    measure. That choice is deliberate, not an omission.
+    """
+    await application_service.mark_applied(session, user, application_id, payload)
+    application = await application_service.get_application(session, user, application_id)
+    return application_service.to_application_detail(application)
+
+
 @router.post("/{application_id}/discard", response_model=ApplicationDetail)
 async def discard_application(
     application_id: int, user: CurrentUser, session: SessionDep
@@ -145,6 +179,59 @@ async def discard_application(
     await application_service.discard(session, user, application_id)
     application = await application_service.get_application(session, user, application_id)
     return application_service.to_application_detail(application)
+
+
+@router.get("/{application_id}/resume", response_model=ApplicationResumeRead)
+async def read_application_resume(
+    application_id: int, user: CurrentUser, session: SessionDep
+) -> ApplicationResumeRead:
+    """The resume **this application** presents, plus the master it came from.
+
+    404 when the application has no version yet — a new one whose master resume
+    is still empty, or one prepared before this existed. Both are a `POST` away
+    from having one.
+    """
+    found = await resume_service.get_version(session, user, application_id)
+    if found is None:
+        raise NotFoundError("This application has no resume version yet.")
+    application, row = found
+    current = await resume_service.current_fingerprint(session, user)
+    return resume_service.to_read(application, row, current=current)
+
+
+@router.post("/{application_id}/resume", response_model=ApplicationResumeRead)
+async def derive_application_resume(
+    application_id: int, user: CurrentUser, session: SessionDep
+) -> ApplicationResumeRead:
+    """Derive this application's resume from the master as it stands now.
+
+    Also the way back to the master: re-deriving discards the edits made to
+    *this* version and starts over from the profile. It touches no other
+    application — each one owns its own row — and it never touches the master.
+    """
+    application, row = await resume_service.derive_version(session, user, application_id)
+    current = await resume_service.current_fingerprint(session, user)
+    return resume_service.to_read(application, row, current=current)
+
+
+@router.patch("/{application_id}/resume", response_model=ApplicationResumeRead)
+async def update_application_resume(
+    application_id: int,
+    payload: ApplicationResumeUpdate,
+    user: CurrentUser,
+    session: SessionDep,
+) -> ApplicationResumeRead:
+    """Save edits to this application's resume. The master is left untouched.
+
+    Refused when an edit changes an experience's company, role or period, or
+    introduces one the master never had: a version re-emphasizes history, it
+    does not rewrite it.
+    """
+    application, row = await resume_service.update_version(
+        session, user, application_id, payload.document
+    )
+    current = await resume_service.current_fingerprint(session, user)
+    return resume_service.to_read(application, row, current=current)
 
 
 @router.get("/{application_id}/stages", response_model=list[InterviewStageRead])

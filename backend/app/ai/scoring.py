@@ -12,11 +12,13 @@ the user directly.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import unicodedata
 from typing import Any
 
 import anthropic
+from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.client import (
@@ -35,9 +37,12 @@ from app.ai.schemas import (
     TailoredResume,
 )
 from app.automation.contracts import FormQuestion, ProfileContext
+from app.domain.resume import build_document, render_plain_text
 from app.domain.scoring import decide
 from app.models.enums import AnalysisKind, AnswerConfidence, JobStatus
 from app.models.job import AIAnalysis
+from app.models.score import SCORE_DEPTH_DEEP
+from app.models.score import JobScore as JobScoreRow
 from app.observability import get_logger
 
 logger = get_logger(__name__)
@@ -54,6 +59,67 @@ def _normalize(text: str) -> str:
     decomposed = unicodedata.normalize("NFKD", text.lower())
     stripped = "".join(char for char in decomposed if not unicodedata.combining(char))
     return _NON_ALNUM.sub(" ", stripped).strip()
+
+
+def profile_source_text(profile: ProfileContext) -> str:
+    """Everything the candidate actually provided, as one block of text.
+
+    Two consumers, one definition: the invention guard checks generated text
+    against this, and `profile_fingerprint` hashes it. Skills and the headline are
+    included so a skill the user genuinely lists is never treated as absent just
+    because it does not appear in the free-text resume body.
+
+    The structured master resume is included for the same reason, and it is the
+    stronger case: a technology named only inside a structured experience is
+    still something the candidate claims, and a guard that flagged their own
+    employment history as fabricated would be a guard nobody could trust. A
+    stored resume that no longer validates is skipped rather than fatal here —
+    it is reported where the user can act on it (the profile and resume
+    endpoints), and letting it break every scoring call would be a worse
+    failure than a temporarily narrower guard.
+    """
+    parts = [
+        profile.resume_text or "",
+        profile.summary or "",
+        profile.headline or "",
+        " ".join(profile.skills or []),
+    ]
+    try:
+        document = build_document(
+            headline=profile.headline,
+            summary=profile.summary,
+            skills=profile.skills or [],
+            technologies=profile.technologies or [],
+            experiences=profile.experiences or [],
+            projects=profile.projects or [],
+            education=profile.education or [],
+            certifications=profile.certifications or [],
+            languages=profile.preferred_languages or [],
+        )
+    except PydanticValidationError as exc:
+        logger.warning(
+            "The stored structured resume did not validate; scoring falls back to the "
+            "free-text resume only.",
+            extra={
+                "action": "profile.source_text",
+                "status": "degraded",
+                "errors": exc.error_count(),
+            },
+        )
+    else:
+        parts.append(render_plain_text(document))
+    return "\n".join(part for part in parts if part.strip())
+
+
+def profile_fingerprint(profile: ProfileContext) -> str:
+    """Hash of the profile a piece of AI output was produced from.
+
+    One scheme for every staleness question in the app: a tailored resume is stale
+    when its fingerprint no longer matches, and two scores with different
+    fingerprints were formed against different profiles — which is what makes "62
+    to 81 after you added Kubernetes" an attribution rather than a guess.
+    """
+    return hashlib.sha256(profile_source_text(profile).encode("utf-8")).hexdigest()
 
 
 def _persist_analysis(
@@ -153,16 +219,42 @@ async def analyze_job(
             cover_letter_language=detected,
         )
 
+    dimensions = [dimension.model_dump(mode="json") for dimension in score.breakdown]
+    gates = [gate.model_dump(mode="json") for gate in score.gates]
+
     job.score = score.score
     job.score_reasons = list(score.reasons)
     job.missing_requirements = list(score.missing_requirements)
-    job.score_breakdown = [dimension.model_dump(mode="json") for dimension in score.breakdown]
-    job.score_gates = [gate.model_dump(mode="json") for gate in score.gates]
+    job.score_breakdown = dimensions
+    job.score_gates = gates
 
     min_score = getattr(settings_row, "min_score", 0) or 0
     decision = decide(score, min_score=min_score)
     job.status = JobStatus.SKIPPED if decision.skipped else JobStatus.ANALYZED
     job.skip_reason = decision.skip_reason
+
+    job_id = getattr(job, "id", None)
+    if job_id is not None:
+        # Appended, never updated: the columns above are the latest verdict, this
+        # row is the verdict that was reached now. Deliberately not the same thing
+        # as the `AIAnalysis` above — that one audits a call (tokens, cost,
+        # refusals); this one is the score's history, queryable by dimension.
+        # A refusal never gets here, and rightly so: there is no verdict to record.
+        session.add(
+            JobScoreRow(
+                job_id=job_id,
+                user_id=user.id,
+                overall=score.score,
+                verdict=decision.verdict,
+                # Fresh copies: the lists above belong to the job's JSON columns,
+                # and sharing them would make one row's mutation rewrite history.
+                dimensions=list(dimensions),
+                gates=list(gates),
+                model=usage.model or ai.model,
+                depth=SCORE_DEPTH_DEEP,
+                profile_fingerprint=profile_fingerprint(profile_ctx),
+            )
+        )
 
     await session.flush()
 
@@ -588,6 +680,8 @@ __all__ = [
     "answer_screening",
     "generate_cover_letter",
     "prepare_interview",
+    "profile_fingerprint",
+    "profile_source_text",
     "review_draft",
     "tailor_resume",
 ]

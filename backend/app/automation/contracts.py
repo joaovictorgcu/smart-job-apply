@@ -107,8 +107,7 @@ class LinkedInService(Protocol):
         """Close the browser and persist the session state."""
         ...
 
-    async def get_state(self) -> SessionState:
-        ...
+    async def get_state(self) -> SessionState: ...
 
     async def wait_for_login(self, timeout_seconds: int = 300) -> SessionState:
         """Wait for the user to log in manually in the open window."""
@@ -161,3 +160,15 @@ class ProfileContext:
     skills: list[str] = field(default_factory=list)
     answer_bank: dict[str, Any] = field(default_factory=dict)
     preferred_languages: list[str] = field(default_factory=list)
+
+    # The structured master resume, carried as the raw stored lists so this
+    # boundary keeps depending on nothing. `app.domain.resume.build_document`
+    # turns them into the validated document; the AI layer flattens them into
+    # `profile_source_text`, which is what the invention guard checks against —
+    # a technology that only appears inside a structured experience is still
+    # something the candidate genuinely claims.
+    technologies: list[str] = field(default_factory=list)
+    experiences: list[dict[str, Any]] = field(default_factory=list)
+    projects: list[dict[str, Any]] = field(default_factory=list)
+    education: list[dict[str, Any]] = field(default_factory=list)
+    certifications: list[str] = field(default_factory=list)

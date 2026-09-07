@@ -1,6 +1,7 @@
-import { ArrowLeft, Briefcase, CircleAlert, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Briefcase, CircleAlert, ExternalLink, FileText } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 
+import { ApplicationResumePanel } from '@/components/ApplicationResumePanel';
 import { ApplicationReviewPanel } from '@/components/ApplicationReviewPanel';
 import { EmptyState } from '@/components/EmptyState';
 import { InterviewPanel } from '@/components/InterviewPanel';
@@ -148,7 +149,12 @@ export function ApplicationDetail() {
 
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
               <StatusBadge kind="application" status={application.status} />
-              {application.was_dry_run ? (
+              {application.channel === 'external' ? (
+                <span className={badgeClass('info')}>no site da empresa</span>
+              ) : null}
+              {/* Dry run describes a form that was not filled in. There is no
+                  form on the external channel, so the badge would only mislead. */}
+              {application.was_dry_run && application.channel !== 'external' ? (
                 <span className={badgeClass('neutral')}>preenchida em modo de teste</span>
               ) : null}
               {showSteps ? (
@@ -158,6 +164,17 @@ export function ApplicationDetail() {
               ) : null}
               {application.resume_filename ? (
                 <span className={badgeClass('neutral')}>{application.resume_filename}</span>
+              ) : null}
+              {/* Which resume this application is using, right next to which job
+                  it is for — the two facts the review screen is about. */}
+              {application.resume_focus.length > 0 ? (
+                <span
+                  className={badgeClass('accent')}
+                  title="O currículo desta candidatura prioriza estes termos da vaga"
+                >
+                  <FileText aria-hidden className="h-3 w-3" />
+                  CV: {application.resume_focus.slice(0, 3).join(' · ')}
+                </span>
               ) : null}
             </div>
           </div>
@@ -178,7 +195,13 @@ export function ApplicationDetail() {
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <ApplicationReviewPanel application={application} className="lg:col-span-2" />
+        <div className="space-y-4 lg:col-span-2">
+          {/* The resume sits above the letter and the answers: it is the first
+              thing a reviewer wants to see per application, and the one thing
+              that differs between two applications made on the same day. */}
+          <ApplicationResumePanel application={application} />
+          <ApplicationReviewPanel application={application} />
+        </div>
 
         <div className="space-y-4">
           <InterviewPanel

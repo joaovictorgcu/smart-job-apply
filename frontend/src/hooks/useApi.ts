@@ -19,6 +19,7 @@ import * as applicationsService from "@/services/applications";
 import * as automationService from "@/services/automation";
 import * as jobsService from "@/services/jobs";
 import * as profileService from "@/services/profile";
+import * as resumesService from "@/services/resumes";
 import * as searchesService from "@/services/searches";
 import * as statsService from "@/services/stats";
 import * as tailoringService from "@/services/tailoring";
@@ -31,6 +32,7 @@ import type {
   ApplicationEvent,
   ApplicationListQuery,
   ApplicationOutcome,
+  ApplicationResume,
   ApplicationUpdate,
   AutomationRun,
   DashboardStats,
@@ -45,6 +47,7 @@ import type {
   PreviewResponse,
   Profile,
   ProfileUpdate,
+  ResumeDocument,
   Search,
   SearchCreate,
   SearchRunRequest,
@@ -75,6 +78,7 @@ export const queryKeys = {
     ["applications", "list", query] as const,
   application: (id: number) => ["applications", "detail", id] as const,
   applicationEvents: (id: number) => ["applications", "events", id] as const,
+  applicationResume: (id: number) => ["applications", "resume", id] as const,
   board: () => ["applications", "board"] as const,
   outcomeStats: () => ["stats", "outcomes"] as const,
   segmentStats: () => ["stats", "segments"] as const,
@@ -442,6 +446,32 @@ export function useSubmitApplication(
   });
 }
 
+/**
+ * Record an application the user made on the company's own site.
+ *
+ * Not a submission and not a quieter route to one: it writes down what already
+ * happened elsewhere. It invalidates the same caches as a submission because the
+ * *consequences* are the same — the application joins the board and the stats.
+ */
+export function useMarkApplied(
+  options?: MutationOpts<ApplicationDetail, { id: number; note?: string | null }>,
+): UseMutationResult<ApplicationDetail, ApiError, { id: number; note?: string | null }> {
+  const client = useQueryClient();
+  return useMutation<ApplicationDetail, ApiError, { id: number; note?: string | null }>({
+    mutationFn: ({ id, note }) => applicationsService.markApplicationApplied(id, note),
+    ...options,
+    onSuccess: (data, vars, context) => {
+      client.setQueryData(queryKeys.application(data.id), data);
+      void client.invalidateQueries({ queryKey: queryKeys.applications() });
+      void client.invalidateQueries({ queryKey: queryKeys.jobs() });
+      // `stats()` is the prefix of the outcome and segment keys, so this covers
+      // the analytics that only now start seeing this application.
+      void client.invalidateQueries({ queryKey: queryKeys.stats() });
+      options?.onSuccess?.(data, vars, context);
+    },
+  });
+}
+
 export function useDiscardApplication(
   options?: MutationOpts<ApplicationDetail, number>,
 ): UseMutationResult<ApplicationDetail, ApiError, number> {
@@ -454,6 +484,79 @@ export function useDiscardApplication(
       void client.invalidateQueries({ queryKey: queryKeys.applications() });
       void client.invalidateQueries({ queryKey: queryKeys.jobs() });
       void client.invalidateQueries({ queryKey: queryKeys.stats() });
+      options?.onSuccess?.(data, vars, context);
+    },
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/* The resume one application presents                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * This application's own version of the resume.
+ *
+ * A missing version is a normal state — a new application whose master resume is
+ * still empty, or one prepared before the feature existed — so a 404 resolves to
+ * `null` rather than an error, and the panel renders its empty state.
+ */
+export function useApplicationResume(
+  applicationId: number,
+  options?: QueryOpts<ApplicationResume | null>,
+): UseQueryResult<ApplicationResume | null, ApiError> {
+  return useQuery<ApplicationResume | null, ApiError>({
+    queryKey: queryKeys.applicationResume(applicationId),
+    queryFn: async ({ signal }) => {
+      try {
+        return await resumesService.fetchApplicationResume(applicationId, signal);
+      } catch (error) {
+        if ((error as { status?: number })?.status === 404) return null;
+        throw error;
+      }
+    },
+    enabled: Number.isFinite(applicationId) && applicationId > 0,
+    ...options,
+  });
+}
+
+/**
+ * Derive (or re-derive) the version from the current master resume.
+ *
+ * Re-deriving is also "start over from my main resume", so it invalidates the
+ * application itself: its `resume_focus` is part of that payload.
+ */
+export function useDeriveApplicationResume(
+  applicationId: number,
+  options?: MutationOpts<ApplicationResume, void>,
+): UseMutationResult<ApplicationResume, ApiError, void> {
+  const client = useQueryClient();
+  return useMutation<ApplicationResume, ApiError, void>({
+    mutationFn: () => resumesService.deriveApplicationResume(applicationId),
+    ...options,
+    onSuccess: (data, vars, context) => {
+      client.setQueryData(queryKeys.applicationResume(applicationId), data);
+      void client.invalidateQueries({ queryKey: queryKeys.application(applicationId) });
+      void client.invalidateQueries({ queryKey: queryKeys.applications() });
+      options?.onSuccess?.(data, vars, context);
+    },
+  });
+}
+
+/** Save the user's edits to this application's version. The master is untouched. */
+export function useUpdateApplicationResume(
+  applicationId: number,
+  options?: MutationOpts<ApplicationResume, ResumeDocument>,
+): UseMutationResult<ApplicationResume, ApiError, ResumeDocument> {
+  const client = useQueryClient();
+  return useMutation<ApplicationResume, ApiError, ResumeDocument>({
+    mutationFn: (document) =>
+      resumesService.updateApplicationResume(applicationId, document),
+    ...options,
+    onSuccess: (data, vars, context) => {
+      client.setQueryData(queryKeys.applicationResume(applicationId), data);
+      // The edit is recorded on the application's timeline.
+      void client.invalidateQueries({ queryKey: queryKeys.applicationEvents(applicationId) });
+      void client.invalidateQueries({ queryKey: queryKeys.application(applicationId) });
       options?.onSuccess?.(data, vars, context);
     },
   });

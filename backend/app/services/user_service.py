@@ -19,6 +19,7 @@ from app.auth.security import hash_password, verify_password
 from app.automation.contracts import ProfileContext
 from app.config import get_settings
 from app.database.base import utcnow
+from app.domain.resume import ResumeDocument, build_document
 from app.models import AuditAction, AuditEvent, LinkedInAccount, Profile, User, UserSettings
 from app.observability import get_logger, record_audit_event
 from app.schemas.user import ProfileUpdate, UserSettingsUpdate
@@ -133,11 +134,22 @@ async def get_or_create_profile(session: AsyncSession, user: User) -> Profile:
 
 async def update_profile(session: AsyncSession, user: User, payload: ProfileUpdate) -> Profile:
     profile = await get_or_create_profile(session, user)
-    changes = payload.model_dump(exclude_unset=True)
+    changes = payload.model_dump(mode="json", exclude_unset=True)
     changed = sorted(field for field, value in changes.items() if getattr(profile, field) != value)
 
     for field, value in changes.items():
         setattr(profile, field, value)
+
+    if "experiences" in changes:
+        # Round-trip the structured resume through the document so the stored
+        # experience keys are the canonical, de-duplicated ones. A key is what
+        # every version of this resume is diffed and identity-checked against,
+        # so it is assigned here, server-side, and never taken from the client.
+        profile.experiences = [
+            experience.model_dump(mode="json")
+            for experience in master_document(profile).experiences
+        ]
+
     await session.flush()
 
     if changed:
@@ -368,7 +380,38 @@ async def build_profile_context(session: AsyncSession, user: User) -> ProfileCon
         skills=list(profile.skills or []),
         answer_bank=dict(profile.answer_bank or {}),
         preferred_languages=list(profile.preferred_languages or []),
+        technologies=list(profile.technologies or []),
+        experiences=list(profile.experiences or []),
+        projects=list(profile.projects or []),
+        education=list(profile.education or []),
+        certifications=list(profile.certifications or []),
     )
+
+
+def master_document(profile: Profile) -> ResumeDocument:
+    """The user's master resume as one validated document.
+
+    The single place the profile's columns become the structure every other
+    layer works with. `pydantic.ValidationError` is left to propagate: a stored
+    resume the app cannot parse is something the user has to be told about, not
+    something to paper over with an empty document.
+    """
+    return build_document(
+        headline=profile.headline,
+        summary=profile.summary,
+        skills=profile.skills or [],
+        technologies=profile.technologies or [],
+        experiences=profile.experiences or [],
+        projects=profile.projects or [],
+        education=profile.education or [],
+        certifications=profile.certifications or [],
+        languages=profile.preferred_languages or [],
+    )
+
+
+async def build_master_document(session: AsyncSession, user: User) -> ResumeDocument:
+    """`master_document` for a user, creating an empty profile on first access."""
+    return master_document(await get_or_create_profile(session, user))
 
 
 async def get_linkedin_account(session: AsyncSession, user: User) -> LinkedInAccount | None:

@@ -62,9 +62,30 @@ class JobRead(ORMModel):
     missing_requirements: list[str] = Field(default_factory=list)
     score_breakdown: list[ScoreDimension] = Field(default_factory=list)
     score_gates: list[ScoreGate] = Field(default_factory=list)
+    # Derived on read from `score` and `score_breakdown`, never stored: a column
+    # would need a migration and would then go stale the moment the bands or the
+    # weighting changed. Jobs scored before the breakdown carried weights report
+    # `None` for the two derived numbers instead of a fabricated one.
+    verdict: str | None = Field(
+        default=None, description="Band the score falls in (strong, good, moderate, weak, poor)."
+    )
+    weighted_score: int | None = Field(
+        default=None, description="The score recomputed from the breakdown's own weights."
+    )
+    score_divergence: int | None = Field(
+        default=None, description="Overall score minus the weighted one; surfaced, not applied."
+    )
     skip_reason: str | None = None
     detected_language: str | None = None
     posted_at: datetime | None = None
+    deadline: datetime | None = None
+    expired_at: datetime | None = None
+    # Derived, like `verdict`: the posting is gone or its deadline has passed, so
+    # preparing it would spend a submission on a job that can no longer be applied
+    # to. Computed on read because it changes with the clock, not with a write.
+    is_stale: bool = Field(
+        default=False, description="Expired, or past its deadline — refused by preparation."
+    )
     created_at: datetime | None = None
     search_id: int | None = None
     application_id: int | None = None
@@ -72,3 +93,30 @@ class JobRead(ORMModel):
 
 class JobDetail(JobRead):
     description: str | None = None
+
+
+class JobUpdate(BaseModel):
+    """The only job field the user may edit directly.
+
+    Everything else on a job is either the portal's word or the pipeline's, and
+    letting a request overwrite a score or a status would make both meaningless.
+    `deadline` is different: no adapter reports one today, so the user is the only
+    source there is. Sending `null` clears it; omitting the key leaves it alone.
+    """
+
+    deadline: datetime | None = None
+
+
+class JobScoreRead(ORMModel):
+    """One verdict from the job's scoring history."""
+
+    id: int
+    job_id: int
+    overall: int
+    verdict: str
+    dimensions: list[ScoreDimension] = Field(default_factory=list)
+    gates: list[ScoreGate] = Field(default_factory=list)
+    model: str
+    depth: str
+    profile_fingerprint: str | None = None
+    created_at: datetime

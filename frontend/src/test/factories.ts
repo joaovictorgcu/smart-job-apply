@@ -8,8 +8,11 @@
 
 import type {
   ApplicationDetail,
+  ApplicationResume,
   Job,
   PreviewResponse,
+  ResumeDocument,
+  ResumeExperience,
   ScreeningAnswer,
   UserSettings,
 } from "@/types/api";
@@ -32,6 +35,11 @@ export function buildJob(overrides: Partial<Job> = {}): Job {
     missing_requirements: [],
     score_breakdown: [],
     score_gates: [],
+    // Derived server-side from the score and its breakdown; an empty breakdown
+    // has no arithmetic to report, which is exactly what an old job looks like.
+    verdict: "strong",
+    weighted_score: null,
+    score_divergence: null,
     skip_reason: null,
     detected_language: "pt",
     posted_at: "2026-08-01T09:00:00Z",
@@ -65,6 +73,7 @@ export function buildApplicationDetail(
     id: 5,
     job_id: 10,
     status: "awaiting_review",
+    channel: "easy_apply",
     cover_letter: "Prezada equipe, tenho interesse nesta vaga.",
     screening_answers: [buildScreeningAnswer()],
     resume_filename: "curriculo.pdf",
@@ -78,10 +87,141 @@ export function buildApplicationDetail(
     outcome: null,
     outcome_updated_at: null,
     outcome_note: null,
+    resume_focus: [".NET 8", "APIs REST"],
     created_at: "2026-08-01T10:00:00Z",
     updated_at: "2026-08-01T10:30:00Z",
     job: buildJob(),
     events: [],
+    ...overrides,
+  };
+}
+
+export function buildExperience(
+  overrides: Partial<ResumeExperience> = {},
+): ResumeExperience {
+  return {
+    key: "globalthings-tech-lead",
+    company: "Globalthings",
+    role: "Tech Lead",
+    start: "2023-02",
+    end: null,
+    location: "Recife, PE",
+    summary: "Lidera a plataforma de gestão de acessos.",
+    highlights: [
+      {
+        text: "Reescreveu o serviço de autorização em .NET 8.",
+        technologies: [".NET 8", "APIs REST"],
+        impact: "p95 de 420 ms para 120 ms",
+      },
+      {
+        text: "Montou o painel administrativo em Blazor.",
+        technologies: ["Blazor"],
+        impact: null,
+      },
+    ],
+    technologies: [".NET 8", "SQL Server", "Blazor"],
+    projects: [],
+    focus: [],
+    ...overrides,
+  };
+}
+
+export function buildResumeDocument(
+  overrides: Partial<ResumeDocument> = {},
+): ResumeDocument {
+  return {
+    headline: "Tech Lead — .NET, React e Python",
+    summary: "Nove anos construindo produtos web.",
+    skills: ["Arquitetura de software", "Liderança técnica"],
+    technologies: [".NET 8", "React", "Python"],
+    experiences: [
+      buildExperience(),
+      buildExperience({
+        key: "nexo-fullstack",
+        company: "Nexo Digital",
+        role: "Engenheiro Full Stack",
+        start: "2020-06",
+        end: "2023-01",
+        summary: "Construiu o checkout de ponta a ponta.",
+        highlights: [
+          {
+            text: "Refez o checkout em React e TypeScript.",
+            technologies: ["React", "TypeScript"],
+            impact: "conversão de 61% para 74%",
+          },
+        ],
+        technologies: ["React", "TypeScript", "Node.js"],
+      }),
+    ],
+    projects: [],
+    education: [],
+    certifications: [],
+    languages: ["pt-BR"],
+    ...overrides,
+  };
+}
+
+/**
+ * One application's resume version, derived from the master.
+ *
+ * The default is a `.NET`-focused version whose leading experience is the .NET
+ * job with a rewritten summary — so a test asserting "this is visibly the
+ * version for this posting" has something to assert against.
+ */
+export function buildApplicationResume(
+  overrides: Partial<ApplicationResume> = {},
+): ApplicationResume {
+  const base = buildResumeDocument();
+  const document = buildResumeDocument({
+    summary: "Nove anos construindo produtos web — ênfase em .NET 8 e APIs REST.",
+    technologies: [".NET 8", "React", "Python"],
+    experiences: [
+      buildExperience({
+        summary:
+          "Lidera a plataforma de gestão de acessos — ênfase em .NET 8 e APIs REST; " +
+          "p95 de 420 ms para 120 ms.",
+        focus: [".NET 8", "APIs REST"],
+      }),
+      buildExperience({
+        key: "nexo-fullstack",
+        company: "Nexo Digital",
+        role: "Engenheiro Full Stack",
+        start: "2020-06",
+        end: "2023-01",
+        summary: "Construiu o checkout de ponta a ponta.",
+        highlights: [
+          {
+            text: "Refez o checkout em React e TypeScript.",
+            technologies: ["React", "TypeScript"],
+            impact: "conversão de 61% para 74%",
+          },
+        ],
+        technologies: ["React", "TypeScript", "Node.js"],
+      }),
+    ],
+  });
+
+  return {
+    application_id: 5,
+    job_id: 10,
+    job_title: "Desenvolvedor Backend .NET Sênior",
+    job_company: "Globalthings",
+    document,
+    base_document: base,
+    focus: [".NET 8", "APIs REST", "SQL Server"],
+    changes: [
+      {
+        section: "Experiência — Globalthings",
+        action: "rephrased",
+        detail: "Descrição reescrita para destacar .NET 8 e APIs REST.",
+      },
+    ],
+    invention_flags: [],
+    source: "rules",
+    is_stale: false,
+    markdown: "# Tech Lead\n\nNove anos construindo produtos web.\n",
+    created_at: "2026-08-01T10:00:00Z",
+    updated_at: "2026-08-01T10:05:00Z",
     ...overrides,
   };
 }

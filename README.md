@@ -90,6 +90,22 @@ O modo de teste (dry run) está ligado por padrão: o fluxo inteiro roda, até o
   inventados
 - Recusas do modelo são registradas e recorrem ao preenchimento manual — o que é o sistema funcionando, não falhando
 
+**Um currículo por candidatura**
+
+- Você mantém **um currículo principal** com experiências estruturadas: cargo, empresa, período e realizações,
+  cada realização marcada com as tecnologias que ela envolveu de verdade
+- Cada candidatura ganha a **sua própria versão** dele, montada a partir da vaga: as experiências, realizações,
+  projetos e tecnologias mais próximos do anúncio vão para o topo, e a descrição de cada experiência é reescrita
+  em torno do que aquela vaga pede
+- Quatro candidaturas abertas — Backend .NET, Full Stack React, Python, APIs — apresentam quatro currículos
+  diferentes tirados da mesma história. A mesma experiência abre com .NET numa e com React na outra
+- **Nada é inventado**: a interseção é sempre com o seu próprio vocabulário, então uma vaga que exige Rust de quem
+  nunca escreveu Rust não produz Rust em lugar nenhum. Sem chamada de modelo, determinístico e offline
+- **Nada vaza entre candidaturas**: editar o currículo principal muda o que as próximas vão derivar e não toca
+  nenhuma que já exista; editar o de uma candidatura não mexe nas outras nem no principal
+- Cargo, empresa e período **não são editáveis** na versão de uma candidatura — uma versão reenfatiza o passado,
+  não o reescreve; e a tela mostra, lado a lado, o que difere do currículo principal
+
 **Revisão e controle**
 
 - Toda candidatura espera em `awaiting_review` com a carta e cada resposta editáveis antes de você aprovar
@@ -526,8 +542,9 @@ Mais, incluindo problemas por plataforma: [docs/installation.md](docs/installati
 
 Ordem aproximada, sem datas. Qualquer coisa que reduza a supervisão humana está permanentemente fora de escopo.
 
-- Sugestões de adaptação de currículo por vaga — destacando qual da sua experiência existente colocar em primeiro plano, sem
-  inventar nada
+- ~~Sugestões de adaptação de currículo por vaga — destacando qual da sua experiência existente colocar em primeiro
+  plano, sem inventar nada~~ — feito: cada candidatura mantém a sua própria versão do currículo principal, e a tela
+  da candidatura mostra o que difere
 - Lembretes de acompanhamento de candidatura e rastreamento de desfecho (respondeu / entrevista / rejeitado), para que o modelo de nota
   tenha uma referência real para se conferir
 - Melhor correspondência do banco de respostas, para que perguntas recorrentes parem de ser reperguntadas ao modelo

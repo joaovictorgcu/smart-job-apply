@@ -55,6 +55,23 @@ export function submitApplication(id: number): Promise<ApplicationDetail> {
   return api.post<ApplicationDetail>(`/applications/${id}/submit`, { confirm: true });
 }
 
+/**
+ * POST /api/applications/{id}/mark-applied
+ *
+ * Records an application the user made themselves, on the company's own site.
+ * It sends nothing: the endpoint never reaches the automation engine, and this
+ * is deliberately not `submitApplication` under another name.
+ */
+export function markApplicationApplied(
+  id: number,
+  note?: string | null,
+): Promise<ApplicationDetail> {
+  return api.post<ApplicationDetail>(`/applications/${id}/mark-applied`, {
+    confirm: true,
+    note: note ?? null,
+  });
+}
+
 /** POST /api/applications/{id}/discard */
 export function discardApplication(id: number): Promise<ApplicationDetail> {
   return api.post<ApplicationDetail>(`/applications/${id}/discard`);

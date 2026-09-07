@@ -141,6 +141,7 @@ export function Applications() {
                   <th scope="col">Nota</th>
                   <th scope="col">Vaga</th>
                   <th scope="col">Empresa</th>
+                  <th scope="col">Currículo</th>
                   <th scope="col">Última atualização</th>
                   <th scope="col">Enviada</th>
                   <th scope="col">
@@ -184,6 +185,21 @@ export function Applications() {
                       </td>
                       <td className="max-w-[12rem]">
                         <span className="block truncate">{job?.company ?? '—'}</span>
+                      </td>
+                      {/* Each application carries its own version of the resume;
+                          the focus is what makes that visible from the list,
+                          without opening four pages to compare them. */}
+                      <td className="max-w-[12rem]">
+                        {application.resume_focus.length > 0 ? (
+                          <span
+                            className="block truncate text-2xs text-accent-400"
+                            title={`Prioriza: ${application.resume_focus.join(', ')}`}
+                          >
+                            {application.resume_focus.slice(0, 3).join(' · ')}
+                          </span>
+                        ) : (
+                          <span className="text-2xs text-content-subtle">sem versão própria</span>
+                        )}
                       </td>
                       <td className="tabular whitespace-nowrap text-xs">
                         {formatDateTime(application.updated_at ?? application.created_at)}

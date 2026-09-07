@@ -75,12 +75,22 @@ posting with no education requirement is noise, not explanation.
 - `score` is that dimension alone, 0-100, judged the same way as the overall score.
 - `weight` is `hard` when the posting states it as a requirement and \
 `nice_to_have` when it is a preference ("bonus", "a plus", "ideally").
+- `weight_pct` is how much that dimension moved the overall score, as a whole \
+number. The `weight_pct` values you emit must add up to 100 across the \
+dimensions you chose to include — no more, no less. Weight what the posting \
+dwells on: a role that spends four paragraphs on the tech stack and one line on \
+location is mostly a skills judgment. This is a different question from `weight`: \
+a nice-to-have the posting keeps returning to can carry more of the number than a \
+hard requirement it mentions once.
 - `evidence` is one short sentence naming what the posting asks and what the \
 candidate's profile shows ("asks for 5+ years, resume shows 6"). Never restate \
 the dimension name.
 - The overall `score` must be consistent with the breakdown: a hard dimension \
 scoring near zero caps the overall score, and an overall score far above every \
-dimension is a contradiction.
+dimension is a contradiction. Concretely, the overall `score` should land within \
+a few points of the sum of each dimension's `score` times its `weight_pct` \
+divided by 100 — the user is shown both numbers side by side, so a breakdown that \
+contradicts the headline score is visible to them.
 """
 
 

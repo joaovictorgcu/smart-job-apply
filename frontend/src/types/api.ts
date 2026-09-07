@@ -26,6 +26,15 @@ export type ApplicationStatus =
   | "discarded"
   | "failed";
 
+/**
+ * How an application reaches the employer.
+ *
+ * "easy_apply" is the LinkedIn form the automation fills and sends after you
+ * approve it. "external" is a posting on the company's own site: the app
+ * prepares the content, you submit it there, and then record that you did.
+ */
+export type ApplicationChannel = "easy_apply" | "external";
+
 /** Real-world result after an application was submitted (the pipeline board). */
 export type ApplicationOutcome =
   | "applied"
@@ -149,6 +158,74 @@ export interface TokenResponse {
   user: User;
 }
 
+/* -------------------------------------------------------------------------- */
+/* The structured resume (domain/resume.py)                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One achievement, tagged with the technologies it actually involved.
+ *
+ * The tags are what let an application's version lead with the right sentence:
+ * a .NET posting opens this position with its .NET work, a React posting with
+ * its React work — same list, different order, nothing invented.
+ */
+export interface ResumeHighlight {
+  text: string;
+  technologies: string[];
+  impact: string | null;
+}
+
+export interface ResumeProject {
+  name: string;
+  description: string;
+  technologies: string[];
+  outcome: string | null;
+}
+
+/**
+ * One position. `key` is its identity across every version of the resume — the
+ * diff and the identity check both run off it, so it is assigned server-side.
+ *
+ * `focus` is filled in only on an application's version: the posting's terms
+ * this position is being used to answer. It is always empty on the master.
+ */
+export interface ResumeExperience {
+  key: string;
+  company: string;
+  role: string;
+  start: string;
+  end: string | null;
+  location: string | null;
+  summary: string | null;
+  highlights: ResumeHighlight[];
+  technologies: string[];
+  projects: ResumeProject[];
+  focus: string[];
+}
+
+export interface ResumeEducation {
+  institution: string;
+  degree: string;
+  start: string;
+  end: string | null;
+  detail: string | null;
+}
+
+/** A whole resume as data: the master, or one application's version of it. */
+export interface ResumeDocument {
+  headline: string | null;
+  summary: string | null;
+  /** Competências. */
+  skills: string[];
+  /** Tecnologias. */
+  technologies: string[];
+  experiences: ResumeExperience[];
+  projects: ResumeProject[];
+  education: ResumeEducation[];
+  certifications: string[];
+  languages: string[];
+}
+
 export interface Profile {
   headline: string | null;
   location: string | null;
@@ -158,6 +235,11 @@ export interface Profile {
   resume_text: string | null;
   resume_filename: string | null;
   skills: string[];
+  technologies: string[];
+  experiences: ResumeExperience[];
+  projects: ResumeProject[];
+  education: ResumeEducation[];
+  certifications: string[];
   preferred_languages: string[];
   answer_bank: Record<string, unknown>;
   updated_at: string | null;
@@ -171,6 +253,11 @@ export interface ProfileUpdate {
   summary?: string | null;
   resume_text?: string | null;
   skills?: string[] | null;
+  technologies?: string[] | null;
+  experiences?: ResumeExperience[] | null;
+  projects?: ResumeProject[] | null;
+  education?: ResumeEducation[] | null;
+  certifications?: string[] | null;
   preferred_languages?: string[] | null;
   answer_bank?: Record<string, unknown> | null;
 }
@@ -275,6 +362,12 @@ export interface Job {
   missing_requirements: string[];
   score_breakdown: ScoreDimension[];
   score_gates: ScoreGate[];
+  /** Band the score falls in, derived on read: strong, good, moderate, weak, poor. */
+  verdict: string | null;
+  /** The score recomputed from the breakdown's own weights, or null when it cannot be. */
+  weighted_score: number | null;
+  /** Overall score minus the weighted one. Reported, never applied. */
+  score_divergence: number | null;
   skip_reason: string | null;
   detected_language: string | null;
   posted_at: string | null;
@@ -309,6 +402,11 @@ export interface ScoreDimension {
   dimension: ScoreDimensionName;
   score: number;
   weight: "hard" | "nice_to_have";
+  /**
+   * How much this dimension moved the overall score. Sums to 100 across a
+   * breakdown scored after the field existed; 0 on every row stored before it.
+   */
+  weight_pct: number;
   evidence: string;
 }
 
@@ -430,6 +528,36 @@ export interface TailoredResume {
   updated_at: string | null;
 }
 
+/**
+ * The resume one application presents, and where it came from.
+ *
+ * `document` is what this application shows an employer; `base_document` is the
+ * master as it stood when the version was derived. Both travel together so the
+ * difference can be shown without a second request — and so "editing my main
+ * resume changed nothing here" is visible rather than promised.
+ */
+export interface ApplicationResume {
+  application_id: number;
+  job_id: number;
+  job_title: string | null;
+  job_company: string | null;
+  document: ResumeDocument;
+  base_document: ResumeDocument;
+  /** Your own terms this posting asked for, strongest first. */
+  focus: string[];
+  changes: CVChange[];
+  /** Technologies in this version but not in your master resume. */
+  invention_flags: string[];
+  /** "rules" while it is the derivation's output, "user" once you edit it. */
+  source: "rules" | "user" | string;
+  /** True when the master changed after this version was derived. */
+  is_stale: boolean;
+  /** The version as markdown, for pasting into a portal. */
+  markdown: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Applications (schemas/application.py)                                      */
 /* -------------------------------------------------------------------------- */
@@ -438,6 +566,8 @@ export interface Application {
   id: number;
   job_id: number;
   status: ApplicationStatus;
+  /** Which completion path this application may take. */
+  channel: ApplicationChannel;
   cover_letter: string | null;
   /** Persisted as loose JSON; shaped like ScreeningAnswer. */
   screening_answers: ScreeningAnswer[];
@@ -452,6 +582,11 @@ export interface Application {
   outcome: ApplicationOutcome | null;
   outcome_updated_at: string | null;
   outcome_note: string | null;
+  /**
+   * What this application's own resume version leads with, strongest term
+   * first. Empty when it has no version yet.
+   */
+  resume_focus: string[];
   created_at: string | null;
   updated_at: string | null;
 }
@@ -545,6 +680,17 @@ export interface ApplicationListQuery extends Paginated {
 /** Explicit consent for a single, already-reviewed application. */
 export interface SubmitRequest {
   confirm: true;
+}
+
+/**
+ * The record that you applied on the company's own site.
+ *
+ * `confirm` mirrors SubmitRequest so this cannot fire by accident — but it
+ * consents to writing something down, not to sending anything.
+ */
+export interface MarkAppliedRequest {
+  confirm: true;
+  note?: string | null;
 }
 
 /* -------------------------------------------------------------------------- */

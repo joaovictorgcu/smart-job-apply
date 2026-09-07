@@ -59,7 +59,19 @@ class User(Base, TimestampMixin):
 
 
 class Profile(Base, TimestampMixin):
-    """Resume as text plus the answer bank used by the AI."""
+    """The **master resume**: free text, structured history, and the answer bank.
+
+    This is the one resume the user maintains. Every application derives its own
+    version from it (`TailoredResume`), and editing it here can never reach into
+    a version that was already derived — that is what `TailoredResume.
+    base_document` freezes.
+
+    `resume_text` came first and stays: it is the PDF's text twin, and the AI
+    path reads it. The structured lists below are what make a *demonstrably*
+    per-job resume possible — reordering experiences and re-describing them
+    needs experiences as data, not one blob of prose. A profile with none of
+    them keeps working exactly as it did.
+    """
 
     __tablename__ = "profiles"
 
@@ -75,7 +87,31 @@ class Profile(Base, TimestampMixin):
     summary: Mapped[str | None] = mapped_column(Text, default=None)
     resume_text: Mapped[str | None] = mapped_column(Text, default=None)
     resume_filename: Mapped[str | None] = mapped_column(String(255), default=None)
+    # Competências. `technologies` below is the other half: a posting asks for
+    # "arquitetura de software" and for ".NET 8" in different sentences and
+    # weighs them differently, and one merged list loses that.
     skills: Mapped[list[str]] = mapped_column(JSON, default=list)
+
+    # --- The structured master resume (see `app.domain.resume`) -------------
+    #
+    # Validated on the way in and out through `ResumeDocument`, and stored as
+    # the flat lists the profile always used rather than one nested blob: the
+    # headline, the summary and the skills are already columns here, and a
+    # nested copy of them would be a second source of truth for the same fact.
+    technologies: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # [{"key", "company", "role", "start", "end", "location", "summary",
+    #   "technologies": [...], "highlights": [{"text", "impact",
+    #   "technologies": [...]}], "projects": [...]}]
+    #
+    # `highlights` is the field the whole feature turns on: one position holds
+    # several achievements the candidate wrote, each tagged with what it is
+    # about, so a .NET posting and a React posting can honestly lead with
+    # different sentences from the same job — with nothing invented for either.
+    experiences: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    projects: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    education: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
+    certifications: Mapped[list[str]] = mapped_column(JSON, default=list)
+
     preferred_languages: Mapped[list[str]] = mapped_column(JSON, default=list)
     # Default answers for recurring screening questions, e.g.:
     # {"salary_expectation": "15,000", "notice_period": "30 days",

@@ -9,7 +9,10 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
+from pydantic import ValidationError
+
 from app.automation.contracts import ProfileContext
+from app.domain.resume import build_document, render_markdown
 
 # Budgets keep a single job description from crowding out the resume. The model
 # sees a truncation marker so it never treats a cut description as complete.
@@ -116,7 +119,41 @@ def render_profile_block(profile: ProfileContext, *, include_resume: bool = True
         resume = truncate(profile.resume_text, MAX_RESUME_CHARS)
         lines.append("Resume text:")
         lines.append(resume or "(no resume text available)")
+        structured = _structured_resume_block(profile)
+        if structured:
+            # The structured history is the stronger source: it is the same
+            # facts with the employer, the period and the technologies attached
+            # to each achievement, which is what a model needs to tell "used it
+            # here" from "mentioned it once".
+            lines.append("Structured resume (the candidate's own entries):")
+            lines.append(truncate(structured, MAX_RESUME_CHARS))
     return "\n".join(lines)
+
+
+def _structured_resume_block(profile: ProfileContext) -> str:
+    """The master resume's structured entries, or "" when there are none.
+
+    A stored resume that no longer validates is skipped: a prompt is not the
+    place to surface a data problem, and the endpoints the user actually edits
+    it from report the error properly.
+    """
+    try:
+        document = build_document(
+            headline=profile.headline,
+            summary=profile.summary,
+            skills=profile.skills or [],
+            technologies=profile.technologies or [],
+            experiences=profile.experiences or [],
+            projects=profile.projects or [],
+            education=profile.education or [],
+            certifications=profile.certifications or [],
+            languages=profile.preferred_languages or [],
+        )
+    except ValidationError:
+        return ""
+    if not document.experiences and not document.projects:
+        return ""
+    return render_markdown(document)
 
 
 __all__ = [

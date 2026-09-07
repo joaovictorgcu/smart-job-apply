@@ -1,10 +1,15 @@
 """The only path that sends anything to LinkedIn.
 
 `_submit_application` is the single caller of `LinkedInService.submit()`. It
-refuses unless, in this order: the application belongs to the user, it is
-awaiting review, it was explicitly approved, dry run is off, and the throttle
-allows it — working hours first, then the daily cap. Nothing else in the engine
-may reach the submit button.
+refuses unless, in this order: the application belongs to the user, its channel
+is Easy Apply, it is awaiting review, it was explicitly approved, dry run is
+off, and the throttle allows it — working hours first, then the daily cap.
+Nothing else in the engine may reach the submit button.
+
+The channel check is first because it is categorical rather than conditional: an
+application to a posting on the company's own site is completed by the user
+there and recorded with `application_service.mark_applied`. No draft state, no
+approval and no setting can turn it into something this path may send.
 
 Only once all of that passes does it touch the browser, and then it opens, fills
 and sends in one uninterrupted sequence. Preparing left nothing open on purpose,
@@ -33,7 +38,14 @@ from app.automation.engine.base import EngineBase
 from app.automation.errors import AutomationError
 from app.database.base import utcnow
 from app.database.session import session_scope
-from app.models import Application, ApplicationEventType, ApplicationStatus, Job, JobStatus
+from app.models import (
+    Application,
+    ApplicationChannel,
+    ApplicationEventType,
+    ApplicationStatus,
+    Job,
+    JobStatus,
+)
 from app.observability import get_logger, to_live_event
 from app.websocket.manager import manager
 
@@ -71,6 +83,16 @@ class SubmitMixin(EngineBase):
             )
             if application is None or application.user_id != user_id:
                 raise AutomationError(f"Application {application_id} does not belong to this user.")
+            # Checked before anything else about the draft: an external application
+            # has no Easy Apply form behind it, so there is no state of it that
+            # could make this path correct. It is completed by the user on the
+            # company's site and recorded through `mark_applied`, never here.
+            if application.channel == ApplicationChannel.EXTERNAL:
+                raise AutomationError(
+                    f"Application {application_id} is for a posting on the company's own "
+                    "site; there is no Easy Apply form to send. Apply there and record it "
+                    "instead — nothing is submitted from here."
+                )
             if application.status != ApplicationStatus.AWAITING_REVIEW:
                 raise AutomationError(
                     "Only an application awaiting review can be submitted "
