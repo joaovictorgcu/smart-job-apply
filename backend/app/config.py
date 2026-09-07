@@ -37,6 +37,21 @@ class Settings(BaseSettings):
     access_token_ttl_minutes: int = 60 * 12
 
     # --- AI ---
+    # Which provider answers. Empty means "decide from what is configured": the
+    # paid Anthropic path when a key is present, otherwise the offline provider,
+    # so a fresh clone runs end to end without anyone signing up for anything.
+    # See app/ai/providers/__init__.py for the accepted names.
+    ai_provider: str = ""
+    # Credential and endpoint for every OpenAI-compatible provider (groq, gemini,
+    # openrouter, cerebras, ollama, llamacpp). Both fall back to the preset's own
+    # values, so naming the provider is usually the only setting needed.
+    ai_api_key: str = ""
+    ai_base_url: str = ""
+    ai_model: str = ""
+    # Pins the offline provider's score, for tests that need a specific side of a
+    # threshold. Ignored by every other provider.
+    ai_stub_score: int | None = None
+
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-opus-5"
     # Effort used for bulk scoring (cheaper); the cover letter uses "high".
@@ -48,6 +63,11 @@ class Settings(BaseSettings):
 
     # --- Automation ---
     headless: bool = False
+    # Serve `app.automation.demo_portal` instead of the live site, so the whole
+    # flow can be driven end to end without touching anyone's real account and
+    # without an application ever leaving the machine. Off by default: with this
+    # on, the app is a demo of itself and applies to nothing real.
+    demo_portal: bool = False
     max_concurrent_sessions: int = 1
     # Conservative default guardrails — the user can adjust them in settings.
     default_daily_cap: int = 15
@@ -115,8 +135,36 @@ class Settings(BaseSettings):
         return path
 
     @property
+    def resolved_ai_provider(self) -> str:
+        """The provider that will actually be used.
+
+        An explicit `AI_PROVIDER` always wins. With none set, a configured
+        Anthropic key keeps the original behaviour, and its absence selects the
+        offline provider rather than disabling AI entirely — the app is usable
+        out of the box, and the offline provider labels its own output as a
+        placeholder so nobody mistakes it for a real assessment.
+        """
+        explicit = self.ai_provider.strip().lower()
+        if explicit:
+            return explicit
+        return "anthropic" if self.anthropic_api_key else "stub"
+
+    @property
     def ai_enabled(self) -> bool:
-        return bool(self.anthropic_api_key)
+        """Whether the resolved provider has everything it needs to answer.
+
+        Only the two credentialed paths can be unusable here: the local and
+        offline providers need nothing, and an unknown name is reported by
+        `build_provider` rather than silently read as "AI is off".
+        """
+        provider = self.resolved_ai_provider
+        if provider == "anthropic":
+            return bool(self.anthropic_api_key)
+        if provider in ("stub", "ollama", "llamacpp"):
+            return True
+        if provider == "openai_compat":
+            return bool(self.ai_base_url and self.ai_model)
+        return bool(self.ai_api_key)
 
 
 @lru_cache

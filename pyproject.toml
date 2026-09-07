@@ -10,6 +10,10 @@ dependencies = [
     "fastapi>=0.115,<0.116",
     "uvicorn[standard]>=0.34,<0.35",
     "anthropic>=0.40",
+    # Transport for every OpenAI-compatible provider (ollama, groq, gemini,
+    # openrouter, cerebras). Runtime, not just test-time, since those are the
+    # providers that let the app run without a paid key.
+    "httpx>=0.28",
     "playwright>=1.49,<2",
     "sqlalchemy[asyncio]>=2.0.36,<2.1",
     "alembic>=1.14,<2",
@@ -64,6 +68,13 @@ asyncio_mode = "auto"
 testpaths = ["backend/tests"]
 pythonpath = ["backend"]
 filterwarnings = ["ignore::DeprecationWarning"]
+markers = [
+    "e2e: drives a real Chromium against the fake portal (needs `playwright install chromium`)",
+]
+# The browser tests are opt-in: they need a browser binary and take seconds each,
+# so `make test` stays fast and runnable on a bare checkout. `make e2e` runs them
+# with `-m e2e`, and `make test-all` runs everything.
+addopts = "-m 'not e2e'"
 
 [tool.coverage.run]
 source = ["backend/app"]

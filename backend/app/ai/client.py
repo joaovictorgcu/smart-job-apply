@@ -1,15 +1,17 @@
-"""Claude integration.
+"""The capability layer: one method per thing the app asks a model to do.
 
-Everything provider-specific is confined here: SDK calls, retries, refusal
-handling, and token accounting. Callers get the provider-agnostic models from
+Provider specifics live in `app.ai.providers`; this module owns what does not
+change when the model does — prompt selection, token budgets, retries, refusal
+handling and token accounting. Callers get the provider-agnostic models from
 `app.ai.schemas` plus an `AIUsage` describing the call.
 
 Two invariants matter for the rest of the app:
 
-* A refusal is a normal outcome, not an exception. `claude-opus-5` can decline a
-  request with HTTP 200 and `stop_reason == "refusal"`; every method returns a
-  usable fallback with `AIUsage.refused` set so the caller degrades to manual
-  input instead of crashing.
+* A refusal is a normal outcome, not an exception. A model can decline a request
+  with HTTP 200 and `stop_reason == "refusal"`, and a local model can return
+  something that does not validate; every method returns a usable fallback with
+  `AIUsage.refused` set so the caller degrades to manual input instead of
+  crashing.
 * An AI failure must never abort an automation run. Transient errors are retried;
   anything that survives the retries is raised for the caller to record and move on.
 """
@@ -22,9 +24,6 @@ import re
 import time
 from collections.abc import Callable
 from typing import Any, TypeVar
-
-import anthropic
-from anthropic import AsyncAnthropic
 
 from app.ai.prompts import JobLike
 from app.ai.prompts.cover_letter import (
@@ -39,6 +38,14 @@ from app.ai.prompts.review import REVIEW_SYSTEM_PROMPT, build_review_prompt
 from app.ai.prompts.scoring import SCORING_SYSTEM_PROMPT, build_scoring_prompt
 from app.ai.prompts.screening import SCREENING_SYSTEM_PROMPT, build_screening_prompt
 from app.ai.prompts.tailoring import TAILORING_SYSTEM_PROMPT, build_tailoring_prompt
+from app.ai.providers import (
+    ChatProvider,
+    ProviderError,
+    ProviderNotConfiguredError,
+    build_provider,
+    describe_provider,
+)
+from app.ai.providers.base import ProviderTransientError
 from app.ai.schemas import (
     AIUsage,
     CoverLetter,
@@ -90,23 +97,22 @@ _PRICING_USD_PER_MTOK: dict[str, tuple[float, float]] = {
     "claude-haiku-4-5": (1.0, 5.0),
 }
 
-_NUMERIC_ANSWER = re.compile(r"^-?\d+([.,]\d+)?$")
+# Models that cost nothing to call because nothing left the machine. A hosted
+# free tier is deliberately NOT listed: it is free only up to a quota, and
+# reporting 0.00 for it would be a wrong number rather than an unknown one.
+_FREE_MODELS = frozenset({"stub-offline"})
 
-# Version-compatibility shim state: SDK builds disagree on whether
-# `output_config` may accompany `output_format`. Once a build rejects the pair we
-# stop sending it and log the downgrade a single time.
-_output_config_supported = True
-_shim_logged = False
+_NUMERIC_ANSWER = re.compile(r"^-?\d+([.,]\d+)?$")
 
 
 class AINotConfiguredError(RuntimeError):
-    """No Anthropic API key is configured, so AI features are unavailable."""
+    """The selected AI provider cannot run, so AI features are unavailable."""
 
     def __init__(
         self,
         message: str = (
-            "AI features are not configured. Set ANTHROPIC_API_KEY to enable job "
-            "scoring, cover letters, and screening answers."
+            "AI features are not configured. Set AI_PROVIDER to a free provider "
+            "(ollama runs locally and needs no key), or set ANTHROPIC_API_KEY."
         ),
     ) -> None:
         super().__init__(message)
@@ -186,31 +192,30 @@ def flag_unsupported_skills(source_text: str, tailored_text: str) -> list[str]:
 
 
 def _is_retryable(error: Exception) -> bool:
-    if isinstance(error, anthropic.RateLimitError):
+    """Whether a second attempt could plausibly succeed.
+
+    `ProviderTransientError` is the OpenAI-compatible providers' typed signal for
+    timeouts, 5xx and rate limits. The Anthropic SDK raises its own exception
+    types, so that judgement is delegated to the module that imports it.
+    """
+    if isinstance(error, ProviderTransientError):
         return True
-    if isinstance(error, anthropic.APIStatusError):
-        return error.status_code >= 500
-    # Covers APITimeoutError, which subclasses APIConnectionError.
-    return isinstance(error, anthropic.APIConnectionError)
+    if isinstance(error, ProviderError):
+        # Every other ProviderError is a configuration or contract problem;
+        # retrying would just repeat it three times.
+        return False
+    from app.ai.providers.anthropic_provider import is_retryable as anthropic_retryable
+
+    return anthropic_retryable(error)
 
 
-def _mentions_output_config(error: Exception) -> bool:
-    message = str(error).lower()
-    return "output_config" in message or "effort" in message
+def _is_provider_failure(error: Exception) -> bool:
+    """Errors the retry loop owns, as opposed to bugs it should let through."""
+    if isinstance(error, ProviderError):
+        return True
+    from app.ai.providers.anthropic_provider import is_provider_api_error
 
-
-def _note_shim_downgrade(error: Exception) -> None:
-    """Disable `output_config` for this process, logging the downgrade once."""
-    global _output_config_supported, _shim_logged
-    _output_config_supported = False
-    if not _shim_logged:
-        _shim_logged = True
-        logger.warning(
-            "Installed Anthropic SDK rejects output_config alongside output_format; "
-            "retrying without effort control for the rest of this process (%s).",
-            error,
-            extra={"action": "ai.output_config_downgrade", "detail": str(error)},
-        )
+    return is_provider_api_error(error)
 
 
 def _refusal_category(response: Any) -> str | None:
@@ -233,25 +238,49 @@ _T = TypeVar("_T")
 
 
 class AIClient:
-    """Async wrapper around the Anthropic Messages API."""
+    """The app's AI capabilities, over whichever provider is configured."""
 
-    def __init__(self, *, model: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        model: str | None = None,
+        provider: ChatProvider | None = None,
+    ) -> None:
         self._settings = get_settings()
-        self.model = model or self._settings.anthropic_model
-        self._client: AsyncAnthropic | None = None
+        self._provider = provider
+        self._model_override = model
 
     @property
     def is_configured(self) -> bool:
         return self._settings.ai_enabled
 
-    def _require_client(self) -> AsyncAnthropic:
-        if not self.is_configured:
-            raise AINotConfiguredError
-        if self._client is None:
-            # The key comes from settings so a `.env` file works even when the
-            # value is not exported into the process environment.
-            self._client = AsyncAnthropic(api_key=self._settings.anthropic_api_key or None)
-        return self._client
+    @property
+    def model(self) -> str:
+        """The model that will answer, without building the provider to ask."""
+        if self._model_override:
+            return self._model_override
+        if self._provider is not None:
+            return self._provider.model
+        return describe_provider(self._settings).split("/", 1)[-1]
+
+    @property
+    def provider_name(self) -> str:
+        return describe_provider(self._settings)
+
+    def _require_provider(self) -> ChatProvider:
+        if self._provider is None:
+            if not self.is_configured:
+                raise AINotConfiguredError
+            try:
+                self._provider = build_provider(self._settings)
+            except ProviderNotConfiguredError as exc:
+                raise AINotConfiguredError(str(exc)) from exc
+        return self._provider
+
+    async def aclose(self) -> None:
+        """Release the provider's transport. Safe to call more than once."""
+        if self._provider is not None:
+            await self._provider.aclose()
 
     # --- transport -----------------------------------------------------------
 
@@ -266,38 +295,24 @@ class AIClient:
     ) -> Any:
         """One request, retried on transient failures.
 
-        `output_format` selects `messages.parse` (validated structured output)
-        over `messages.create` (free text).
+        `output_format` asks for validated structured output; the provider
+        decides how to obtain it and returns `parsed_output` either way.
         """
-        client = self._require_client()
-        base_kwargs: dict[str, Any] = {
-            "model": self.model,
-            "max_tokens": max_tokens,
-            "system": system,
-            "messages": [{"role": "user", "content": user_prompt}],
-        }
-        if output_format is not None:
-            base_kwargs["output_format"] = output_format
-
-        async def attempt() -> Any:
-            call = client.messages.parse if output_format is not None else client.messages.create
-            if effort and _output_config_supported:
-                try:
-                    return await call(**base_kwargs, output_config={"effort": effort})
-                except TypeError as exc:
-                    _note_shim_downgrade(exc)
-                except anthropic.BadRequestError as exc:
-                    if not _mentions_output_config(exc):
-                        raise
-                    _note_shim_downgrade(exc)
-            return await call(**base_kwargs)
+        provider = self._require_provider()
+        model = self._model_override or provider.model
 
         last_error: Exception | None = None
         for attempt_number in range(1, MAX_ATTEMPTS + 1):
             try:
-                return await attempt()
-            except anthropic.APIError as exc:
-                if not _is_retryable(exc):
+                return await provider.send(
+                    system=system,
+                    user_prompt=user_prompt,
+                    max_tokens=max_tokens,
+                    effort=effort,
+                    output_format=output_format,
+                )
+            except Exception as exc:
+                if not _is_provider_failure(exc) or not _is_retryable(exc):
                     raise
                 last_error = exc
                 if attempt_number == MAX_ATTEMPTS:
@@ -307,13 +322,15 @@ class AIClient:
                     _MAX_RETRY_DELAY,
                 )
                 logger.warning(
-                    "Anthropic call failed (attempt %s/%s), retrying in %.1fs: %s",
+                    "AI call failed (attempt %s/%s), retrying in %.1fs: %s",
                     attempt_number,
                     MAX_ATTEMPTS,
                     delay,
                     exc,
                     extra={
                         "action": "ai.retry",
+                        "provider": getattr(provider, "name", "unknown"),
+                        "model": model,
                         "attempt": attempt_number,
                         "max_attempts": MAX_ATTEMPTS,
                         "delay_seconds": round(delay, 2),
@@ -709,7 +726,14 @@ def _match_question(label: str, questions: list[FormQuestion]) -> FormQuestion |
 
 
 def estimate_cost_usd(usage: AIUsage) -> float | None:
-    """List-price cost of a call, or `None` for a model with no known price."""
+    """List-price cost of a call, or `None` for a model with no known price.
+
+    A locally served model costs nothing, which is a real 0.00 rather than an
+    unknown. Hosted free tiers still return `None`: they are free only within a
+    quota, so any number we invented for them would be wrong.
+    """
+    if usage.model in _FREE_MODELS:
+        return 0.0
     price = _PRICING_USD_PER_MTOK.get(usage.model)
     if price is None:
         return None
@@ -722,9 +746,11 @@ def estimate_cost_usd(usage: AIUsage) -> float | None:
     )
 
 
-def get_ai_client(model: str | None = None) -> AIClient:
-    """Build a client, optionally overriding the configured model."""
-    return AIClient(model=model)
+def get_ai_client(
+    model: str | None = None, *, provider: ChatProvider | None = None
+) -> AIClient:
+    """Build a client, optionally overriding the configured model or provider."""
+    return AIClient(model=model, provider=provider)
 
 
 __all__ = [

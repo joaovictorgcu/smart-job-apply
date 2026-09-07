@@ -109,9 +109,22 @@ def block_network(monkeypatch: pytest.MonkeyPatch) -> None:
     if anthropic is not None:
         for name in ("Anthropic", "AsyncAnthropic"):
             monkeypatch.setattr(anthropic, name, _forbidden, raising=False)
-    client_module = import_first("app.ai.client")
-    if client_module is not None:
-        monkeypatch.setattr(client_module, "AsyncAnthropic", _forbidden, raising=False)
+    # The SDK now lives behind the provider seam, so the guard follows it there.
+    # `app.ai.client` imports the SDK lazily and holds no such name any more.
+    anthropic_provider = import_first("app.ai.providers.anthropic_provider")
+    if anthropic_provider is not None:
+        monkeypatch.setattr(anthropic_provider, "AsyncAnthropic", _forbidden, raising=False)
+    # Every hosted provider builds one transport of its own, so blocking that
+    # covers groq, gemini, openrouter and cerebras at once. Patched on the
+    # provider rather than on `httpx.AsyncClient`, which the API tests need, and
+    # on the constructor rather than the accessor, so a test may still inject a
+    # `MockTransport` client. The offline `stub` provider holds no transport at
+    # all, which is why the suite can use it freely.
+    openai_compat = import_first("app.ai.providers.openai_compat")
+    if openai_compat is not None:
+        monkeypatch.setattr(
+            openai_compat.OpenAICompatProvider, "_new_client", _forbidden, raising=False
+        )
 
     playwright = import_first("playwright.async_api")
     if playwright is not None:
