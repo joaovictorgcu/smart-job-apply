@@ -75,6 +75,7 @@ Windows sem WSL. O comando bruto está na terceira coluna quando você precisar.
 | Só o backend | `make dev-backend` | `.venv/bin/python -m uvicorn app.main:app --reload --app-dir backend --port 8000` |
 | Só o frontend | `make dev-frontend` | `cd frontend && npm run dev` |
 | App autônomo (IA offline, portal falso) | `make demo` | `python scripts/demo_server.py --fresh` |
+| Popular com dados fictícios | `make seed` | `python scripts/seed_mock.py --fresh` |
 | Testes | `make test` | `pytest` (os de navegador ficam de fora) |
 | Testes de navegador (backend) | `make e2e` | `pytest -m e2e` |
 | Testes de navegador (dashboard) | `make e2e-frontend` | `cd frontend && npm run e2e` |

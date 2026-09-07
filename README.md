@@ -161,6 +161,17 @@ candidatura, revise e aprove: o fluxo é o mesmo do produto real, incluindo o ga
 a automação dirige é servido pelo próprio processo da API
 ([`app/automation/demo_portal.py`](backend/app/automation/demo_portal.py)).
 
+Para ver as telas cheias em vez de estados vazios, popule o banco antes:
+
+```bash
+python scripts/seed_mock.py --fresh         # ou: make seed
+# entra com admin@admin.com / 123
+```
+
+Semeia 18 vagas em todas as faixas de nota, 13 candidaturas cobrindo todos os status, desfechos espalhados pelo
+funil, etapas de entrevista, histórico de pontuação e uma linha do tempo por candidatura. Nada é real e nada foi
+enviado a lugar nenhum.
+
 O modo de demo desliga o modo de teste (senão o formulário nunca é aberto) mas **nunca** desliga
 `require_manual_approval` — é justamente essa garantia que a demo existe para mostrar.
 

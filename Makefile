@@ -10,6 +10,7 @@
 #   make dev            ->  run the two commands above in two terminals
 #   make build          ->  cd frontend; npm run build
 #   make demo           ->  .venv\Scripts\python scripts\demo_server.py --fresh
+#   make seed           ->  .venv\Scripts\python scripts\seed_mock.py --fresh
 #   make test           ->  .venv\Scripts\python -m pytest
 #   make e2e            ->  .venv\Scripts\python -m pytest -m e2e
 #   make e2e-frontend   ->  cd frontend; npm run e2e
@@ -37,7 +38,7 @@ FRONTEND_DIR:= frontend
 BACKEND_PORT ?= 8000
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev dev-backend dev-frontend build demo test e2e \
+.PHONY: help install dev dev-backend dev-frontend build demo seed test e2e \
         e2e-frontend test-all lint format typecheck migrate migration user \
         docker-build docker-up docker-down docker-logs clean
 
@@ -67,6 +68,9 @@ demo: ## Run the app self-contained: offline AI, fake job portal, seeded account
 	@printf 'Backend on :8000 with DEMO_PORTAL and the offline AI provider.\n'
 	@printf 'Run `make dev-frontend` in another terminal, then open :5173.\n\n'
 	$(PY) scripts/demo_server.py --fresh
+
+seed: ## Fill the demo database with believable data (admin@admin.com / 123)
+	$(PY) scripts/seed_mock.py --fresh
 
 test: ## Run the test suite (the browser tests are opt-in; see e2e)
 	$(PY) -m pytest
