@@ -42,8 +42,20 @@ TEST_ENV: dict[str, str] = {
     "ENCRYPTION_KEY": "test-encryption-key-not-for-production-use",
     "ANTHROPIC_API_KEY": "test-anthropic-key-never-sent-anywhere",
     "ANTHROPIC_MODEL": "claude-opus-5",
+    # Pinned, not left to `Settings` to resolve. Every AI_* value has to be set
+    # here or the developer's own .env decides it: a local `AI_PROVIDER=groq`
+    # with no key makes `ai_enabled` False and fails the AI-status tests for a
+    # reason that has nothing to do with the code under test. `anthropic` is the
+    # value the suite's fakes are written against.
+    "AI_PROVIDER": "anthropic",
+    "AI_API_KEY": "",
+    "AI_BASE_URL": "",
+    "AI_MODEL": "",
     "DATABASE_URL": "sqlite+aiosqlite:///:memory:",
     "HEADLESS": "true",
+    # The bundled fake portal is off, so the live-run pacing floor applies —
+    # which is what the production path does and therefore what to test against.
+    "DEMO_PORTAL": "false",
     "ASSISTED_MODE_ONLY": "true",
     "DEFAULT_DAILY_CAP": "15",
     "DEFAULT_MIN_SCORE": "70",
