@@ -11,6 +11,8 @@
 #   make build          ->  cd frontend; npm run build
 #   make demo           ->  .venv\Scripts\python scripts\demo_server.py --fresh
 #   make seed           ->  .venv\Scripts\python scripts\seed_mock.py --fresh
+#   make seed-demo      ->  .venv\Scripts\python scripts\seed_demo.py
+#   make seed-demo n=10 ->  ... --applications 10
 #   make test           ->  .venv\Scripts\python -m pytest
 #   make e2e            ->  .venv\Scripts\python -m pytest -m e2e
 #   make e2e-frontend   ->  cd frontend; npm run e2e
@@ -38,9 +40,9 @@ FRONTEND_DIR:= frontend
 BACKEND_PORT ?= 8000
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev dev-backend dev-frontend build demo seed test e2e \
-        e2e-frontend test-all lint format typecheck migrate migration user \
-        docker-build docker-up docker-down docker-logs clean
+.PHONY: help install dev dev-backend dev-frontend build demo seed seed-demo \
+        test e2e e2e-frontend test-all lint format typecheck migrate migration \
+        user docker-build docker-up docker-down docker-logs clean
 
 help: ## Show this help
 	@printf 'smart-job-apply — available targets\n\n'
@@ -71,6 +73,15 @@ demo: ## Run the app self-contained: offline AI, fake job portal, seeded account
 
 seed: ## Fill the demo database with believable data (admin@admin.com / 123)
 	$(PY) scripts/seed_mock.py --fresh
+
+# Narrower than `seed` on purpose, and overlapping with it: `seed` fills every
+# screen with a broad history, while this seeds one candidate against postings
+# chosen to pull their resume in five different directions, then prints what
+# each adaptation emphasised. That printout is the point — it makes "five
+# vacancies, five different resumes" checkable from a terminal. Shares its
+# dataset with the test suite (`app/demo.py`), so the two cannot drift.
+seed-demo: ## Seed one candidate and N per-application resumes (make seed-demo n=10)
+	$(PY) scripts/seed_demo.py $(if $(n),--applications $(n),)
 
 test: ## Run the test suite (the browser tests are opt-in; see e2e)
 	$(PY) -m pytest

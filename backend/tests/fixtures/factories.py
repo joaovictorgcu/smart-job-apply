@@ -279,25 +279,40 @@ def make_form_question(
 
 
 async def create_demo_user(session: AsyncSession, **overrides: Any) -> User:
-    """A user whose master resume is the rich demo document.
+    """A user whose master resume is the rich demo document, history included.
 
     The default factory profile is deliberately thin — four skills and one line
     of resume text — which is right for the tests that only need *a* profile and
     useless for the per-application resume tests: a candidate with four skills
-    produces five near-identical derivations however good the engine is. This
-    hands over the same document `scripts/seed_demo.py` seeds, so what the tests
-    assert and what a demo shows are the same thing.
+    produces five near-identical adaptations however good the engine is. This
+    hands over the same master resume `scripts/seed_demo.py` seeds, so what the
+    tests assert and what a demo shows are the same thing.
+
+    The two halves are written the way the app writes them: the unstructured
+    fields onto `Profile`, and the history as `Experience` rows. An earlier
+    version passed the whole demo dict as `Profile(**...)` kwargs, which cannot
+    work — the history is its own table — and went unnoticed because nothing
+    called this helper.
     """
-    from app.demo import demo_profile_fields
+    from app.demo import demo_experiences, demo_profile_fields
+    from app.models.resume import Experience
 
     profile = {**demo_profile_fields(), **(overrides.pop("profile", None) or {})}
-    return await create_user(
+    with_experiences = overrides.pop("with_experiences", True)
+    user = await create_user(
         session,
         email=overrides.pop("email", None) or f"demo{next_id()}@example.com",
         full_name=overrides.pop("full_name", "Alex Moreira"),
         profile=profile,
         **overrides,
     )
+
+    if with_experiences:
+        for entry in demo_experiences():
+            session.add(Experience(user_id=user.id, **entry))
+        await session.flush()
+        await session.commit()
+    return user
 
 
 async def create_demo_jobs(

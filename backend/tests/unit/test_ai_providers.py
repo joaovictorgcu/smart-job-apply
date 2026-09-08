@@ -547,3 +547,39 @@ def test_stub_schema_mode_constants_are_ordered_most_to_least_capable() -> None:
         "json_object",
         "prompt_only",
     )
+
+
+# --------------------------------------------------------------------------- #
+# Vocabulary casing
+# --------------------------------------------------------------------------- #
+
+
+def test_a_gap_is_reported_in_the_postings_own_spelling() -> None:
+    """`KNOWN_TECHNOLOGIES` is lowercase, and a gap has no candidate spelling.
+
+    Covered terms take the candidate's own casing, which is right for a resume.
+    Uncovered ones have none by definition, so without this they render as
+    "elixir" / "grpc" next to a posting that wrote "Elixir" / "gRPC".
+    """
+    from app.domain.technologies import spelling_in
+
+    posting = "We use Elixir and gRPC behind Apache, with some Kubernetes."
+
+    assert spelling_in(posting, "elixir") == "Elixir"
+    assert spelling_in(posting, "grpc") == "gRPC"
+    assert spelling_in(posting, "apache") == "Apache"
+
+
+def test_a_term_the_posting_never_names_keeps_its_vocabulary_spelling() -> None:
+    from app.domain.technologies import spelling_in
+
+    assert spelling_in("We use Python.", "elixir") == "elixir"
+    assert spelling_in("", "grpc") == "grpc"
+
+
+def test_spelling_lookup_respects_whole_term_boundaries() -> None:
+    """The same boundary rule as the matcher: `net` must not match `network`."""
+    from app.domain.technologies import spelling_in
+
+    assert spelling_in("our Network team", "net") == "net"
+    assert spelling_in("built on .NET and C#", ".net") == ".NET"

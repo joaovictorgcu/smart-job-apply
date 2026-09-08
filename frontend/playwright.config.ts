@@ -8,9 +8,16 @@ import { defineConfig, devices } from "@playwright/test";
  * network. `--fresh` wipes the demo database first, which is what makes these
  * tests repeatable: they assert on counts and on empty states.
  *
- * Both servers are started here, and Playwright reuses an already-running pair
- * locally so `npm run dev` in another terminal is not fought over. On CI it
- * always starts its own.
+ * The backend is never reused. Reusing it was observably flaky: a server left
+ * over from an earlier run has a database `--fresh` never got to wipe, so the
+ * demo account already has applications and preparing the same job comes back
+ * 422 "none of the selected jobs can be prepared". The suite shares one account
+ * and one search across its specs, so a non-fresh backend is not a slower
+ * run — it is a wrong one.
+ *
+ * The frontend is still reused, because the dev server holds no state worth
+ * isolating and fighting over port 5173 with someone's `npm run dev` is a real
+ * annoyance.
  */
 
 const BACKEND_PORT = 8000;
@@ -41,7 +48,9 @@ export default defineConfig({
       command: `python scripts/demo_server.py --fresh --port ${BACKEND_PORT}`,
       cwd: "..",
       url: `http://127.0.0.1:${BACKEND_PORT}/api/health`,
-      reuseExistingServer: !process.env.CI,
+      // Never reused: see the note above. A stale database silently invalidates
+      // the whole suite instead of failing at the seam that caused it.
+      reuseExistingServer: false,
       timeout: 120_000,
       stdout: "pipe",
       stderr: "pipe",

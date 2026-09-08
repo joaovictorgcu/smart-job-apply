@@ -106,6 +106,37 @@ def mentioned_terms(haystack: str, vocabulary: Iterable[str]) -> list[str]:
     return [term for _, _, term in sorted(found.values())]
 
 
+@lru_cache(maxsize=2048)
+def _original_pattern(folded_term: str) -> re.Pattern[str]:
+    """`_term_pattern`'s rule, applied to text that has not been folded."""
+    return re.compile(
+        rf"(?<![A-Za-z0-9]){re.escape(folded_term)}(?![A-Za-z0-9])", re.IGNORECASE
+    )
+
+
+def spelling_in(haystack: str, term: str) -> str:
+    """How `haystack` itself spells `term`, or `term` unchanged.
+
+    `mentioned_terms` deliberately takes casing from the vocabulary, so the
+    candidate's own spelling wins for anything they have. That leaves the terms
+    they do *not* have falling back to `KNOWN_TECHNOLOGIES`, which is lowercase
+    throughout — so a gap renders as "elixir", "grpc", "apache" beside a posting
+    that wrote "Elixir", "gRPC", "Apache". This recovers the posting's spelling
+    for exactly that case.
+
+    Matched against the unfolded text, rather than by mapping an index back out
+    of `fold`, because folding is not guaranteed length-preserving. A term whose
+    only difference from the haystack is an accent therefore will not match here
+    and keeps its vocabulary spelling; no technology name in the vocabulary is
+    accented, so that costs nothing.
+    """
+    folded = fold(term).strip()
+    if not folded:
+        return term
+    match = _original_pattern(folded).search(haystack)
+    return match.group(0) if match is not None else term
+
+
 def job_technologies(text: str, extra_vocabulary: Iterable[str] = ()) -> list[str]:
     """The technologies a posting names, ordered by where it first names them.
 
@@ -127,6 +158,7 @@ __all__ = [
     "ORIG_WORD",
     "job_technologies",
     "mentioned_terms",
+    "spelling_in",
     "mentions",
     "position_of",
 ]

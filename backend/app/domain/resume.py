@@ -28,7 +28,13 @@ from datetime import date
 from typing import Any
 
 from app.domain.language import fold, squash
-from app.domain.technologies import job_technologies, mentioned_terms, mentions, position_of
+from app.domain.technologies import (
+    job_technologies,
+    mentioned_terms,
+    mentions,
+    position_of,
+    spelling_in,
+)
 
 # --------------------------------------------------------------------------- #
 # Inputs
@@ -468,7 +474,13 @@ def adapt(master: MasterResume, job: JobTarget) -> AdaptedResume:
     owned = master.searchable()
 
     covered = tuple(term for term in wanted if mentions(owned, term))
-    uncovered = tuple(term for term in wanted if term not in covered)
+    # A covered term keeps the candidate's own spelling, which is what belongs in
+    # their resume. An uncovered one has no such spelling by definition, so it
+    # would otherwise fall back to the lowercase vocabulary and render as
+    # "elixir" beside a posting that wrote "Elixir" — take the posting's.
+    uncovered = tuple(
+        spelling_in(job_text, term) for term in wanted if term not in covered
+    )
 
     ranked = _rank_experiences(master.experiences, wanted)
     highlighted_skills = tuple(skill for skill in master.skills if mentions(job_text, skill))
