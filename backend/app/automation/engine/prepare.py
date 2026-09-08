@@ -50,6 +50,7 @@ from app.models import (
     User,
 )
 from app.observability import EventName, get_logger, to_live_event
+from app.services import resume_service
 from app.websocket.manager import manager
 
 logger = get_logger(__name__)
@@ -201,12 +202,6 @@ class PrepareMixin(EngineBase):
             # one created by hand must present the same document. Idempotent, so
             # re-preparing a draft keeps the copy the user may already have edited.
             #
-            # Imported here, not at module scope: `resume_service` raises the API
-            # layer's errors, and `app.api.errors` imports `app.automation` for
-            # its exception mapping — so the module-level edge closes a cycle that
-            # only shows up as an ImportError at startup.
-            from app.services import resume_service
-
             await resume_service.ensure_application_resume(session, user_id, application_id)
 
         await self._publish(
