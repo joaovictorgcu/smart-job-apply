@@ -121,7 +121,17 @@ class PrepareMixin(EngineBase):
                         message=f"Prepared {index} of {len(job_ids)} application(s).",
                         data={"processed": index, "total": len(job_ids)},
                     )
-                    await throttle.wait_action()
+                    # The between-applications pause, not the between-actions
+                    # one. Preparing a draft opens the real Easy Apply modal, so
+                    # a batch of fifty hits that form fifty times; at 2.5-7s
+                    # apart that is a burst no person produces, and the burst is
+                    # what gets noticed. Submitting already paces itself this way
+                    # (see submit.py) and preparing is the same kind of traffic.
+                    #
+                    # Skipped after the last job: the pause exists to separate
+                    # two form openings, and there is no next one to separate.
+                    if index < len(job_ids):
+                        await throttle.wait_between_applications()
 
             await self._finish_run(
                 run_id, AutomationRunStatus.COMPLETED, applications_prepared=len(prepared)

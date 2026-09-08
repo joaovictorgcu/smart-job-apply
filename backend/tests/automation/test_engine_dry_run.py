@@ -13,6 +13,7 @@ import inspect
 from typing import Any
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.client import AIClient
@@ -25,6 +26,7 @@ from app.models import (
     AutomationRunKind,
     AutomationRunStatus,
     JobStatus,
+    UserSettings,
 )
 from tests.automation import FILTERS, application_for_job, jobs_of, reload_run
 from tests.fixtures.factories import create_job, create_run, create_search, create_user
@@ -478,3 +480,91 @@ class TestSubmitRequiresApproval:
         reverted = await application_for_job(session, job.id)
         assert reverted is not None
         assert reverted.status == ApplicationStatus.AWAITING_REVIEW
+
+
+class TestBatchPreparingPacesItself:
+    """Preparing opens the real form, so a batch has to be spaced like one.
+
+    The pacing is the only thing standing between a fifty-job batch and fifty
+    form openings seconds apart, which is the burst pattern that gets an account
+    looked at. `sleep_spy` records the durations without waiting for them, so
+    this asserts the schedule rather than the wall clock.
+    """
+
+    # The test factory zeroes every delay so the suite does not wait, which
+    # would make both ranges indistinguishable at 0.0. These are set apart by an
+    # order of magnitude on purpose: a recorded duration inside APPLY_RANGE came
+    # from `wait_between_applications` and from nothing else.
+    ACTION_RANGE = (0.5, 1.0)
+    APPLY_RANGE = (40.0, 90.0)
+
+    @classmethod
+    def _long_pauses(cls, recorded: list[float]) -> list[float]:
+        low, high = cls.APPLY_RANGE
+        return [delay for delay in recorded if low <= delay <= high]
+
+    @classmethod
+    async def _paced_user(cls, session: AsyncSession) -> Any:
+        user = await create_user(session)
+        rows = await session.execute(
+            select(UserSettings).where(UserSettings.user_id == user.id)
+        )
+        row = rows.scalar_one()
+        row.action_delay_min, row.action_delay_max = cls.ACTION_RANGE
+        row.apply_delay_min, row.apply_delay_max = cls.APPLY_RANGE
+        await session.flush()
+        return user
+
+    @staticmethod
+    async def _preparable(session: AsyncSession, user: Any, count: int) -> list[Any]:
+        return [
+            await create_job(
+                session,
+                user,
+                external_id=f"pace-{index}",
+                status=JobStatus.ANALYZED,
+                score=90,
+            )
+            for index in range(count)
+        ]
+
+    async def test_it_waits_the_between_applications_interval_between_jobs(
+        self, session: AsyncSession, automation_engine: Any, sleep_spy: list[float]
+    ) -> None:
+        user = await self._paced_user(session)
+        jobs = await self._preparable(session, user, 3)
+        run = await prepare_run(session, user)
+
+        sleep_spy.clear()
+        await automation_engine.prepare_applications(user.id, run.id, [job.id for job in jobs])
+
+        # Two gaps for three jobs: the pause separates two form openings, so
+        # the last job is not followed by one.
+        assert len(self._long_pauses(sleep_spy)) == 2, sorted(sleep_spy)
+
+    async def test_it_does_not_pause_after_the_last_job(
+        self, session: AsyncSession, automation_engine: Any, sleep_spy: list[float]
+    ) -> None:
+        user = await self._paced_user(session)
+        jobs = await self._preparable(session, user, 1)
+        run = await prepare_run(session, user)
+
+        sleep_spy.clear()
+        await automation_engine.prepare_applications(user.id, run.id, [jobs[0].id])
+
+        assert self._long_pauses(sleep_spy) == []
+
+    async def test_every_pause_is_randomised_rather_than_fixed(
+        self, session: AsyncSession, automation_engine: Any, sleep_spy: list[float]
+    ) -> None:
+        """A constant interval is itself a fingerprint."""
+        user = await self._paced_user(session)
+        jobs = await self._preparable(session, user, 6)
+        run = await prepare_run(session, user)
+
+        sleep_spy.clear()
+        await automation_engine.prepare_applications(user.id, run.id, [job.id for job in jobs])
+
+        pauses = self._long_pauses(sleep_spy)
+        assert len(pauses) == 5, sorted(sleep_spy)
+        assert len(set(pauses)) > 1, "the interval must vary, not repeat"

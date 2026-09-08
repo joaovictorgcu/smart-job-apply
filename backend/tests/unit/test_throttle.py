@@ -71,9 +71,81 @@ class TestConfiguration:
         throttle = Throttle(settings_row(action_delay_min=9.0, action_delay_max=1.0))
         assert throttle.action_delay == (1.0, 9.0)
 
-    def test_a_negative_delay_is_clamped_to_zero(self) -> None:
+    def test_a_negative_delay_never_reaches_random_uniform(self) -> None:
+        """The point is that it is not negative; the live floor then raises it."""
         throttle = Throttle(settings_row(action_delay_min=-5.0, action_delay_max=2.0))
-        assert throttle.action_delay[0] == 0.0
+        assert throttle.action_delay[0] >= 0.0
+        assert throttle.action_delay[0] <= throttle.action_delay[1]
+
+
+class TestTheLiveRunFloor:
+    """Zero pacing must not reach a real site.
+
+    `scripts/demo_server.py` and `scripts/seed_mock.py` both zero an account's
+    delays, which is right against the bundled fake portal and dangerous
+    against the real one — and that demo account is the most likely one to be
+    reused after a deploy. The floor exists for that accident specifically.
+    """
+
+    def test_a_zeroed_account_is_raised_when_the_demo_portal_is_off(self) -> None:
+        throttle = Throttle(
+            settings_row(
+                action_delay_min=0.0,
+                action_delay_max=0.0,
+                apply_delay_min=0.0,
+                apply_delay_max=0.0,
+            )
+        )
+
+        assert throttle.action_delay[0] > 0
+        assert throttle.apply_delay[0] > 0
+        # The long pause is what separates two form openings, so it has to stay
+        # an order of magnitude above the between-actions one.
+        assert throttle.apply_delay[0] > throttle.action_delay[1]
+
+    def test_a_deliberately_higher_setting_is_left_alone(self) -> None:
+        """The floor raises a too-low value; it does not overwrite tuning."""
+        throttle = Throttle(
+            settings_row(
+                action_delay_min=8.0,
+                action_delay_max=20.0,
+                apply_delay_min=300.0,
+                apply_delay_max=600.0,
+            )
+        )
+
+        assert throttle.action_delay == (8.0, 20.0)
+        assert throttle.apply_delay == (300.0, 600.0)
+
+    def test_a_wide_range_keeps_its_upper_bound(self) -> None:
+        throttle = Throttle(settings_row(apply_delay_min=0.0, apply_delay_max=600.0))
+
+        assert throttle.apply_delay[0] > 0
+        assert throttle.apply_delay[1] == 600.0
+
+    def test_the_demo_portal_keeps_a_zeroed_account_at_zero(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Against a fake site there is no one to be polite to."""
+        from app.config import get_settings
+
+        real = get_settings()
+        monkeypatch.setattr(
+            type(real), "demo_portal", property(lambda _self: True), raising=False
+        )
+        try:
+            throttle = Throttle(
+                settings_row(
+                    action_delay_min=0.0,
+                    action_delay_max=0.0,
+                    apply_delay_min=0.0,
+                    apply_delay_max=0.0,
+                )
+            )
+            assert throttle.action_delay == (0.0, 0.0)
+            assert throttle.apply_delay == (0.0, 0.0)
+        finally:
+            monkeypatch.undo()
 
 
 class TestWorkingHours:

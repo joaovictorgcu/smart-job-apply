@@ -33,6 +33,22 @@ logger = get_logger(__name__)
 # Upper bound for `backoff`, so a retry loop can never sleep for minutes.
 _MAX_BACKOFF_SECONDS = 60.0
 
+# Floors applied whenever the automation is pointed at a real site.
+#
+# Zero delays are legitimate — the demo portal and the test suite both use them,
+# because there is no one to be polite to and no run should wait. The danger is
+# that they reach a live run: `scripts/demo_server.py` and `scripts/seed_mock.py`
+# both zero an account's pacing, so a demo database later pointed at the real
+# LinkedIn would fire a batch with no spacing at all. That account is the most
+# likely one to be reused, which makes it the most likely way to get restricted.
+#
+# These are a floor against that accident, NOT a recommendation. The shipped
+# defaults (2.5-7s between actions, 45-120s between applications) are the
+# recommendation and are several times higher. A user who deliberately tunes
+# above the floor keeps their value; only a value below it is raised.
+_LIVE_ACTION_FLOOR = (1.0, 3.0)
+_LIVE_APPLY_FLOOR = (15.0, 45.0)
+
 
 class Throttle:
     """Timing and volume guard rails derived from a user's settings."""
@@ -68,6 +84,26 @@ class Throttle:
 
         self.action_delay = _ordered(self.action_delay)
         self.apply_delay = _ordered(self.apply_delay)
+
+        # Against the bundled fake portal there is nothing to pace, so a zeroed
+        # account stays zeroed and the demo runs at full speed.
+        if not defaults.demo_portal:
+            raised = (
+                _at_least(self.action_delay, _LIVE_ACTION_FLOOR),
+                _at_least(self.apply_delay, _LIVE_APPLY_FLOOR),
+            )
+            if raised != (self.action_delay, self.apply_delay):
+                logger.warning(
+                    "Raised this account's pacing to the live-run floor.",
+                    extra={
+                        "action": "throttle.floor_applied",
+                        "action_delay_was": self.action_delay,
+                        "apply_delay_was": self.apply_delay,
+                        "action_delay_now": raised[0],
+                        "apply_delay_now": raised[1],
+                    },
+                )
+            self.action_delay, self.apply_delay = raised
 
     # --- Delays -----------------------------------------------------------
 
@@ -176,6 +212,15 @@ class Throttle:
                 "Skipped human pause.",
                 extra={"action": "throttle.human_pause", "status": "skipped", "error": str(exc)},
             )
+
+
+def _at_least(pair: tuple[float, float], floor: tuple[float, float]) -> tuple[float, float]:
+    """`pair` with each bound raised to `floor`, keeping it a valid range.
+
+    Each bound is raised independently, then re-ordered: a configuration like
+    (0, 200) keeps its wide upper bound and only gains a non-zero lower one.
+    """
+    return _ordered((max(pair[0], floor[0]), max(pair[1], floor[1])))
 
 
 def _ordered(pair: tuple[float, ...]) -> tuple[float, float]:
