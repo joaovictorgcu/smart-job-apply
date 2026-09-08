@@ -7,6 +7,7 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Query, Response
 
 from app.api.deps import CurrentUser, LimitDep, OffsetDep, SessionDep
+from app.api.errors import NotFoundError
 from app.models import ApplicationStatus
 from app.schemas.application import (
     ApplicationCard,
@@ -22,7 +23,12 @@ from app.schemas.application import (
 )
 from app.schemas.automation import SubmitRequest
 from app.schemas.common import Page
-from app.services import application_service, automation_service
+from app.schemas.tailoring import (
+    ApplicationResumeRead,
+    ResumeDeriveRequest,
+    TailoredResumeUpdate,
+)
+from app.services import application_service, automation_service, tailoring_service
 
 router = APIRouter(prefix="/applications", tags=["applications"])
 
@@ -245,3 +251,67 @@ async def list_application_events(
     """Every recorded step of this application, oldest first."""
     events = await application_service.list_events(session, user, application_id)
     return [ApplicationEventOut.model_validate(event) for event in events]
+
+
+# --------------------------------------------------------------------------- #
+# This application's own resume
+# --------------------------------------------------------------------------- #
+#
+# One user, N applications, N resumes. Each of these three endpoints addresses
+# exactly one application's version, which is why editing application 3 cannot
+# touch 1, 2 or 4: there is no request shape that names two of them.
+
+
+@router.get("/{application_id}/resume", response_model=ApplicationResumeRead)
+async def read_application_resume(
+    application_id: int, user: CurrentUser, session: SessionDep
+) -> ApplicationResumeRead:
+    """This application's own version of the resume.
+
+    404 when it has none yet — which is the normal state for an application
+    prepared before this feature existed, and for one whose version has not been
+    built. The screen reads that as "offer to build one", never as an error.
+    """
+    application, row = await tailoring_service.get_for_application(session, user, application_id)
+    if row is None:
+        raise NotFoundError(
+            "This application has no resume version yet. Generate one to tailor your "
+            "resume to this posting."
+        )
+    current = await tailoring_service.current_fingerprint(session, user)
+    return tailoring_service.to_application_read(application, row, current=current)
+
+
+@router.post("/{application_id}/resume", response_model=ApplicationResumeRead)
+async def create_application_resume(
+    application_id: int,
+    user: CurrentUser,
+    session: SessionDep,
+    payload: ResumeDeriveRequest | None = None,
+) -> ApplicationResumeRead:
+    """Build (or rebuild) this application's version from the current master resume.
+
+    Always derives from the master *as it stands now* and freezes that snapshot
+    onto the row, so a new application picks up profile edits while the versions
+    already derived keep the document their user reviewed.
+    """
+    application, row = await tailoring_service.derive_for_application(
+        session, user, application_id, strategy=(payload or ResumeDeriveRequest()).strategy
+    )
+    current = await tailoring_service.current_fingerprint(session, user)
+    return tailoring_service.to_application_read(application, row, current=current)
+
+
+@router.patch("/{application_id}/resume", response_model=ApplicationResumeRead)
+async def update_application_resume(
+    application_id: int,
+    payload: TailoredResumeUpdate,
+    user: CurrentUser,
+    session: SessionDep,
+) -> ApplicationResumeRead:
+    """Save the user's edits to this application's version, and only this one."""
+    application, row = await tailoring_service.update_for_application(
+        session, user, application_id, payload.content
+    )
+    current = await tailoring_service.current_fingerprint(session, user)
+    return tailoring_service.to_application_read(application, row, current=current)

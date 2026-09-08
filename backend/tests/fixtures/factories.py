@@ -278,6 +278,49 @@ def make_form_question(
     )
 
 
+async def create_demo_user(session: AsyncSession, **overrides: Any) -> User:
+    """A user whose master resume is the rich demo document.
+
+    The default factory profile is deliberately thin — four skills and one line
+    of resume text — which is right for the tests that only need *a* profile and
+    useless for the per-application resume tests: a candidate with four skills
+    produces five near-identical derivations however good the engine is. This
+    hands over the same document `scripts/seed_demo.py` seeds, so what the tests
+    assert and what a demo shows are the same thing.
+    """
+    from app.demo import demo_profile_fields
+
+    profile = {**demo_profile_fields(), **(overrides.pop("profile", None) or {})}
+    return await create_user(
+        session,
+        email=overrides.pop("email", None) or f"demo{next_id()}@example.com",
+        full_name=overrides.pop("full_name", "Alex Moreira"),
+        profile=profile,
+        **overrides,
+    )
+
+
+async def create_demo_jobs(
+    session: AsyncSession, user: User, count: int | None = None
+) -> list[Job]:
+    """The demo postings, as `Job` rows — five vacancies that pull one resume apart.
+
+    `count` above five cycles the descriptions with fresh external ids, so a test
+    about "N applications" can ask for ten without inventing more copy.
+    """
+    from app.demo import DEMO_JOBS
+
+    total = len(DEMO_JOBS) if count is None else count
+    jobs: list[Job] = []
+    for index in range(total):
+        template = dict(DEMO_JOBS[index % len(DEMO_JOBS)])
+        # `external_id` is unique per (user, external id); a cycled posting needs
+        # its own or the second copy would be deduplicated away.
+        template["external_id"] = f"{template['external_id']}-{index + 1}"
+        jobs.append(await create_job(session, user, **template))
+    return jobs
+
+
 def make_profile_context(**overrides: Any) -> ProfileContext:
     values: dict[str, Any] = {
         "full_name": "Test User",

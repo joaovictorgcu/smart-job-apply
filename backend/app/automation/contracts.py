@@ -147,7 +147,13 @@ class LinkedInService(Protocol):
 
 @dataclass(slots=True)
 class ProfileContext:
-    """User data handed to the AI and to the form filling (without touching the ORM)."""
+    """User data handed to the AI and to the form filling (without touching the ORM).
+
+    The structured lists mirror `Profile`'s master-resume columns verbatim (loose
+    JSON, parsed by `app.domain.resume`). They travel here rather than being read
+    from the ORM downstream so the derivation, the prompts and the invention
+    guard all see one snapshot of the candidate, taken at one moment.
+    """
 
     full_name: str | None = None
     email: str | None = None
@@ -159,5 +165,9 @@ class ProfileContext:
     resume_text: str | None = None
     resume_path: str | None = None
     skills: list[str] = field(default_factory=list)
+    experiences: list[dict[str, Any]] = field(default_factory=list)
+    projects: list[dict[str, Any]] = field(default_factory=list)
+    education: list[dict[str, Any]] = field(default_factory=list)
+    certifications: list[str] = field(default_factory=list)
     answer_bank: dict[str, Any] = field(default_factory=dict)
     preferred_languages: list[str] = field(default_factory=list)

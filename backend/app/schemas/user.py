@@ -20,6 +20,53 @@ class UserRead(ORMModel):
     last_login_at: datetime | None = None
 
 
+class ResumeHighlight(BaseModel):
+    """One achievement of one experience, tagged with what it is about.
+
+    `technologies` is not decoration: it is how a derivation picks which of the
+    user's own bullets lead for a given posting, so a .NET vacancy and a React
+    vacancy honestly show different sentences from the same job. Untagged
+    bullets still work — they are matched on their text alone.
+    """
+
+    text: str = Field(min_length=1, max_length=1000)
+    technologies: list[str] = Field(default_factory=list, max_length=40)
+
+
+class ResumeExperienceIn(BaseModel):
+    """One position of the master resume."""
+
+    # Stable across edits so a derived version can point back at its source
+    # entry. Generated when absent, never required from the client.
+    id: str | None = Field(default=None, max_length=80)
+    role: str = Field(min_length=1, max_length=200)
+    company: str = Field(min_length=1, max_length=200)
+    start: str = Field(default="", max_length=40)
+    end: str = Field(default="", max_length=40)
+    location: str = Field(default="", max_length=200)
+    # The neutral description, used for a posting that matches no highlight.
+    summary: str = Field(default="", max_length=2000)
+    highlights: list[ResumeHighlight] = Field(default_factory=list, max_length=30)
+    technologies: list[str] = Field(default_factory=list, max_length=60)
+
+
+class ResumeProjectIn(BaseModel):
+    id: str | None = Field(default=None, max_length=80)
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2000)
+    outcome: str = Field(default="", max_length=500)
+    technologies: list[str] = Field(default_factory=list, max_length=60)
+
+
+class ResumeEducationIn(BaseModel):
+    id: str | None = Field(default=None, max_length=80)
+    degree: str = Field(default="", max_length=200)
+    institution: str = Field(default="", max_length=200)
+    start: str = Field(default="", max_length=40)
+    end: str = Field(default="", max_length=40)
+    detail: str = Field(default="", max_length=1000)
+
+
 class ProfileRead(ORMModel):
     headline: str | None = None
     location: str | None = None
@@ -29,6 +76,13 @@ class ProfileRead(ORMModel):
     resume_text: str | None = None
     resume_filename: str | None = None
     skills: list[str] = Field(default_factory=list)
+    # The structured master resume. Read back as loose JSON rather than through
+    # the `*In` models: rows written before this existed, or by an earlier shape
+    # of it, must still render instead of failing validation on the way out.
+    experiences: list[dict[str, Any]] = Field(default_factory=list)
+    projects: list[dict[str, Any]] = Field(default_factory=list)
+    education: list[dict[str, Any]] = Field(default_factory=list)
+    certifications: list[str] = Field(default_factory=list)
     preferred_languages: list[str] = Field(default_factory=list)
     answer_bank: dict[str, Any] = Field(default_factory=dict)
     updated_at: datetime | None = None
@@ -42,6 +96,13 @@ class ProfileUpdate(BaseModel):
     summary: str | None = None
     resume_text: str | None = None
     skills: list[str] | None = None
+    # Validated on the way in — this is the document every future application
+    # derives from, and a malformed entry here would quietly degrade every one
+    # of them. Omitted fields are left untouched, as everywhere else here.
+    experiences: list[ResumeExperienceIn] | None = Field(default=None, max_length=40)
+    projects: list[ResumeProjectIn] | None = Field(default=None, max_length=40)
+    education: list[ResumeEducationIn] | None = Field(default=None, max_length=20)
+    certifications: list[str] | None = Field(default=None, max_length=40)
     preferred_languages: list[str] | None = None
     answer_bank: dict[str, Any] | None = None
 
