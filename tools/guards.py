@@ -59,6 +59,7 @@ from __future__ import annotations
 
 import ast
 import logging
+import re
 import sys
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
@@ -470,6 +471,61 @@ def g7_reserved_log_keys(root: Path) -> list[Violation]:
 
 # --- Runner -----------------------------------------------------------------
 
+# --- G8 ---------------------------------------------------------------------
+
+# The production compose file, and the only ports it may publish.
+PROD_COMPOSE = "docker-compose.prod.yml"
+
+# A published port looks like "8000:8000" or "127.0.0.1:8000:8000". Matched
+# loosely on purpose: anything that binds a host port at all has to be checked.
+PORT_MAPPING = re.compile(r'^\s*-\s*"?(?P<mapping>[\w.:\[\]-]*\d+:\d+(?:/\w+)?)"?\s*$')
+
+# Only these bind to the host alone. `localhost` is accepted because Docker
+# resolves it to 127.0.0.1, and ::1 for an IPv6-only host.
+LOOPBACK_PREFIXES = ("127.0.0.1:", "localhost:", "[::1]:")
+
+
+def g8_production_ports_are_loopback(root: Path) -> list[Violation]:
+    """`docker-compose.prod.yml` must not publish a port on a public interface.
+
+    Port 6080 is a noVNC bridge to a Chromium signed in to the operator's
+    LinkedIn, and `docker/supervisord.conf` runs x11vnc with `-nopw`. That is
+    safe while the raw VNC port stays inside the container. Publishing the
+    bridge on 0.0.0.0 hands an interactive, already-authenticated session to
+    anyone who finds the port — no password, no TLS, nothing logged.
+
+    The deployment reaches both ports over a tailnet instead, so a loopback
+    binding is not an inconvenience to work around: it is the boundary.
+    """
+    path = root / PROD_COMPOSE
+    if not path.exists():
+        return []
+
+    violations: list[Violation] = []
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if line.lstrip().startswith("#"):
+            continue
+        match = PORT_MAPPING.match(line)
+        if match is None:
+            continue
+        mapping = match.group("mapping")
+        if mapping.startswith(LOOPBACK_PREFIXES):
+            continue
+        violations.append(
+            Violation(
+                "G8",
+                relative(path, root),
+                number,
+                f"`{mapping}` publishes a port on every interface. In "
+                f"{PROD_COMPOSE} every mapping must bind loopback "
+                "(127.0.0.1:HOST:CONTAINER) and be reached over the tailnet: "
+                "port 6080 is an unauthenticated noVNC bridge to a browser "
+                "signed in to LinkedIn.",
+            )
+        )
+    return violations
+
+
 ALL_GUARDS: tuple[Callable[[Path], list[Violation]], ...] = (
     g1_assisted_mode_default,
     g2_user_settings_defaults,
@@ -478,6 +534,7 @@ ALL_GUARDS: tuple[Callable[[Path], list[Violation]], ...] = (
     g5_domain_purity,
     g6_silent_broad_except,
     g7_reserved_log_keys,
+    g8_production_ports_are_loopback,
 )
 
 

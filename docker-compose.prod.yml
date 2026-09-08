@@ -1,0 +1,97 @@
+# Production deployment. Nothing listens on a public interface.
+#
+#     docker compose -f docker-compose.prod.yml up -d --build
+#
+# Self-contained on purpose — do NOT combine it with docker-compose.yml.
+# Compose *merges* `ports` lists across files rather than replacing them, so
+# layering this over the base file would keep the base's public bindings
+# alongside these loopback ones and quietly undo the whole point. `!override`
+# fixes that but needs Compose 2.24+, and a security boundary should not depend
+# on the reader having a recent enough Compose.
+#
+# Why loopback matters here: port 6080 is a noVNC bridge to a Chromium that is
+# signed in to your LinkedIn, and `docker/supervisord.conf` runs x11vnc with
+# `-nopw`. That is safe inside the container, where the raw VNC port never
+# leaves. It stops being safe the moment the bridge is reachable from the
+# internet: whoever finds the port gets an interactive, already-authenticated
+# session. No password, no TLS, no audit trail.
+#
+# So both ports bind to 127.0.0.1 and are reached over your tailnet with
+# `tailscale serve`, which gives tailnet-only access plus TLS with nothing to
+# rotate. See docs/deployment.md for the runbook.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: smart-job-apply:latest
+    container_name: smart-job-apply
+
+    # Secrets and the AI provider live in .env, which is gitignored.
+    env_file:
+      - .env
+
+    environment:
+      # Absolute path inside the container; matches the volume mount below.
+      DATA_DIR: /app/backend/data
+      # The browser reaches the app through the hostname tailscale serves it on,
+      # so that origin has to be allowed. Set TAILNET_HOST in .env to your
+      # machine's tailnet name, e.g. sja.tailnet-1234.ts.net
+      CORS_ORIGINS: "https://${TAILNET_HOST:?set TAILNET_HOST in .env}"
+      # A real run drives the real site, never the bundled fake portal. Set
+      # explicitly rather than left to .env, because a demo database carried
+      # over from local testing would otherwise decide this.
+      DEMO_PORTAL: "false"
+      # The browser renders into the virtual display. Headless Chromium
+      # advertises itself as headless, and you could not sign in by hand.
+      HEADLESS: "false"
+
+    ports:
+      # Loopback only. `tailscale serve` is what makes these reachable, and
+      # only from your own tailnet. Publishing either on 0.0.0.0 hands out a
+      # logged-in LinkedIn session — see the note at the top of this file.
+      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:6080:6080"
+
+    volumes:
+      # app.db, browser_profiles/ (the encrypted LinkedIn session), resumes/
+      # and screenshots/. Back this up; losing it means signing in again and
+      # losing the application history.
+      - app-data:/app/backend/data
+
+    # Chromium allocates its renderer heap in /dev/shm. Docker's 64 MB default
+    # makes tabs crash with no useful error.
+    shm_size: 1gb
+
+    # Chromium is the memory-hungry part; the API and the provider calls are
+    # not. Without a limit a runaway renderer takes the host down with it.
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+    restart: unless-stopped
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          python3 -c "import urllib.request,sys;
+          sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health',
+          timeout=5).status == 200 else 1)"
+      interval: 30s
+      timeout: 10s
+      # Migrations and the first browser launch make the first boot slow.
+      start_period: 60s
+      retries: 3
+
+volumes:
+  app-data:
+    name: smart-job-apply-data

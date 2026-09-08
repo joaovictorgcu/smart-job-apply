@@ -162,6 +162,40 @@ O mesmo vale para o `.env`, que guarda a sua chave de API e a sua chave de cript
 Quando você fizer backup do diretório — e você deve, já que é a única cópia do seu histórico de busca de emprego —
 guarde-o em algum lugar onde você se sentiria confortável armazenando o seu currículo e um conjunto de credenciais vivas.
 
+## Rodar num servidor
+
+Um deploy muda o perfil de risco de duas formas, e as duas são maiores que
+qualquer ajuste de configuração.
+
+**A porta 6080 é uma sessão autenticada.** Ela é uma ponte noVNC para o Chromium
+que a automação dirige — o mesmo navegador em que você fez login no LinkedIn — e
+`docker/supervisord.conf` roda `x11vnc` com `-nopw`. Isso é seguro enquanto a
+porta VNC crua não sai do contêiner, que é o caso no laptop. Publicar a ponte
+numa interface pública entrega uma sessão interativa já logada a quem achar a
+porta: sem senha, sem TLS, sem nada registrado. Não é escalonamento de
+privilégio nem exploração de falha — é a porta da frente aberta.
+
+Por isso `docker-compose.prod.yml` só publica em `127.0.0.1` e o acesso é pelo
+tailnet, e por isso o guard **G8** falha o build se alguma ligação daquele
+arquivo deixar de ser loopback. O guard existe porque essa é a configuração
+mais fácil de afrouxar por conveniência e a mais cara de afrouxar por engano.
+
+**IP de datacenter é reconhecido.** As faixas de nuvem são públicas e
+conhecidas. A mesma atividade que passa de uma conexão residencial chama atenção
+mais rápido de um servidor, e um deploy que roda sem ninguém olhando acumula
+mais atividade antes de alguém notar um problema. Os atrasos aleatórios, o teto
+diário e a janela de horário continuam valendo — e continuam sendo redução de
+risco, não garantia.
+
+Um detalhe que morde: os `DEFAULT_*` do ambiente só semeiam contas **novas**.
+Uma conta que já existe guarda os próprios valores, e as contas criadas pelos
+seeders de demonstração têm os atrasos em zero de propósito, porque contra o
+portal falso não há ninguém para poupar. O `Throttle` aplica um piso quando
+`DEMO_PORTAL=false`, então zero nunca alcança o site real; ainda assim, confira
+os valores da conta antes da primeira execução de verdade.
+
+O procedimento completo está em [deployment.md](deployment.md).
+
 ## Ética
 
 O risco técnico é seu para aceitar. Estes pontos são sobre outras pessoas.

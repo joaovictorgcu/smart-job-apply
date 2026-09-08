@@ -93,7 +93,7 @@ class TestTheLiveRepository:
         # A guard defined but never registered is worse than no guard at all.
         defined = {name for name in vars(guards) if name.startswith("g") and name[1:2].isdigit()}
         assert {guard.__name__ for guard in guards.ALL_GUARDS} == defined
-        assert len(guards.ALL_GUARDS) == 7
+        assert len(guards.ALL_GUARDS) == 8
 
     def test_a_compliant_fake_repository_reports_nothing(self, repo: Path) -> None:
         assert guards.run_all(repo) == []
