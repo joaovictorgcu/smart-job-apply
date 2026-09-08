@@ -89,83 +89,6 @@ def render_job_block(job: JobLike) -> str:
     return "\n".join(lines)
 
 
-def render_structured_history(profile: ProfileContext) -> str:
-    """The candidate's structured master resume, or `""` when they keep none.
-
-    Rendered as plain lines rather than JSON: this is source material the model
-    reads, not a payload it has to parse. Every technology list is spelled out
-    because the model's job is to *re-emphasize* what is there, and it can only
-    re-emphasize what it can see — a technology named only in a structured bullet
-    would otherwise look, to the model, like something the candidate lacks.
-    """
-    blocks: list[str] = []
-    for entry in profile.experiences or []:
-        if not isinstance(entry, dict):
-            continue
-        head = " — ".join(
-            str(entry.get(key) or "").strip()
-            for key in ("role", "company")
-            if str(entry.get(key) or "").strip()
-        )
-        period = " to ".join(
-            str(entry.get(key) or "").strip()
-            for key in ("start", "end")
-            if str(entry.get(key) or "").strip()
-        )
-        lines = [f"- {head}" + (f" ({period})" if period else "")]
-        if entry.get("summary"):
-            lines.append(f"  {str(entry['summary']).strip()}")
-        for highlight in entry.get("highlights") or []:
-            text = highlight.get("text") if isinstance(highlight, dict) else highlight
-            if str(text or "").strip():
-                lines.append(f"  * {str(text).strip()}")
-        technologies = entry.get("technologies") or []
-        if technologies:
-            lines.append(f"  Technologies: {', '.join(str(item) for item in technologies)}")
-        blocks.append("\n".join(lines))
-
-    project_lines: list[str] = []
-    for entry in profile.projects or []:
-        if not isinstance(entry, dict):
-            continue
-        name = str(entry.get("name") or "").strip()
-        if not name:
-            continue
-        detail = " ".join(
-            str(entry.get(key) or "").strip()
-            for key in ("description", "outcome")
-            if str(entry.get(key) or "").strip()
-        )
-        technologies = entry.get("technologies") or []
-        suffix = f" [{', '.join(str(item) for item in technologies)}]" if technologies else ""
-        project_lines.append(f"- {name}: {detail}{suffix}".rstrip())
-
-    education_lines: list[str] = []
-    for entry in profile.education or []:
-        if not isinstance(entry, dict):
-            continue
-        parts = [
-            str(entry.get(key) or "").strip()
-            for key in ("degree", "institution", "end")
-            if str(entry.get(key) or "").strip()
-        ]
-        if parts:
-            education_lines.append(f"- {' — '.join(parts)}")
-
-    sections: list[str] = []
-    if blocks:
-        sections.append("Structured experience:\n" + "\n".join(blocks))
-    if project_lines:
-        sections.append("Projects:\n" + "\n".join(project_lines))
-    if education_lines:
-        sections.append("Education:\n" + "\n".join(education_lines))
-    if profile.certifications:
-        sections.append(
-            "Certifications: " + ", ".join(str(item) for item in profile.certifications)
-        )
-    return "\n\n".join(sections)
-
-
 def render_profile_block(profile: ProfileContext, *, include_resume: bool = True) -> str:
     """The candidate as the model should see it.
 
@@ -193,12 +116,6 @@ def render_profile_block(profile: ProfileContext, *, include_resume: bool = True
         resume = truncate(profile.resume_text, MAX_RESUME_CHARS)
         lines.append("Resume text:")
         lines.append(resume or "(no resume text available)")
-        # Budgeted separately from the free text: a candidate who keeps their
-        # history as structure should not have it crowded out by a long prose CV.
-        history = truncate(render_structured_history(profile), MAX_RESUME_CHARS)
-        if history:
-            lines.append("")
-            lines.append(history)
     return "\n".join(lines)
 
 
@@ -213,6 +130,5 @@ __all__ = [
     "fence_untrusted",
     "render_job_block",
     "render_profile_block",
-    "render_structured_history",
     "truncate",
 ]

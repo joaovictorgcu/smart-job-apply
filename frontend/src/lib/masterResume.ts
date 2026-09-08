@@ -6,7 +6,7 @@
  * long resume form into a full remount and a lost cursor.
  */
 
-import type { ResumeEducationEntry, ResumeExperience, ResumeProject } from "@/types/api";
+import type { ResumeEducationEntry, ResumeExperience, ResumeProject } from "@/types/masterResume";
 
 /**
  * Prefix marking an entry that exists only in this browser so far.

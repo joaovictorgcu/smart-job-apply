@@ -159,49 +159,6 @@ export interface TokenResponse {
   user: User;
 }
 
-/**
- * One achievement of one experience, tagged with the technologies it involved.
- *
- * The tags are what let a per-application version lead with different sentences
- * from the same job. An untagged bullet still works — it is matched on its text.
- */
-export interface ResumeHighlight {
-  text: string;
-  technologies: string[];
-}
-
-/** One position of the master resume. */
-export interface ResumeExperience {
-  /** Stable across edits; assigned by the server when absent. */
-  id?: string | null;
-  role: string;
-  company: string;
-  start: string;
-  end: string;
-  location: string;
-  /** The neutral description, used for a posting that matches no highlight. */
-  summary: string;
-  highlights: ResumeHighlight[];
-  technologies: string[];
-}
-
-export interface ResumeProject {
-  id?: string | null;
-  name: string;
-  description: string;
-  outcome: string;
-  technologies: string[];
-}
-
-export interface ResumeEducationEntry {
-  id?: string | null;
-  degree: string;
-  institution: string;
-  start: string;
-  end: string;
-  detail: string;
-}
-
 export interface Profile {
   headline: string | null;
   location: string | null;
@@ -211,11 +168,6 @@ export interface Profile {
   resume_text: string | null;
   resume_filename: string | null;
   skills: string[];
-  /** The structured master resume every application derives its version from. */
-  experiences: ResumeExperience[];
-  projects: ResumeProject[];
-  education: ResumeEducationEntry[];
-  certifications: string[];
   preferred_languages: string[];
   answer_bank: Record<string, unknown>;
   updated_at: string | null;
@@ -229,10 +181,6 @@ export interface ProfileUpdate {
   summary?: string | null;
   resume_text?: string | null;
   skills?: string[] | null;
-  experiences?: ResumeExperience[] | null;
-  projects?: ResumeProject[] | null;
-  education?: ResumeEducationEntry[] | null;
-  certifications?: string[] | null;
   preferred_languages?: string[] | null;
   answer_bank?: Record<string, unknown> | null;
 }
@@ -483,79 +431,6 @@ export interface CVChange {
   detail: string;
 }
 
-/** How a version's markdown was written. */
-export type ResumeStrategy = "deterministic" | "ai";
-
-/** How central an experience is to the posting this version was built for. */
-export type ResumeEmphasis = "lead" | "support" | "context";
-
-/** One experience as one application presents it. */
-export interface TailoredExperience {
-  id: string;
-  role: string;
-  company: string;
-  period: string;
-  location: string;
-  /** Composed from your own bullets — this is the adapted description. */
-  description: string;
-  highlights: string[];
-  /** The entry's technologies, the ones this posting asks for first. */
-  technologies: string[];
-  /** Which of the posting's keywords this entry backs. */
-  matched: string[];
-  /** 0-100, relative to the strongest entry in this version. */
-  relevance: number;
-  emphasis: ResumeEmphasis;
-  /** Bullets from your master resume this version left out. */
-  omitted: string[];
-}
-
-export interface TailoredProject {
-  id: string;
-  name: string;
-  description: string;
-  outcome: string;
-  technologies: string[];
-  matched: string[];
-  relevance: number;
-}
-
-export interface ResumeEducation {
-  id: string;
-  degree: string;
-  institution: string;
-  start: string;
-  end: string;
-  detail: string;
-}
-
-/** The structured, per-application resume. Identity is verbatim from the master. */
-export interface ResumeSections {
-  full_name: string;
-  headline: string;
-  location: string;
-  summary: string;
-  years_of_experience: number | null;
-  /** Skills this posting asks for, in its own order of priority. */
-  prioritized_skills: string[];
-  /** Everything else you list, in your order. */
-  other_skills: string[];
-  experiences: TailoredExperience[];
-  projects: TailoredProject[];
-  education: ResumeEducation[];
-  certifications: string[];
-  language: string;
-}
-
-/** The posting reduced to what was matched — why this version looks like this. */
-export interface ResumeFocus {
-  title: string;
-  company: string;
-  level: string | null;
-  keywords: string[];
-  unsupported: string[];
-}
-
 /** A resume adapted to one job — reorganized and re-emphasized, never invented. */
 export interface TailoredResume {
   job_id: number;
@@ -570,21 +445,10 @@ export interface TailoredResume {
   summary: string | null;
   model: string | null;
   was_edited: boolean;
-  /** True when your profile changed after this version was derived. */
+  /** True when your profile changed after this draft was generated. */
   is_stale: boolean;
-  strategy: ResumeStrategy;
-  /** Null for a version derived before the structure existed. */
-  sections: ResumeSections | null;
-  focus: ResumeFocus | null;
   created_at: string | null;
   updated_at: string | null;
-}
-
-/** The same version, addressed as one application's own. */
-export interface ApplicationResume extends TailoredResume {
-  application_id: number;
-  job_title: string | null;
-  job_company: string | null;
 }
 
 /* -------------------------------------------------------------------------- */

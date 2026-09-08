@@ -10,6 +10,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, type RenderOptions, type RenderResult } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
+import { MemoryRouter } from "react-router-dom";
 
 import { ToastProvider } from "@/components/ToastProvider";
 
@@ -37,10 +38,15 @@ export function renderWithProviders(
   ui: ReactElement,
   { queryClient = createTestQueryClient(), ...options }: RenderWithProvidersOptions = {},
 ): RenderResult & { queryClient: QueryClient } {
+  // A router is part of the harness because panels link out to other screens
+  // (a resume panel points at Perfil). Rendering one without a router throws,
+  // and a per-test wrapper would be the same three lines in every file.
   function Wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={queryClient}>
-        <ToastProvider>{children}</ToastProvider>
+        <MemoryRouter>
+          <ToastProvider>{children}</ToastProvider>
+        </MemoryRouter>
       </QueryClientProvider>
     );
   }

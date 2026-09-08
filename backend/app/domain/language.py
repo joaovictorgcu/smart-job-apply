@@ -45,15 +45,6 @@ def squash(text: str) -> str:
     return _NON_ALNUM.sub(" ", fold(text)).strip()
 
 
-def slugify(text: str, *, limit: int = 60) -> str:
-    """Fold to a dash-separated ascii identifier fragment; `""` if nothing remains.
-
-    Used for identifiers derived from user content (a resume experience's id), so
-    the id stays stable while the content does and never depends on list order.
-    """
-    return _NON_ALNUM.sub("-", fold(text)).strip("-")[:limit].strip("-")
-
-
 def detect_language(text: str | None) -> str:
     """Guess the language of a job description.
 
@@ -71,4 +62,4 @@ def detect_language(text: str | None) -> str:
     return "pt-BR" if portuguese > english else "en"
 
 
-__all__ = ["detect_language", "fold", "slugify", "squash"]
+__all__ = ["detect_language", "fold", "squash"]

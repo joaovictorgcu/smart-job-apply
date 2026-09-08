@@ -11,7 +11,6 @@
 
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApplicationResumePanel } from "@/components/ApplicationResumePanel";
@@ -46,11 +45,10 @@ function notFound(): Error & { status: number } {
 }
 
 function render() {
-  return renderWithProviders(
-    <MemoryRouter>
-      <ApplicationResumePanel applicationId={APPLICATION_ID} />
-    </MemoryRouter>,
-  );
+  // No MemoryRouter here: `renderWithProviders` already supplies one, and
+  // nesting two routers is a hard error in react-router. The wrapper came from
+  // a branch whose test utils did not provide one.
+  return renderWithProviders(<ApplicationResumePanel applicationId={APPLICATION_ID} />);
 }
 
 async function renderAdapted(overrides: Partial<ApplicationResume> = {}) {

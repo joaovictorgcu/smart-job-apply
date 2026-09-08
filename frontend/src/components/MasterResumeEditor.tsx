@@ -22,7 +22,7 @@ import type {
   ResumeExperience,
   ResumeHighlight,
   ResumeProject,
-} from '@/types/api';
+} from '@/types/masterResume';
 
 interface RowControlsProps {
   index: number;

@@ -54,8 +54,8 @@ export function CVTailorPanel({ jobId, aiConfigured }: CVTailorPanelProps) {
   return (
     <Card>
       <CardHeader
-        title="Currículo adaptado"
-        description="Adapta o seu CV a esta vaga — reorganizado e reenfatizado, nunca inventado."
+        title="Currículo adaptado pela IA (texto)"
+        description="Uma redação em prosa desta vaga, escrita pela IA. O currículo que a candidatura realmente apresenta é montado na tela da candidatura, sem chamada de modelo."
         actions={
           <Button
             loading={busy}
