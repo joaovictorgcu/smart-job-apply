@@ -1,8 +1,11 @@
 # Smart Job Apply
 
-Um agente assistido de candidatura a vagas para o LinkedIn Easy Apply (Candidatura Simplificada). Ele encontra vagas, pontua cada uma em relação ao seu currículo com a
-Claude, redige as respostas de triagem e a carta de apresentação, preenche o formulário — e então **para e espera
-você ler e aprovar** antes de qualquer coisa ser enviada.
+Um agente assistido de candidatura a vagas para o LinkedIn Easy Apply (Candidatura Simplificada). Ele encontra
+vagas, pontua cada uma em relação ao seu currículo, redige as respostas de triagem e a carta de apresentação,
+preenche o formulário — e então **para e espera você ler e aprovar** antes de qualquer coisa ser enviada.
+
+O provider de IA é plugável: um modelo local via Ollama, um tier gratuito (Groq, Gemini, OpenRouter, Cerebras),
+Claude, ou um provider offline determinístico para experimentar sem se cadastrar em nada.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![React](https://img.shields.io/badge/react-vite-61DAFB?logo=react&logoColor=black)](https://react.dev/)
@@ -41,6 +44,37 @@ você ler e aprovar** antes de qualquer coisa ser enviada.
 > O modelo de risco completo está em **[docs/safety.md](docs/safety.md)**. Por favor, leia de verdade.
 
 ---
+
+## Status
+
+Honestamente: **pronto para você tentar, não validado contra o LinkedIn real.**
+
+O que está verificado — e o que isso quer dizer:
+
+| Área | Estado |
+|---|---|
+| Fluxo completo (busca → nota → preenchimento → gate → envio) | Verificado ponta a ponta, mas contra o **portal falso embutido**, não contra o LinkedIn |
+| Camada Playwright (seletores, navegação de passos, "preenche mas nunca envia") | 25 testes de navegador com Chromium real |
+| Gate de aprovação | Coberto por testes de backend, de navegador e de UI; o guard `ASSISTED_MODE_ONLY` falha o build se afrouxar |
+| Provider de IA | 43 testes, incluindo os três modos de saída estruturada e o comportamento em recusa |
+| Ritmo anti-detecção | Atrasos aleatórios cobertos por teste, com piso quando não é modo de demonstração |
+| Suíte | 788 backend + 25 navegador + 61 frontend + 9 Playwright, ruff, eslint, tsc, build, 8 guards |
+
+O que **não** está verificado, e você deve assumir como não funcionando até provar:
+
+- **Nunca rodou contra o LinkedIn de verdade.** Nenhuma busca, nenhuma candidatura. Os seletores em
+  `app/automation/selectors.py` foram conferidos por leitura contra a interface em 2026-08-11 e podem já ter
+  quebrado — a marcação do LinkedIn muda sem aviso e é a parte mais frágil do projeto.
+- **O deploy nunca foi executado.** `docker-compose.prod.yml` está validado como YAML e pelo guard de portas;
+  a imagem não foi construída nem subida por ninguém ainda.
+- **Nenhuma chave de provider configurada.** Sem `AI_API_KEY`, `Settings.ai_enabled` é `False` e as funções de
+  IA ficam indisponíveis. Uma linha no `.env` resolve — veja abaixo.
+- **`mypy` tem cerca de 20 erros pré-existentes**, advisory na CI, concentrados em `app/automation` e
+  `app/services`.
+
+Duas lacunas funcionais conhecidas: a comparação item a item contra o currículo principal (ver Roteiro), e
+`GET /api/resumes/applications/{id}` responde 404 como estado vazio, o que o frontend trata certo mas aparece
+como erro no console do navegador.
 
 ## Por que existe
 
@@ -547,6 +581,10 @@ docker/                     # Dockerfile, entrypoint.sh, supervisord.conf
 docs/  scripts/  Makefile  docker-compose.yml
 ```
 
+Para rodar num servidor em vez de localmente — VPS, Tailscale, login no LinkedIn
+pelo noVNC, backup do volume: **[docs/deployment.md](docs/deployment.md)**. Leia
+a abertura dele antes de expor qualquer porta.
+
 As fronteiras de camadas, o modelo de dados completo e por que cada tabela existe, o fluxo de eventos do engine até a aba do navegador,
 e os trade-offs de projeto: **[docs/architecture.md](docs/architecture.md)**.
 
@@ -605,8 +643,9 @@ Mais, incluindo problemas por plataforma: [docs/installation.md](docs/installati
 Ordem aproximada, sem datas. Qualquer coisa que reduza a supervisão humana está permanentemente fora de escopo.
 
 - ~~Sugestões de adaptação de currículo por vaga — destacando qual da sua experiência existente colocar em primeiro
-  plano, sem inventar nada~~ — feito: cada candidatura mantém a sua própria versão do currículo principal, e a tela
-  da candidatura mostra o que difere
+  plano, sem inventar nada~~ — feito em parte: cada candidatura mantém a sua própria versão do currículo principal,
+  e a aba "O que foi adaptado" relata o que a derivação fez. O que **falta** é a comparação item a item contra o
+  currículo principal — posição 3ª→1ª, descrição antes/depois, tecnologias promovidas versus adicionadas à mão
 - Lembretes de acompanhamento de candidatura e rastreamento de desfecho (respondeu / entrevista / rejeitado), para que o modelo de nota
   tenha uma referência real para se conferir
 - Melhor correspondência do banco de respostas, para que perguntas recorrentes parem de ser reperguntadas ao modelo
