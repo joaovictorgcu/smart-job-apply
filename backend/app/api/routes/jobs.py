@@ -25,7 +25,12 @@ async def list_jobs(
     limit: LimitDep = 50,
     offset: OffsetDep = 0,
 ) -> Page[JobRead]:
-    """List jobs, best score first. Each item carries the id of its application, if any."""
+    """List jobs, best score first. Each item carries the id of its application, if any.
+
+    Each item also carries the recommendation — which of the posting's
+    technologies the resume can back and which it cannot — built once for the
+    whole page rather than per row.
+    """
     jobs, total = await job_service.list_jobs(
         session,
         user,
@@ -35,8 +40,9 @@ async def list_jobs(
         limit=limit,
         offset=offset,
     )
+    recommended = await job_service.build_recommendations(session, user, jobs)
     return Page[JobRead](
-        items=[job_service.to_job_read(job) for job in jobs],
+        items=[job_service.to_job_read(job, recommended=recommended.get(job.id)) for job in jobs],
         total=total,
         limit=limit,
         offset=offset,
@@ -45,9 +51,10 @@ async def list_jobs(
 
 @router.get("/{job_id}", response_model=JobDetail)
 async def read_job(job_id: int, user: CurrentUser, session: SessionDep) -> JobDetail:
-    """Return one job including its full description."""
+    """Return one job including its full description and its recommendation."""
     job = await job_service.get_job(session, user, job_id)
-    return job_service.to_job_detail(job)
+    recommended = await job_service.build_recommendations(session, user, [job])
+    return job_service.to_job_detail(job, recommended=recommended.get(job.id))
 
 
 @router.patch("/{job_id}", response_model=JobRead)

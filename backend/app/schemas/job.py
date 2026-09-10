@@ -46,6 +46,28 @@ class SearchRead(ORMModel, SearchBase):
     created_at: datetime | None = None
 
 
+class RecommendationRead(BaseModel):
+    """Why this posting — as two lists the reader can check, not a number.
+
+    Terms and counts only: the sentence that renders them is composed in the
+    frontend, the same rule the adaptation report follows. `covered` carries
+    the candidate's own spelling and `missing` the posting's, because a
+    technology someone never wrote down has no spelling of theirs to use.
+    """
+
+    verdict: str
+    score: int | None = None
+    covered: list[str] = Field(default_factory=list)
+    missing: list[str] = Field(default_factory=list)
+    prioritized: list[str] = Field(default_factory=list)
+    covered_total: int = 0
+    asked_total: int = 0
+    coverage_pct: int = 0
+    # False when the posting named nothing comparable. An empty two-column
+    # split would otherwise read as "you match nothing".
+    has_evidence: bool = False
+
+
 class JobRead(ORMModel):
     id: int
     external_id: str
@@ -89,6 +111,11 @@ class JobRead(ORMModel):
     created_at: datetime | None = None
     search_id: int | None = None
     application_id: int | None = None
+    # Filled in only where the reader is deciding whether to apply — the job
+    # list and one job's page. Elsewhere (a run preview, an application's
+    # embedded job) the same rows are shown for a different reason, and the
+    # extra profile read would buy nothing.
+    recommendation: RecommendationRead | None = None
 
 
 class JobDetail(JobRead):

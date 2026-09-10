@@ -29,6 +29,7 @@ from typing import Any
 
 from app.domain.language import fold, squash
 from app.domain.technologies import (
+    covers,
     job_technologies,
     mentioned_terms,
     mentions,
@@ -151,12 +152,20 @@ class MasterResume:
 
 @dataclass(frozen=True, slots=True)
 class JobTarget:
-    """The posting the resume is being adapted to."""
+    """The posting the resume is being adapted to.
+
+    `priority_terms` is the one input that comes from the candidate rather than
+    the posting: the technologies they said they want to lead with. It can only
+    ever *reorder* what the posting already asks about — see `_prioritize` —
+    so a preference the posting never mentions changes nothing, and a
+    preference the candidate does not actually have changes nothing either.
+    """
 
     title: str = ""
     company: str = ""
     description: str = ""
     location: str | None = None
+    priority_terms: tuple[str, ...] = ()
 
     def searchable(self) -> str:
         # The title is repeated deliberately: a term in "Backend .NET Engineer"
@@ -378,6 +387,35 @@ def _reorder_by_relevance(
     return tuple(line for _, _, line in scored), sum(1 for hits, _, _ in scored if hits < 0)
 
 
+def _prioritize(wanted: Sequence[str], priority: Sequence[str]) -> tuple[str, ...]:
+    """Move the terms the candidate asked to lead with to the front of `wanted`.
+
+    Reordering only, and deliberately nothing else. A priority term the posting
+    never names is not appended — the posting decides what is relevant, and a
+    preference only breaks the tie about what to show first. That is why this
+    cannot make a resume claim anything new: every term here was already in
+    `wanted`, which was itself already the intersection of the posting with the
+    candidate's own vocabulary.
+
+    Priorities keep the order the user listed them in; everything else keeps
+    the order the posting introduced it in.
+    """
+    if not priority:
+        return tuple(wanted)
+
+    ranks: dict[str, int] = {}
+    for rank, term in enumerate(priority):
+        key = fold(term).strip()
+        if key:
+            ranks.setdefault(key, rank)
+
+    leading = [term for term in wanted if fold(term) in ranks]
+    if not leading:
+        return tuple(wanted)
+    leading.sort(key=lambda term: ranks[fold(term)])
+    return (*leading, *(term for term in wanted if fold(term) not in ranks))
+
+
 def _relevance(matched: Sequence[str], wanted: Sequence[str]) -> int:
     """How much of what the posting asks about this experience actually covers."""
     if not wanted:
@@ -470,10 +508,16 @@ def adapt(master: MasterResume, job: JobTarget) -> AdaptedResume:
     the change report be trusted as a description of what happened.
     """
     job_text = job.searchable()
-    wanted = _drop_subsumed(_dedup(job_technologies(job_text, master.vocabulary())))
+    wanted = _prioritize(
+        _drop_subsumed(_dedup(job_technologies(job_text, master.vocabulary()))),
+        job.priority_terms,
+    )
     owned = master.searchable()
 
-    covered = tuple(term for term in wanted if mentions(owned, term))
+    # `covers`, not `mentions`: everything not covered is reported to the user
+    # as a requirement their resume cannot back, and "postgres" in the posting
+    # against "PostgreSQL" in the resume is not one.
+    covered = tuple(term for term in wanted if covers(owned, term))
     # A covered term keeps the candidate's own spelling, which is what belongs in
     # their resume. An uncovered one has no such spelling by definition, so it
     # would otherwise fall back to the lowercase vocabulary and render as

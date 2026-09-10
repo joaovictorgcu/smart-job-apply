@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import Select, func, select
@@ -12,13 +13,14 @@ from app.ai.schemas import CoverLetter, ScoreDimension
 from app.api.errors import NotFoundError, PreconditionFailedError, UpstreamError
 from app.automation.contracts import JobPosting
 from app.database.base import utcnow
+from app.domain import recommendation
 from app.domain.language import detect_language
 from app.domain.preferences import PreferenceVerdict, screen
 from app.domain.scoring import verdict_for, weighted_score
 from app.models import Job, JobScore, JobStatus, User
 from app.observability import EventName, get_logger, make_event
-from app.schemas.job import JobDetail, JobRead, JobScoreRead, JobUpdate
-from app.services import preference_service, user_service
+from app.schemas.job import JobDetail, JobRead, JobScoreRead, JobUpdate, RecommendationRead
+from app.services import preference_service, resume_service, user_service
 from app.websocket.manager import manager
 
 logger = get_logger(__name__)
@@ -433,7 +435,54 @@ def to_posting(job: Job) -> JobPosting:
     )
 
 
-def to_job_read(job: Job) -> JobRead:
+async def build_recommendations(
+    session: AsyncSession, user: User, jobs: Sequence[Job]
+) -> dict[int, RecommendationRead]:
+    """Why each of these postings — as covered/missing terms, for a whole page.
+
+    The candidate's resume and priorities are read once and reused across the
+    rows: this is called with a page of jobs, and one profile query per row
+    would be an N+1 for data that cannot differ between them.
+
+    Postings with no description are left out. There is nothing to compare
+    against, and an empty split would read as "you match nothing" rather than
+    "we have not fetched this posting's text yet".
+    """
+    if not jobs:
+        return {}
+
+    master = await resume_service.build_master(session, user)
+    rules = await preference_service.rules_for(session, user.id)
+    resume_text = master.searchable()
+    vocabulary = master.vocabulary()
+
+    built: dict[int, RecommendationRead] = {}
+    for job in jobs:
+        if not (job.description or "").strip():
+            continue
+        result = recommendation.build(
+            score=job.score,
+            title=job.title or "",
+            description=job.description,
+            resume_text=resume_text,
+            vocabulary=vocabulary,
+            priority=rules.priority_technologies,
+        )
+        built[job.id] = RecommendationRead(
+            verdict=result.verdict,
+            score=result.score,
+            covered=list(result.covered),
+            missing=list(result.missing),
+            prioritized=list(result.prioritized),
+            covered_total=result.covered_total,
+            asked_total=result.asked_total,
+            coverage_pct=result.coverage_pct,
+            has_evidence=result.has_evidence,
+        )
+    return built
+
+
+def to_job_read(job: Job, *, recommended: RecommendationRead | None = None) -> JobRead:
     """Build the response model, filling in what the ORM cannot map.
 
     `application_id`, and the three fields derived from the stored score: the
@@ -441,6 +490,10 @@ def to_job_read(job: Job) -> JobRead:
     gap between the two. Deriving them here keeps them impossible to leave stale,
     and costs no migration. A job scored before dimensions carried weights has
     nothing to recompute from and reports `None` rather than a made-up number.
+
+    `recommended` is optional because most callers show a job for a reason
+    other than deciding whether to apply to it, and building it costs a read of
+    the master resume.
     """
     breakdown = [ScoreDimension.model_validate(row) for row in job.score_breakdown or []]
     weighted = weighted_score(breakdown)
@@ -474,11 +527,15 @@ def to_job_read(job: Job) -> JobRead:
         created_at=job.created_at,
         search_id=job.search_id,
         application_id=job.application.id if job.application else None,
+        recommendation=recommended,
     )
 
 
-def to_job_detail(job: Job) -> JobDetail:
-    return JobDetail(**to_job_read(job).model_dump(), description=job.description)
+def to_job_detail(job: Job, *, recommended: RecommendationRead | None = None) -> JobDetail:
+    return JobDetail(
+        **to_job_read(job, recommended=recommended).model_dump(),
+        description=job.description,
+    )
 
 
 def to_job_score_read(row: JobScore) -> JobScoreRead:

@@ -106,6 +106,63 @@ def mentioned_terms(haystack: str, vocabulary: Iterable[str]) -> list[str]:
     return [term for _, _, term in sorted(found.values())]
 
 
+# Spellings of one technology that the industry uses interchangeably. Both
+# members of every group are already in `KNOWN_TECHNOLOGIES` — which is exactly
+# how the problem arises: a posting writes "postgres", a resume writes
+# "PostgreSQL", and a whole-term comparison reports a gap that is not there.
+# Reporting a false gap is the worst failure this vocabulary can have, because
+# the user reads it as "you are not qualified".
+#
+# Deliberately only exact synonyms, never near-neighbours: `java` and
+# `javascript` are two technologies, and merging them to be helpful would hide
+# a real gap instead of a false one.
+_EQUIVALENT_GROUPS: tuple[frozenset[str], ...] = (
+    frozenset({"postgres", "postgresql"}),
+    frozenset({"c#", "csharp"}),
+    frozenset({".net", "dotnet"}),
+    frozenset({"asp.net", "aspnet"}),
+    frozenset({"sql server", "sqlserver"}),
+    frozenset({"azure devops", "azuredevops"}),
+    frozenset({"sklearn", "scikit-learn"}),
+    frozenset({"nextjs", "next.js"}),
+)
+
+
+@lru_cache(maxsize=512)
+def equivalents(term: str) -> tuple[str, ...]:
+    """Other spellings of the same technology, excluding the one given."""
+    folded = fold(term).strip()
+    for group in _EQUIVALENT_GROUPS:
+        if folded in group:
+            return tuple(sorted(group - {folded}))
+    return ()
+
+
+def owned_spelling(haystack: str, term: str) -> str:
+    """How this text spells the technology, trying every spelling of it.
+
+    The companion to `covers`: once a resume is found to back a requirement,
+    what belongs on screen is the candidate's own wording for it, not the
+    posting's and not the vocabulary's lowercase form.
+    """
+    for candidate in (term, *equivalents(term)):
+        if mentions(haystack, candidate):
+            return spelling_in(haystack, candidate)
+    return term
+
+
+def covers(haystack: str, term: str) -> bool:
+    """Whether this text claims `term`, under any spelling of it.
+
+    The asymmetric half of `mentions`: use it when a *miss* would be reported
+    to the user as something they lack. `mentions` stays the right call when
+    the question is only "does this text talk about X".
+    """
+    return mentions(haystack, term) or any(
+        mentions(haystack, alias) for alias in equivalents(term)
+    )
+
+
 @lru_cache(maxsize=2048)
 def _original_pattern(folded_term: str) -> re.Pattern[str]:
     """`_term_pattern`'s rule, applied to text that has not been folded."""
@@ -156,7 +213,10 @@ __all__ = [
     "CAMELCASE",
     "KNOWN_TECHNOLOGIES",
     "ORIG_WORD",
+    "covers",
+    "equivalents",
     "job_technologies",
+    "owned_spelling",
     "mentioned_terms",
     "spelling_in",
     "mentions",

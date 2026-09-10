@@ -325,3 +325,70 @@ class TestDeterminism:
         # The fingerprint answers "which master was this derived from", so two
         # postings share it and a master edit changes it.
         assert same == other_posting == domain.fingerprint(source)
+
+
+class TestStatedPrioritiesOnlyReorder:
+    """The candidate's own preference is the tiebreak, never a new claim.
+
+    A priority can move a technology to the front of what this posting is being
+    answered with. It cannot put one in a resume that has none, and it cannot
+    make a posting ask for something it never mentioned — which is what keeps
+    "priorizar .NET" from turning into a resume that claims .NET.
+    """
+
+    def test_a_priority_leads_the_emphasised_technologies(self) -> None:
+        source = master()
+        plain = domain.adapt(source, target(FULLSTACK_REACT))
+        assert len(plain.emphasized_technologies) > 1, "nothing to reorder in this fixture"
+
+        led = domain.adapt(
+            source,
+            domain.JobTarget(
+                title=FULLSTACK_REACT["title"],
+                company=FULLSTACK_REACT["company"],
+                description=FULLSTACK_REACT["description"],
+                priority_terms=(plain.emphasized_technologies[-1],),
+            ),
+        )
+
+        assert led.emphasized_technologies[0] == plain.emphasized_technologies[-1]
+        assert set(led.emphasized_technologies) == set(plain.emphasized_technologies)
+
+    def test_a_priority_the_posting_never_asks_for_changes_nothing(self) -> None:
+        source = master()
+        plain = domain.adapt(source, target(PYTHON))
+        absent = ("Elixir", "Haskell")
+        assert not set(absent) & set(plain.emphasized_technologies), "fixture no longer absent"
+
+        with_priority = domain.adapt(
+            source,
+            domain.JobTarget(
+                title=PYTHON["title"],
+                company=PYTHON["company"],
+                description=PYTHON["description"],
+                priority_terms=absent,
+            ),
+        )
+
+        assert with_priority == plain
+
+    def test_a_priority_never_adds_a_technology_to_the_document(self) -> None:
+        source = master()
+        adapted = domain.adapt(
+            source,
+            domain.JobTarget(
+                title=PYTHON["title"],
+                company=PYTHON["company"],
+                description=PYTHON["description"],
+                priority_terms=("Rust",),
+            ),
+        )
+
+        rendered = " ".join(
+            [
+                *adapted.skills,
+                *adapted.emphasized_technologies,
+                *(term for item in adapted.experiences for term in item.technologies),
+            ]
+        )
+        assert "rust" not in rendered.lower()

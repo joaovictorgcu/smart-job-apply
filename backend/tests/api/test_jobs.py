@@ -285,3 +285,89 @@ class TestSearches:
         )
 
         assert response.status_code == 422
+
+
+class TestTheRecommendationOnTheJobList:
+    """Why this vacancy, delivered with the row that asks the question.
+
+    Built once per page rather than per row — the resume it compares against
+    cannot differ between two jobs of the same account — and only for postings
+    whose text we actually have.
+    """
+
+    async def test_each_job_carries_what_it_asks_for_split_in_two(
+        self, client: AsyncClient, session: AsyncSession, user: Any, auth_headers: dict[str, str]
+    ) -> None:
+        await create_job(
+            session,
+            user,
+            title="Backend Engineer",
+            description="Buscamos Python, FastAPI, PostgreSQL e Kubernetes.",
+            status=JobStatus.ANALYZED,
+            score=88,
+        )
+        await session.commit()
+
+        body = (await client.get("/api/jobs", headers=auth_headers)).json()
+        recommendation = body["items"][0]["recommendation"]
+
+        assert recommendation is not None
+        assert recommendation["has_evidence"] is True
+        assert recommendation["verdict"] == "strong"
+        covered = {term.lower() for term in recommendation["covered"]}
+        assert {"python", "fastapi", "postgresql"} <= covered
+        # The factory profile has no Kubernetes, and the gap is named.
+        assert [term.lower() for term in recommendation["missing"]] == ["kubernetes"]
+        assert recommendation["coverage_pct"] == 75
+
+    async def test_a_posting_with_no_description_yet_carries_none(
+        self, client: AsyncClient, session: AsyncSession, user: Any, auth_headers: dict[str, str]
+    ) -> None:
+        await create_job(
+            session, user, title="Backend Engineer", description=None, status=JobStatus.DISCOVERED
+        )
+        await session.commit()
+
+        body = (await client.get("/api/jobs", headers=auth_headers)).json()
+
+        assert body["items"][0]["recommendation"] is None
+
+    async def test_one_job_s_page_carries_it_too(
+        self, client: AsyncClient, session: AsyncSession, user: Any, auth_headers: dict[str, str]
+    ) -> None:
+        job = await create_job(
+            session,
+            user,
+            title="Backend Engineer",
+            description="Buscamos Python e Kubernetes.",
+            status=JobStatus.ANALYZED,
+            score=70,
+        )
+        await session.commit()
+
+        body = (await client.get(f"/api/jobs/{job.id}", headers=auth_headers)).json()
+
+        assert body["recommendation"]["covered"] == ["Python"]
+        assert [term.lower() for term in body["recommendation"]["missing"]] == ["kubernetes"]
+
+    async def test_a_stated_priority_leads_the_covered_list(
+        self, client: AsyncClient, session: AsyncSession, user: Any, auth_headers: dict[str, str]
+    ) -> None:
+        await client.put(
+            "/api/preferences", headers=auth_headers, json={"priority_technologies": ["PostgreSQL"]}
+        )
+        await create_job(
+            session,
+            user,
+            title="Backend Engineer",
+            description="Buscamos Python, FastAPI e PostgreSQL.",
+            status=JobStatus.ANALYZED,
+            score=88,
+        )
+        await session.commit()
+
+        body = (await client.get("/api/jobs", headers=auth_headers)).json()
+        recommendation = body["items"][0]["recommendation"]
+
+        assert recommendation["covered"][0] == "PostgreSQL"
+        assert recommendation["prioritized"] == ["PostgreSQL"]

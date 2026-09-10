@@ -18,6 +18,7 @@ Nothing here commits: the request session commits once, at the end.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date
 from typing import Any
 
@@ -50,7 +51,7 @@ from app.schemas.resume import (
     ResumeChange,
     ResumeVersionSummary,
 )
-from app.services import user_service
+from app.services import preference_service, user_service
 
 logger = get_logger(__name__)
 
@@ -317,14 +318,15 @@ def _write_snapshot(
     row.adapted_at = utcnow()
 
 
-def _target(job: Job | None) -> domain.JobTarget:
+def _target(job: Job | None, priority: Sequence[str] = ()) -> domain.JobTarget:
     if job is None:
-        return domain.JobTarget()
+        return domain.JobTarget(priority_terms=tuple(priority))
     return domain.JobTarget(
         title=job.title or "",
         company=job.company or "",
         description=job.description or "",
         location=job.location,
+        priority_terms=tuple(priority),
     )
 
 
@@ -336,7 +338,10 @@ async def _derive(
     if master.is_empty():
         return None
 
-    adapted = domain.adapt(master, _target(application.job))
+    # The candidate's stated priorities only reorder what this posting already
+    # asks about, so a derivation stays a derivation of *this* vacancy.
+    rules = await preference_service.rules_for(session, user.id)
+    adapted = domain.adapt(master, _target(application.job, rules.priority_technologies))
     row = await get_application_resume(session, user, application.id)
     if row is None:
         row = ApplicationResume(
