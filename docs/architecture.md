@@ -60,22 +60,29 @@ modelo, ou o provedor inteiro, não vaza para a camada da API.
 
 ## Modelo de dados
 
-Dez tabelas. Cada uma existe por um motivo, e algumas delas existem especificamente para tornar as falhas
-sobreviventes.
+Dezessete tabelas. Cada uma existe por um motivo, e algumas delas existem especificamente para tornar as
+falhas sobreviventes.
 
 ```mermaid
 erDiagram
     User ||--o| Profile : tem
     User ||--o| UserSettings : tem
+    User ||--o| JobPreferences : tem
     User ||--o| LinkedInAccount : tem
+    User ||--o{ Experience : possui
     User ||--o{ Search : possui
     User ||--o{ Job : possui
     User ||--o{ Application : possui
     User ||--o{ AutomationRun : possui
+    User ||--o{ AuditEvent : registrou
     Search ||--o{ Job : produziu
     Job ||--o| Application : tem
     Job ||--o{ AIAnalysis : pontuada_por
+    Job ||--o{ JobScore : historico_de
+    Job ||--o| TailoredResume : adaptou
+    Application ||--o| ApplicationResume : apresenta
     Application ||--o{ ApplicationEvent : auditada_por
+    Application ||--o{ InterviewStage : avancou_para
     AutomationRun ||--o{ ApplicationEvent : causou
 ```
 
@@ -83,14 +90,21 @@ erDiagram
 |---|---|
 | `users` | Uma conta local com um hash de senha bcrypt. Este é o login *do aplicativo*, nunca o do LinkedIn. O formato multiusuário é deliberado: é a única coisa que impede as vagas, cookies e feed de eventos de uma pessoa de alcançarem os de outra, mesmo quando você é o único usuário. |
 | `profiles` | O seu currículo como texto mais um `answer_bank` de respostas reutilizáveis (pretensão salarial, aviso prévio, autorização de trabalho). A IA lê isto; é o que faz as respostas de triagem serem suas em vez de inventadas. |
+| `experiences` | A metade estruturada do currículo principal: cargo, empresa, período, atividades, tecnologias, projetos e resultados, uma linha por posição. Estruturada e não um blob porque a derivação por vaga precisa raciocinar sobre as partes separadamente — promover a realização que menciona PostgreSQL é impossível se a experiência inteira for um texto só. Nada gerado escreve aqui. |
 | `user_settings` | Salvaguardas e preferências de IA por usuário. Separada de `profiles` porque são botões operacionais com implicações de segurança, não identidade. |
+| `job_preferences` | Que tipo de vaga a conta procura: cargo principal, cargos alternativos, nível, modelo de trabalho, locais, piso salarial, tecnologias a priorizar e termos a excluir. Separada de `profiles` porque o perfil diz o que a pessoa *fez* e isto diz o que ela *quer a seguir*; separada de `user_settings` porque errar aqui custa uma recomendação ruim, nunca um envio indesejado. |
 | `linkedin_accounts` | O storage state criptografado do Playwright (cookies) mais um caminho de perfil de navegador. Uma linha por usuário, e nenhuma coluna de senha em lugar nenhum do schema. |
 | `searches` | Um conjunto de filtros nomeado e reutilizável. Salvo em vez de ad-hoc para que uma execução seja reproduzível e `max_results` limite o tamanho da varredura. |
 | `jobs` | Um anúncio descoberto mais a sua nota, motivos da nota e requisitos faltantes. `UNIQUE (user_id, external_id)` é a garantia de deduplicação — rodar uma busca de novo nunca reprocessa nem se recandidata ao mesmo anúncio. |
 | `applications` | Uma linha por vaga, `UNIQUE (job_id)`. Guarda a carta de apresentação gerada, as respostas de triagem, os contadores de etapas do formulário e a flag `was_dry_run`. O seu `status` é onde vive o invariante de aprovação humana: `AWAITING_REVIEW` é uma parada total. |
+| `application_resumes` | O currículo que uma candidatura apresenta — um **snapshot completo** derivado do principal, `UNIQUE (application_id)`. Nada aqui é uma view sobre `experiences`, e é isso que torna estrutural a promessa de isolamento: editar o principal não alcança um documento que um humano já revisou, e editar o de uma candidatura não alcança o de outra. |
+| `interview_stages` | As etapas de um processo depois do envio (triagem, técnica, final), cada uma com data e observação. Mais fino que a coluna única "Entrevista" do funil, porque um processo é uma sequência. |
 | `application_events` | Uma trilha de auditoria só de inserção: cada etapa do formulário, cada pergunta respondida, cada erro, com um timestamp e um payload JSON. |
 | `ai_analyses` | A saída bruta de cada chamada ao modelo com contagens de tokens, latência, custo e uma flag `was_refusal`. Auditabilidade e controle de custo. |
+| `job_scores` | Todo veredito que uma vaga já recebeu, do mais antigo ao mais novo. `jobs.score` é a cabeça duplicada desta lista, de propósito: a listagem filtra e ordena por ela e não pode pagar uma subconsulta correlacionada por página. |
+| `tailored_resumes` | O currículo adaptado por IA de uma vaga, com as mudanças relatadas, os requisitos sem cobertura e os `invention_flags` do guarda contra invenção. Caminho distinto de `application_resumes`, que é determinístico e por candidatura. |
 | `automation_runs` | Uma linha por invocação do engine, com contadores, um `checkpoint`, uma flag `stop_requested` e um `blocked_reason`. |
+| `audit_events` | Trilha só de inserção das mudanças de conta, com `relaxed` nomeando quais salvaguardas foram afrouxadas. Nomes de campo, nunca valores: os dados pessoais não entram numa tabela que ninguém pode editar. |
 
 ### Por que `application_events` se justifica
 

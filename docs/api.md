@@ -260,6 +260,59 @@ Determinístico e offline — este endpoint se comporta igual num deploy sem cha
 
 ---
 
+## Preferências de vaga
+
+Que tipo de vaga a conta procura. Alimenta três coisas: a busca, a triagem antes da pontuação e quais das
+tecnologias que o candidato **já tem** ganham destaque.
+
+### `GET /api/preferences`
+
+→ `JobPreferencesRead`:
+
+```json
+{
+  "target_role": "Full Stack Developer",
+  "alternative_roles": ["Backend Developer"],
+  "seniority": ["entry", "associate"],
+  "work_models": ["remote", "hybrid"],
+  "locations": ["Recife, PE"],
+  "salary_min": 5000, "salary_currency": "BRL",
+  "priority_technologies": ["C#", ".NET", "React"],
+  "excluded_terms": ["call center", "vendas"],
+  "updated_at": "2026-09-10T12:00:00+00:00"
+}
+```
+
+Vazio na primeira leitura, e vazio é um estado com significado: **nada declarado não descarta nada.**
+
+### `PUT /api/preferences`
+
+`JobPreferencesUpdate` — todo campo opcional; campos omitidos ficam intocados.
+
+| Campo | Restrição |
+|---|---|
+| `target_role` | ≤ 200 caracteres. É ele que puxa a busca |
+| `alternative_roles`, `locations` | até 5 itens, aparados e sem repetições |
+| `seniority` | `internship`, `entry`, `associate`, `mid-senior`, `director`, `executive` |
+| `work_models` | `remote`, `hybrid`, `on-site` |
+| `salary_min` | 0–10.000.000, em unidades inteiras da moeda |
+| `priority_technologies`, `excluded_terms` | até 40 itens |
+
+Um valor fora do vocabulário é recusado com 422 em vez de virar uma busca que não casa com nada.
+
+**Salvar também mantém uma busca gerenciada em dia.** Informar o cargo cria (ou reescreve) a busca salva
+`Minhas vagas`, para que uma conta nova tenha algo a rodar sem abrir o formulário de busca. Sem cargo, nenhuma
+busca é criada — palavras-chave vazias varreriam tudo. Ela é reescrita a cada salvamento, então não é lugar
+para edições à mão; renomeá-la é como o usuário a assume.
+
+**A triagem roda antes da pontuação.** Um anúncio que bate num termo excluído vai para `SKIPPED` com um
+`skip_reason` que cita a palavra do próprio usuário, **sem gastar uma chamada de modelo**. A comparação é
+com o título, o local e o modelo de trabalho — nunca com a descrição, porque "call center" num parágrafo
+sobre os clientes da empresa não faz de uma vaga backend um call center. Um anúncio que não declara o modelo
+de trabalho nunca conta como incompatível.
+
+---
+
 ## Configurações
 
 Salvaguardas e preferências de IA por usuário. Os significados campo a campo, faixas e o risco de afrouxar cada

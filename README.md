@@ -59,7 +59,8 @@ O que está verificado — e o que isso quer dizer:
 | Provider de IA | 43 testes, incluindo os três modos de saída estruturada e o comportamento em recusa |
 | Ritmo anti-detecção | Atrasos aleatórios cobertos por teste, com piso quando não é modo de demonstração |
 | Leitura do currículo enviado | Determinística e offline; um teste estrutural exige que **toda** string extraída seja um trecho do arquivo |
-| Suíte | 832 backend + 25 navegador + 67 frontend + 9 Playwright, ruff, eslint, tsc, build, 8 guards |
+| Preferências de vaga | Determinísticas; testes cobrem que nada é descartado por um motivo que o usuário não escreveu, e que uma vaga excluída não custa chamada de modelo |
+| Suíte | 860 backend + 25 navegador + 72 frontend + 9 Playwright, ruff, eslint, tsc, build, 8 guards |
 
 O que **não** está verificado, e você deve assumir como não funcionando até provar:
 
@@ -122,6 +123,21 @@ O modo de teste (dry run) está ligado por padrão: o fluxo inteiro roda, até o
   bloqueia o salvamento até que venha
 - **Nada é gravado antes de você confirmar.** Ler o arquivo não move um único campo do seu perfil
 - Determinístico e offline: funciona igual num deploy sem chave de IA nenhuma
+
+**Diga uma vez o que você procura**
+
+- Cargo principal, cargos que também servem, nível, modelo de trabalho, onde, um piso salarial,
+  tecnologias a destacar e **termos que você não quer nem ver**
+- Informar o cargo já cria a busca "Minhas vagas" pronta para rodar — você não precisa abrir o
+  formulário de busca para começar
+- Uma vaga que bate num termo excluído é descartada **antes** de custar uma chamada de modelo, e o
+  motivo cita a sua própria palavra: "você pediu para pular vagas com 'call center'". Comparado com
+  o título, o local e o modelo de trabalho — nunca com o texto inteiro do anúncio, porque "call
+  center" num parágrafo sobre os clientes da empresa não faz de uma vaga backend um call center
+- Não dizer nada não descarta nada: preferência em branco deixa passar tudo, e uma vaga que não
+  informa o modelo de trabalho nunca conta como incompatível
+- Tecnologias prioritárias só reordenam o que já está no seu currículo — uma que você não tem não
+  aparece em lugar nenhum
 
 **Busca e pontuação**
 
@@ -454,38 +470,47 @@ você deliberadamente desligá-lo. Faça pelo menos uma passagem completa desse 
    arquivo entra no seu perfil. O que ele não conseguir ler aparece como aviso, para você completar à mão
    em **Perfil**. Um perfil raso produz notas fracas e cartas vagas.
 
-3. **Preencha o banco de respostas.** Estes são os cinco minutos de maior valor que você vai gastar aqui. Pretensão
+3. **Diga que tipo de vaga você procura.** A tela seguinte do cadastro, e depois em **Perfil**. Cargo
+   principal, cargos que também servem, nível, modelo de trabalho, onde, um piso salarial, o que
+   destacar e o que você não quer nem ver. O cargo principal já cria a busca **Minhas vagas** pronta
+   para rodar, e os termos excluídos descartam vagas antes de gastarem uma análise. Deixar em branco
+   não descarta nada.
+
+4. **Preencha o banco de respostas.** Estes são os cinco minutos de maior valor que você vai gastar aqui. Pretensão
    salarial, aviso prévio, autorização de trabalho, anos com as suas principais tecnologias. Estas são as
    perguntas que todo formulário de Candidatura Simplificada faz, e um banco preenchido é a diferença entre respostas confiantes
    e palpites sinalizados.
 
-4. **Conecte o LinkedIn.** Inicie uma sessão de navegador pelo painel, então **faça login manualmente na janela do
+5. **Conecte o LinkedIn.** Inicie uma sessão de navegador pelo painel, então **faça login manualmente na janela do
    navegador** — noVNC em <http://localhost:6080> no Docker, a janela do desktop localmente. Conclua a autenticação
    de dois fatores normalmente. O app observa até o login ter sucesso e então criptografa e armazena a
    sessão. Ele nunca vê a sua senha.
 
-5. **Salve uma busca.** Palavras-chave, localização, preferência de trabalho remoto, data de publicação. Deixe "Apenas Candidatura Simplificada" ligado — só
-   formulários de Candidatura Simplificada podem ser preenchidos. Comece com `max_results` em 25.
+6. **Rode a busca.** Se você informou o cargo principal no passo 3, a busca **Minhas vagas** já está lá
+   pronta. Para uma busca à parte: palavras-chave, localização, preferência de trabalho remoto, data de
+   publicação. Deixe "Apenas Candidatura Simplificada" ligado — só formulários de Candidatura
+   Simplificada podem ser preenchidos. Comece com `max_results` em 25.
 
-6. **Rode.** A busca encontra vagas e as pontua. Acompanhe o feed de atividade: `job.found` conforme cada anúncio
-   aparece, `job.analyzed` conforme cada nota chega. Nada recebe candidatura.
+7. **Acompanhe.** A busca encontra vagas e as pontua. Veja o feed de atividade: `job.found` conforme cada
+   anúncio aparece, `job.analyzed` conforme cada nota chega — ou o motivo, quando uma vaga bate num
+   termo que você excluiu e é descartada sem análise. Nada recebe candidatura.
 
-7. **Revise as vagas pontuadas.** Ordene por nota. Leia os motivos e — mais importante — os requisitos
+8. **Revise as vagas pontuadas.** Ordene por nota. Leia os motivos e — mais importante — os requisitos
    faltantes. É aqui que você decide, não o modelo. Pule as que você não quer de verdade.
 
-8. **Pré-visualize, depois prepare.** A pré-visualização informa quantas vagas seriam processadas, quantas já foram
+9. **Pré-visualize, depois prepare.** A pré-visualização informa quantas vagas seriam processadas, quantas já foram
    candidatadas e quanto do seu limite diário resta. Confirme, e a automação abre cada formulário de Candidatura
    Simplificada, preenche, anexa o seu currículo e **para na etapa de revisão**.
 
-9. **Leia o rascunho direito.** A carta de apresentação e cada resposta de triagem, com as de baixa confiança
-   destacadas. Corrija o que estiver errado. **Não pule isto** — a carta sai em seu nome, e as
-   respostas são declarações sobre você. Se diz oito anos de Python e você tem quatro, mude
-   antes de aprovar.
+10. **Leia o rascunho direito.** A carta de apresentação e cada resposta de triagem, com as de baixa confiança
+    destacadas. Corrija o que estiver errado. **Não pule isto** — a carta sai em seu nome, e as
+    respostas são declarações sobre você. Se diz oito anos de Python e você tem quatro, mude
+    antes de aprovar.
 
-10. **Aprove.** Uma candidatura, um clique deliberado. Ela é enviada, a trilha de auditoria registra quem aprovou
+11. **Aprove.** Uma candidatura, um clique deliberado. Ela é enviada, a trilha de auditoria registra quem aprovou
     o quê e quando, e a vaga passa para `applied`.
 
-11. **Quando estiver pronto para envios de verdade**, desligue `dry_run` em Configurações — deliberadamente, tendo
+12. **Quando estiver pronto para envios de verdade**, desligue `dry_run` em Configurações — deliberadamente, tendo
     acompanhado o fluxo pelo menos uma vez. Ligue de novo quando terminar por hoje.
 
 Se um desafio de segurança aparecer em qualquer ponto, a execução para e o painel diz `blocked`. **Resolva
