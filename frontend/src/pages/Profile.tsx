@@ -1,6 +1,5 @@
 import { Info, Plus, Save, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import type { KeyboardEvent } from 'react';
 
 import {
   Button,
@@ -14,7 +13,9 @@ import {
   Textarea,
 } from '@/components/primitives';
 import { ExperienceListEditor } from '@/components/ExperienceListEditor';
+import { PreferencesForm } from '@/components/PreferencesForm';
 import { ResumeUploader } from '@/components/ResumeUploader';
+import { TagEditor } from '@/components/TagEditor';
 import { useToast } from '@/components/ToastProvider';
 import { useProfile, useUpdateProfile } from '@/hooks/useApi';
 import { errorMessage } from '@/services/client';
@@ -56,70 +57,6 @@ function draftFrom(profile: ProfileType): Draft {
       return { id: answerRowId, key, value: value === null ? '' : String(value) };
     }),
   };
-}
-
-function TagEditor({
-  id,
-  tags,
-  onChange,
-  placeholder,
-}: {
-  id: string;
-  tags: string[];
-  onChange: (tags: string[]) => void;
-  placeholder: string;
-}) {
-  const [value, setValue] = useState('');
-
-  const add = () => {
-    const parts = value
-      .split(',')
-      .map((part) => part.trim())
-      .filter((part) => part.length > 0 && !tags.includes(part));
-    if (parts.length > 0) onChange([...tags, ...parts]);
-    setValue('');
-  };
-
-  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter' || event.key === ',') {
-      event.preventDefault();
-      add();
-    } else if (event.key === 'Backspace' && value === '' && tags.length > 0) {
-      onChange(tags.slice(0, -1));
-    }
-  };
-
-  return (
-    <div>
-      {tags.length > 0 ? (
-        <ul className="mb-2 flex flex-wrap gap-1.5">
-          {tags.map((tag) => (
-            <li key={tag}>
-              <span className="inline-flex items-center gap-1 rounded-full border border-accent-500/35 bg-accent-500/12 py-0.5 pl-2.5 pr-1 text-xs font-medium text-accent-400">
-                {tag}
-                <button
-                  type="button"
-                  onClick={() => onChange(tags.filter((entry) => entry !== tag))}
-                  aria-label={`Remover ${tag}`}
-                  className="rounded-full p-0.5 hover:bg-accent-500/20"
-                >
-                  <X aria-hidden className="h-3 w-3" />
-                </button>
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      <Input
-        id={id}
-        value={value}
-        placeholder={placeholder}
-        onChange={(event) => setValue(event.target.value)}
-        onKeyDown={onKeyDown}
-        onBlur={add}
-      />
-    </div>
-  );
 }
 
 export function Profile() {
@@ -325,6 +262,13 @@ export function Profile() {
       </Card>
 
       <ExperienceListEditor />
+
+      {/* The same form the onboarding wizard uses. These answers drive the
+          search, the triage and which of the candidate's own technologies get
+          emphasised, so this is where they are changed later — not a screen of
+          their own, which would be a fifth place to look for one setting. */}
+      <PreferencesForm />
+
 
       <Card>
         <CardHeader

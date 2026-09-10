@@ -186,6 +186,41 @@ export interface ProfileUpdate {
 }
 
 /* -------------------------------------------------------------------------- */
+/* What kind of vacancy this account is looking for                           */
+/* -------------------------------------------------------------------------- */
+
+/** The portal's own vocabulary, so a preference needs no translation table. */
+export const SENIORITY_VALUES = [
+  "internship",
+  "entry",
+  "associate",
+  "mid-senior",
+  "director",
+  "executive",
+] as const;
+export type Seniority = (typeof SENIORITY_VALUES)[number];
+
+export const WORK_MODELS = ["remote", "hybrid", "on-site"] as const;
+export type WorkModel = (typeof WORK_MODELS)[number];
+
+export interface JobPreferences {
+  target_role: string | null;
+  alternative_roles: string[];
+  seniority: string[];
+  work_models: string[];
+  locations: string[];
+  /** A floor, in whole currency units. */
+  salary_min: number | null;
+  salary_currency: string;
+  priority_technologies: string[];
+  /** Words that disqualify a posting outright, matched on title/location/workplace. */
+  excluded_terms: string[];
+  updated_at: string | null;
+}
+
+export type JobPreferencesUpdate = Partial<Omit<JobPreferences, "updated_at">>;
+
+/* -------------------------------------------------------------------------- */
 /* Reading an uploaded resume                                                 */
 /* -------------------------------------------------------------------------- */
 

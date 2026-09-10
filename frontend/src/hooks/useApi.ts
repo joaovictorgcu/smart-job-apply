@@ -18,6 +18,7 @@ import {
 import * as applicationsService from "@/services/applications";
 import * as automationService from "@/services/automation";
 import * as jobsService from "@/services/jobs";
+import * as preferencesService from "@/services/preferences";
 import * as profileService from "@/services/profile";
 import * as resumesService from "@/services/resumes";
 import * as searchesService from "@/services/searches";
@@ -42,6 +43,8 @@ import type {
   ExperienceUpdate,
   IntakeApplied,
   IntakeApply,
+  JobPreferences,
+  JobPreferencesUpdate,
   MasterResume,
   OutcomeStats,
   ResumeVersionSummary,
@@ -74,6 +77,7 @@ export const queryKeys = {
   // structured half of the master resume that lives next to it.
   experiences: () => ["profile", "experiences"] as const,
   settings: () => ["settings"] as const,
+  preferences: () => ["preferences"] as const,
   aiStatus: () => ["ai", "status"] as const,
   tailoredResume: (jobId: number) => ["ai", "tailored-cv", jobId] as const,
   health: () => ["health"] as const,
@@ -207,6 +211,33 @@ export function useApplyResumeIntake(
       // New positions move the master resume's fingerprint, so every derived
       // copy has to re-answer whether it is stale.
       void client.invalidateQueries({ queryKey: queryKeys.resumes() });
+      options?.onSuccess?.(data, vars, context);
+    },
+  });
+}
+
+export function usePreferences(
+  options?: QueryOpts<JobPreferences>,
+): UseQueryResult<JobPreferences, ApiError> {
+  return useQuery<JobPreferences, ApiError>({
+    queryKey: queryKeys.preferences(),
+    queryFn: ({ signal }) => preferencesService.fetchPreferences(signal),
+    ...options,
+  });
+}
+
+export function useUpdatePreferences(
+  options?: MutationOpts<JobPreferences, JobPreferencesUpdate>,
+): UseMutationResult<JobPreferences, ApiError, JobPreferencesUpdate> {
+  const client = useQueryClient();
+  return useMutation<JobPreferences, ApiError, JobPreferencesUpdate>({
+    mutationFn: (payload) => preferencesService.updatePreferences(payload),
+    ...options,
+    onSuccess: (data, vars, context) => {
+      client.setQueryData(queryKeys.preferences(), data);
+      // Saving a role also creates or rewrites the managed saved search, so the
+      // search list is stale even though nothing here touched it.
+      void client.invalidateQueries({ queryKey: queryKeys.searches() });
       options?.onSuccess?.(data, vars, context);
     },
   });

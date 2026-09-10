@@ -20,6 +20,7 @@ import {
   Note,
   Textarea,
 } from '@/components/primitives';
+import { PreferencesForm } from '@/components/PreferencesForm';
 import { TagEditor } from '@/components/TagEditor';
 import { useToast } from '@/components/ToastProvider';
 import { useApplyResumeIntake, useExperiences, useProfile, useReadResumeIntake } from '@/hooks/useApi';
@@ -478,7 +479,9 @@ function ConfirmStep({
 /* The page                                                                   */
 /* -------------------------------------------------------------------------- */
 
-const STEPS = ['Currículo', 'Conferir', 'Pronto'] as const;
+const STEPS = ['Currículo', 'Conferir', 'Preferências', 'Pronto'] as const;
+
+type Stage = 'upload' | 'confirm' | 'preferences' | 'done';
 
 export function Onboarding() {
   const toast = useToast();
@@ -489,7 +492,8 @@ export function Onboarding() {
   const [intake, setIntake] = useState<ResumeIntake | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [replaceExisting, setReplaceExisting] = useState(false);
-  const [done, setDone] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [finished, setFinished] = useState(false);
 
   const read = useReadResumeIntake({
     onSuccess: (result) => {
@@ -501,7 +505,7 @@ export function Onboarding() {
 
   const apply = useApplyResumeIntake({
     onSuccess: (result) => {
-      setDone(true);
+      setSaved(true);
       toast.success(
         'Perfil salvo',
         result.experiences_created > 0
@@ -513,7 +517,8 @@ export function Onboarding() {
   });
 
   const existingCount = experiences?.length ?? 0;
-  const step = done ? 2 : draft ? 1 : 0;
+  const stage: Stage = finished ? 'done' : saved ? 'preferences' : draft ? 'confirm' : 'upload';
+  const step = STEPS.length - 1 - ['done', 'preferences', 'confirm', 'upload'].indexOf(stage);
 
   const save = () => {
     if (!draft || !intake) return;
@@ -540,10 +545,30 @@ export function Onboarding() {
   };
 
   const heading = useMemo(() => {
-    if (done) return 'Perfil pronto';
-    if (draft) return 'Encontramos estas informações no seu currículo';
-    return 'Vamos começar pelo seu currículo';
-  }, [done, draft]);
+    switch (stage) {
+      case 'done':
+        return 'Tudo pronto';
+      case 'preferences':
+        return 'Que tipo de vaga você procura?';
+      case 'confirm':
+        return 'Encontramos estas informações no seu currículo';
+      default:
+        return 'Vamos começar pelo seu currículo';
+    }
+  }, [stage]);
+
+  const subheading = useMemo(() => {
+    switch (stage) {
+      case 'done':
+        return 'A partir daqui é encontrar vagas boas e revisar cada candidatura.';
+      case 'preferences':
+        return 'Isto decide quais vagas buscamos, quais recomendamos e quais nem chegam até você.';
+      case 'confirm':
+        return 'Nada foi salvo ainda. Confira, corrija o que estiver errado e salve.';
+      default:
+        return 'Envie o PDF que você já usa. A gente lê e mostra o que encontrou para você conferir.';
+    }
+  }, [stage]);
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-5 pb-24">
@@ -557,16 +582,20 @@ export function Onboarding() {
           ))}
         </ol>
         <h1 className="mt-2 text-xl leading-snug">{heading}</h1>
-        <p className="mt-1.5 text-sm text-content-muted">
-          {done
-            ? 'Agora é escolher que tipo de vaga você procura.'
-            : draft
-              ? 'Nada foi salvo ainda. Confira, corrija o que estiver errado e salve.'
-              : 'Envie o PDF que você já usa. A gente lê e mostra o que encontrou para você conferir.'}
-        </p>
+        <p className="mt-1.5 text-sm text-content-muted">{subheading}</p>
       </div>
 
-      {done ? (
+      {stage === 'preferences' ? (
+        <PreferencesForm
+          submitLabel="Salvar e continuar"
+          secondaryAction={
+            <Button variant="ghost" onClick={() => setFinished(true)}>
+              Defino isso depois
+            </Button>
+          }
+          onSaved={() => setFinished(true)}
+        />
+      ) : stage === 'done' ? (
         <Card>
           <div className="card-body space-y-4 text-center">
             <span
