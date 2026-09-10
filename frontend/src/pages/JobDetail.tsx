@@ -25,6 +25,7 @@ import {
   SectionLabel,
   Skeleton,
 } from '@/components/primitives';
+import { MatchSummary } from '@/components/MatchSummary';
 import { ScoreBadge } from '@/components/ScoreBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/ToastProvider';
@@ -188,6 +189,14 @@ export function JobDetail() {
             </div>
           </div>
         </div>
+
+        {/* The first question this page has to answer is "should I apply",
+            and the two requirement lists answer it better than the number
+            beside the title does. */}
+        <MatchSummary
+          recommendation={job.recommendation}
+          className="mt-4 border-t border-line pt-4"
+        />
 
         <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line pt-4">
           <Button

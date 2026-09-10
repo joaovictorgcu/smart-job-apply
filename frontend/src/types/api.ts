@@ -220,6 +220,27 @@ export interface JobPreferences {
 
 export type JobPreferencesUpdate = Partial<Omit<JobPreferences, "updated_at">>;
 
+/**
+ * Why one vacancy — as two lists, not as a number.
+ *
+ * `covered` carries the candidate's own spelling and `missing` the posting's,
+ * because a technology they never wrote down has no spelling of theirs to use.
+ * Every sentence about these is composed in the frontend.
+ */
+export interface Recommendation {
+  verdict: string;
+  score: number | null;
+  covered: string[];
+  missing: string[];
+  /** The subset of `covered` the user asked to lead with. Never an addition. */
+  prioritized: string[];
+  covered_total: number;
+  asked_total: number;
+  coverage_pct: number;
+  /** False when the posting named nothing comparable. */
+  has_evidence: boolean;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Reading an uploaded resume                                                 */
 /* -------------------------------------------------------------------------- */
@@ -413,6 +434,12 @@ export interface Job {
   created_at: string | null;
   search_id: number | null;
   application_id: number | null;
+  /**
+   * Filled in only on the job list and one job's page — the two screens where
+   * the reader is deciding whether to apply. Null elsewhere, and null for a
+   * posting whose description has not been fetched yet.
+   */
+  recommendation?: Recommendation | null;
 }
 
 export interface JobDetail extends Job {

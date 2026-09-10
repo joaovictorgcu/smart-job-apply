@@ -351,6 +351,40 @@ export function fitFactorLabel(factor: string): string {
   return FIT_FACTOR_LABELS[factor] ?? humanizeSnakeCase(factor);
 }
 
+/**
+ * The band a score falls in, in words.
+ *
+ * Mirrors `app.domain.scoring.VERDICT_BANDS`. The backend sends the band name
+ * and the frontend owns every sentence about it, so moving a boundary is a
+ * one-file change on each side and never a disagreement between them.
+ */
+const VERDICT_LABELS: Record<string, string> = {
+  strong: "Excelente compatibilidade",
+  good: "Boa compatibilidade",
+  moderate: "Compatibilidade parcial",
+  weak: "Compatibilidade baixa",
+  poor: "Pouca aderência",
+};
+
+export function verdictLabel(verdict: string | null | undefined): string {
+  if (!verdict) return "Ainda não analisada";
+  return VERDICT_LABELS[verdict] ?? humanizeSnakeCase(verdict);
+}
+
+/**
+ * "A", "A e B", "A, B e C" — a list a person reads, not one a machine prints.
+ *
+ * Capped because these render inline inside a sentence: past three names the
+ * sentence stops being read and starts being skimmed.
+ */
+export function joinTerms(terms: readonly string[], max = 3): string {
+  const shown = terms.slice(0, max);
+  if (shown.length === 0) return "";
+  if (shown.length === 1) return shown[0];
+  const rest = terms.length > max ? ` e mais ${terms.length - max}` : "";
+  return `${shown.slice(0, -1).join(", ")} e ${shown[shown.length - 1]}${rest}`;
+}
+
 /** Score colour ramp for badges, bars and chart marks. */
 export function scoreTone(score: number | null | undefined): ToneName {
   if (score === null || score === undefined) return "neutral";

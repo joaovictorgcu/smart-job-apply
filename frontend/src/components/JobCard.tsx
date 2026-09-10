@@ -5,6 +5,7 @@ import { badgeClass, enumLabel, formatRelativeTime, truncate } from '@/lib/forma
 import { cn } from '@/lib/utils';
 import type { Job } from '@/types/api';
 
+import { MatchSummary } from './MatchSummary';
 import { ScoreBadge } from './ScoreBadge';
 import { StatusBadge } from './StatusBadge';
 
@@ -107,6 +108,10 @@ export function JobCard({
             <span className={badgeClass('neutral')}>{enumLabel(job.workplace_type)}</span>
           ) : null}
         </div>
+
+        {/* Before the model's prose on purpose: which requirements you meet is
+            checkable, and a sentence about the score is not. */}
+        <MatchSummary recommendation={job.recommendation} compact className="mt-2.5" />
 
         {topReason ? (
           <p className="mt-2.5 flex items-start gap-1.5 text-xs leading-relaxed text-content-muted">
