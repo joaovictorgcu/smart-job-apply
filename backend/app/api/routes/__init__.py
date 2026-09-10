@@ -10,6 +10,7 @@ from app.api.routes import (
     health,
     jobs,
     portals,
+    preferences,
     profile,
     resumes,
     searches,
@@ -25,6 +26,7 @@ api_router.include_router(health.router)
 api_router.include_router(auth.router)
 api_router.include_router(users.router)
 api_router.include_router(profile.router)
+api_router.include_router(preferences.router)
 api_router.include_router(resumes.router)
 api_router.include_router(settings.router)
 api_router.include_router(searches.router)

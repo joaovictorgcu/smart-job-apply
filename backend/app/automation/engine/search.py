@@ -16,7 +16,7 @@ from app.automation.linkedin.search import PAGE_SIZE
 from app.database.session import session_scope
 from app.models import AutomationRun, AutomationRunStatus, Job, JobStatus, User
 from app.observability import EventName, get_logger
-from app.services.job_service import upsert_job_from_posting
+from app.services.job_service import screen_by_preferences, upsert_job_from_posting
 
 logger = get_logger(__name__)
 
@@ -158,15 +158,35 @@ class SearchMixin(EngineBase):
                     extra={"action": "engine.analyze", "user_id": user_id, "job_id": job_id},
                 )
                 return None
-            settings = await self._settings(session, user_id)
-            profile = await self._profile_context(session, user_id)
 
-            await self._ai.analyze_job(
-                session, user=user, job=job, profile_ctx=profile, settings_row=settings
-            )
+            # A posting the user already ruled out is dropped here rather than
+            # paid for: scoring is the expensive step, and the reason quotes
+            # their own term instead of a number they would have to interpret.
+            verdict = await screen_by_preferences(session, user_id, job)
+            if not verdict.excluded:
+                settings = await self._settings(session, user_id)
+                profile = await self._profile_context(session, user_id)
+                await self._ai.analyze_job(
+                    session, user=user, job=job, profile_ctx=profile, settings_row=settings
+                )
+
             resulting = job.status
             score = job.score
             title = job.title
+
+        # Published after the session closes, so a dashboard that refetches on
+        # the event reads the committed row rather than racing the write.
+        if verdict.excluded:
+            await self._publish(
+                user_id,
+                EventName.JOB_ANALYZED,
+                run_id=run_id,
+                job_id=job_id,
+                message=f"{title}: {verdict.reason}",
+                level="info",
+                data={"skipped": True, "matched_term": verdict.matched_term},
+            )
+            return resulting
 
         await self._publish(
             user_id,

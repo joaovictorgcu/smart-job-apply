@@ -41,6 +41,9 @@ class User(Base, TimestampMixin):
     settings: Mapped[UserSettings | None] = relationship(
         back_populates="user", cascade="all, delete-orphan", uselist=False
     )
+    preferences: Mapped[JobPreferences | None] = relationship(
+        back_populates="user", cascade="all, delete-orphan", uselist=False
+    )
     linkedin_account: Mapped[LinkedInAccount | None] = relationship(
         back_populates="user", cascade="all, delete-orphan", uselist=False
     )
@@ -126,6 +129,60 @@ class UserSettings(Base, TimestampMixin):
     generate_cover_letter: Mapped[bool] = mapped_column(Boolean, default=True)
 
     user: Mapped[User] = relationship(back_populates="settings")
+
+
+class JobPreferences(Base, TimestampMixin):
+    """What kind of vacancy this account is looking for.
+
+    Separate from `Search`, and the distinction is the point. A `Search` is one
+    reusable query against one portal, with that portal's own filter
+    vocabulary. This is the standing answer to "what am I looking for" — the
+    thing a user states once, in their own terms, that then feeds the query,
+    the triage and the emphasis of every adapted resume.
+
+    Kept apart from `Profile` because it is not identity: the profile says what
+    the candidate *has done*, this says what they *want next*, and the two move
+    independently. And apart from `UserSettings`, which is operational
+    guardrails with safety implications; getting this wrong costs a bad
+    recommendation, not an unwanted submission.
+
+    Every list holds the user's own words. `excluded_terms` and
+    `priority_technologies` in particular are matched, never generated from.
+    """
+
+    __tablename__ = "job_preferences"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True
+    )
+
+    # The one role that drives the query. Alternatives widen it without
+    # diluting it: they are searched too, but never rank above the main one.
+    target_role: Mapped[str | None] = mapped_column(String(200), default=None)
+    alternative_roles: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # LinkedIn's own vocabulary, so this maps onto a search with no translation
+    # table: internship / entry / associate / mid-senior / director / executive.
+    seniority: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # remote / hybrid / on-site — same values `Search.remote_filter` accepts.
+    work_models: Mapped[list[str]] = mapped_column(JSON, default=list)
+    locations: Mapped[list[str]] = mapped_column(JSON, default=list)
+
+    # A floor, not a range: "below this I am not interested" is the only part of
+    # a salary expectation a posting can actually be screened against.
+    salary_min: Mapped[int | None] = mapped_column(Integer, default=None)
+    salary_currency: Mapped[str] = mapped_column(String(10), default="BRL")
+
+    # Technologies to lead with when they appear in a posting. They can only
+    # re-rank what the candidate already claims — a term here that is not in
+    # their resume changes nothing, by construction.
+    priority_technologies: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # Words that disqualify a posting outright, matched against its title,
+    # location and workplace type. Deliberately not the description: "call
+    # center" in a benefits paragraph is not a call-centre job.
+    excluded_terms: Mapped[list[str]] = mapped_column(JSON, default=list)
+
+    user: Mapped[User] = relationship(back_populates="preferences")
 
 
 class LinkedInAccount(Base, TimestampMixin):

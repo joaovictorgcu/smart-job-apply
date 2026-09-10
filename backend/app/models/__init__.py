@@ -28,7 +28,7 @@ from app.models.resume import ApplicationResume, Experience
 # `JobScore` here is the persisted verdict; `app.ai.schemas.JobScore` is the
 # model's output contract. Modules needing both import this one as `JobScoreRow`.
 from app.models.score import JobScore
-from app.models.user import LinkedInAccount, Profile, User, UserSettings
+from app.models.user import JobPreferences, LinkedInAccount, Profile, User, UserSettings
 
 __all__ = [
     "AIAnalysis",
@@ -49,6 +49,7 @@ __all__ = [
     "Experience",
     "InterviewStage",
     "Job",
+    "JobPreferences",
     "JobScore",
     "JobStatus",
     "LinkedInAccount",

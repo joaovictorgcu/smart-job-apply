@@ -13,11 +13,12 @@ from app.api.errors import NotFoundError, PreconditionFailedError, UpstreamError
 from app.automation.contracts import JobPosting
 from app.database.base import utcnow
 from app.domain.language import detect_language
+from app.domain.preferences import PreferenceVerdict, screen
 from app.domain.scoring import verdict_for, weighted_score
 from app.models import Job, JobScore, JobStatus, User
 from app.observability import EventName, get_logger, make_event
 from app.schemas.job import JobDetail, JobRead, JobScoreRead, JobUpdate
-from app.services import user_service
+from app.services import preference_service, user_service
 from app.websocket.manager import manager
 
 logger = get_logger(__name__)
@@ -252,6 +253,46 @@ async def count_by_status(session: AsyncSession, user: User) -> dict[str, int]:
     return counts
 
 
+async def screen_by_preferences(
+    session: AsyncSession, user_id: int, job: Job
+) -> PreferenceVerdict:
+    """Drop a posting the user already ruled out, before it costs a model call.
+
+    Deliberately a *caller's* decision rather than part of the AI layer: this is
+    not a second definition of "skipped" competing with the score threshold, it
+    is the question of whether to score the posting at all. Both callers — the
+    API's single-job analyse and the engine's search run — go through here, so
+    there is one implementation and one wording of the reason.
+
+    A user who has stated nothing rules out nothing, and the reason always
+    quotes their own term, so a skipped posting can be argued with.
+    """
+    rules = await preference_service.rules_for(session, user_id)
+    verdict = screen(
+        rules,
+        title=job.title or "",
+        location=job.location,
+        workplace_type=job.workplace_type,
+    )
+    if not verdict.excluded:
+        return verdict
+
+    job.status = JobStatus.SKIPPED
+    job.skip_reason = verdict.reason
+    await session.flush()
+    logger.info(
+        "Job skipped by the user's stated preferences.",
+        extra={
+            "action": "job.screen",
+            "status": "skipped",
+            "user_id": user_id,
+            "job_id": job.id,
+            "matched_term": verdict.matched_term,
+        },
+    )
+    return verdict
+
+
 async def _require_described_job(session: AsyncSession, user: User, job_id: int) -> Job:
     job = await get_job(session, user, job_id)
     if not job.description:
@@ -272,6 +313,21 @@ async def analyze_job(session: AsyncSession, user: User, job_id: int) -> Job:
     from app.ai import analyze_job as ai_analyze_job
 
     job = await _require_described_job(session, user, job_id)
+
+    verdict = await screen_by_preferences(session, user.id, job)
+    if verdict.excluded:
+        await manager.publish(
+            user.id,
+            make_event(
+                EventName.JOB_ANALYZED,
+                job_id=job.id,
+                message=f"{job.title}: {verdict.reason}",
+                level="info",
+                data={"skipped": True, "matched_term": verdict.matched_term},
+            ),
+        )
+        return job
+
     profile = await user_service.build_profile_context(session, user)
     user_settings = await user_service.get_or_create_settings(session, user)
 
