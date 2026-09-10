@@ -238,7 +238,7 @@ def resume_path(filename: str) -> Path:
 MAX_EXTRACTED_RESUME_CHARS = 20_000
 
 
-def _extract_resume_text(content: bytes, suffix: str) -> str | None:
+def extract_resume_text(content: bytes, suffix: str) -> str | None:
     """Best-effort plain text from an uploaded resume.
 
     The stored file is what LinkedIn receives; this text is what the AI actually
@@ -303,7 +303,7 @@ async def save_resume_file(
     # theirs, and a re-upload must never silently discard it.
     extracted_chars = 0
     if not (profile.resume_text or "").strip():
-        extracted = await asyncio.to_thread(_extract_resume_text, content, suffix)
+        extracted = await asyncio.to_thread(extract_resume_text, content, suffix)
         if extracted:
             profile.resume_text = extracted
             extracted_chars = len(extracted)
