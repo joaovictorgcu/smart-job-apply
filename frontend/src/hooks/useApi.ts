@@ -40,6 +40,8 @@ import type {
   Experience,
   ExperienceCreate,
   ExperienceUpdate,
+  IntakeApplied,
+  IntakeApply,
   MasterResume,
   OutcomeStats,
   ResumeVersionSummary,
@@ -53,6 +55,7 @@ import type {
   PreviewResponse,
   Profile,
   ProfileUpdate,
+  ResumeIntake,
   Search,
   SearchCreate,
   SearchRunRequest,
@@ -162,6 +165,48 @@ export function useUploadResume(
     ...options,
     onSuccess: (data, vars, context) => {
       client.setQueryData(queryKeys.profile(), data);
+      options?.onSuccess?.(data, vars, context);
+    },
+  });
+}
+
+/**
+ * Read an uploaded CV (or the stored resume text) into a proposal.
+ *
+ * A mutation rather than a query on purpose: it is an action the user takes,
+ * and re-running it on window focus would re-upload a file. Passing `null`
+ * reads the resume text already on the profile.
+ */
+export function useReadResumeIntake(
+  options?: MutationOpts<ResumeIntake, File | null>,
+): UseMutationResult<ResumeIntake, ApiError, File | null> {
+  const client = useQueryClient();
+  return useMutation<ResumeIntake, ApiError, File | null>({
+    mutationFn: (file) =>
+      file ? profileService.readResumeIntake(file) : profileService.readStoredResumeIntake(),
+    ...options,
+    onSuccess: (data, vars, context) => {
+      // An upload stores the file, so the profile's `resume_filename` moved
+      // even though not one profile field the user typed did.
+      if (vars) void client.invalidateQueries({ queryKey: queryKeys.profile() });
+      options?.onSuccess?.(data, vars, context);
+    },
+  });
+}
+
+export function useApplyResumeIntake(
+  options?: MutationOpts<IntakeApplied, IntakeApply>,
+): UseMutationResult<IntakeApplied, ApiError, IntakeApply> {
+  const client = useQueryClient();
+  return useMutation<IntakeApplied, ApiError, IntakeApply>({
+    mutationFn: (payload) => profileService.applyResumeIntake(payload),
+    ...options,
+    onSuccess: (data, vars, context) => {
+      client.setQueryData(queryKeys.profile(), data.profile);
+      void client.invalidateQueries({ queryKey: queryKeys.experiences() });
+      // New positions move the master resume's fingerprint, so every derived
+      // copy has to re-answer whether it is stale.
+      void client.invalidateQueries({ queryKey: queryKeys.resumes() });
       options?.onSuccess?.(data, vars, context);
     },
   });

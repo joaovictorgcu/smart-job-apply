@@ -16,6 +16,7 @@ import { JobDetail } from "@/pages/JobDetail";
 import { Jobs } from "@/pages/Jobs";
 import { Login } from "@/pages/Login";
 import { NotFound } from "@/pages/NotFound";
+import { Onboarding } from "@/pages/Onboarding";
 import { Pipeline } from "@/pages/Pipeline";
 import { Profile } from "@/pages/Profile";
 import { Register } from "@/pages/Register";
@@ -69,6 +70,7 @@ export function App() {
                   }
                 >
                   <Route path="/" element={<Dashboard />} />
+                  <Route path="/onboarding" element={<Onboarding />} />
                   <Route path="/jobs" element={<Jobs />} />
                   <Route path="/jobs/:id" element={<JobDetail />} />
                   <Route path="/applications" element={<Applications />} />

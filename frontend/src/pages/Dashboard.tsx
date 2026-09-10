@@ -1,4 +1,4 @@
-import { ArrowRight, ClipboardCheck, Radio } from 'lucide-react';
+import { ArrowRight, ClipboardCheck, FileUp, Radio } from 'lucide-react';
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -9,7 +9,7 @@ import { ScoreBadge } from '@/components/ScoreBadge';
 import { ScoreChart } from '@/components/ScoreChart';
 import { SessionStatusCard } from '@/components/SessionStatusCard';
 import { StatsCards } from '@/components/StatsCards';
-import { useApplications, useJobs, useStats } from '@/hooks/useApi';
+import { useApplications, useJobs, useMasterResume, useStats } from '@/hooks/useApi';
 import { useRecentEvents } from '@/hooks/useEvents';
 import { formatRelativeTime } from '@/lib/format';
 import type { Job } from '@/types/api';
@@ -17,7 +17,40 @@ import type { Job } from '@/types/api';
 /** Applications carry only a job_id, so the job row is joined on the client. */
 const JOB_JOIN_LIMIT = 200;
 
+/**
+ * An account with no resume yet.
+ *
+ * Everything the dashboard normally shows is derived from one — the counters
+ * are zeroes, the queue is empty, the chart has no bars. Showing all of that to
+ * someone who has not uploaded a CV is six empty cards where one instruction
+ * belongs.
+ */
+function StartHere() {
+  return (
+    <div className="mx-auto w-full max-w-xl space-y-6 py-6">
+      <div className="text-center">
+        <span
+          aria-hidden
+          className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-accent-500/40 bg-accent-500/10 text-accent-400"
+        >
+          <FileUp className="h-5 w-5" />
+        </span>
+        <h1 className="mt-3 text-xl leading-snug">Comece pelo seu currículo</h1>
+        <p className="mx-auto mt-2 max-w-md text-sm text-content-muted">
+          Envie o PDF que você já usa. A gente lê, mostra o que encontrou para você conferir, e a
+          partir daí encontra vagas e prepara cada candidatura.
+        </p>
+        <Link to="/onboarding" className="btn btn-primary mt-5">
+          Enviar meu currículo
+          <ArrowRight aria-hidden className="h-4 w-4" />
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 export function Dashboard() {
+  const { data: master, isLoading: masterLoading } = useMasterResume();
   const { data: stats, isLoading: statsLoading } = useStats();
   const { data: reviewQueue, isLoading: queueLoading } = useApplications({
     status: 'awaiting_review',
@@ -35,6 +68,16 @@ export function Dashboard() {
   }, [jobsPage]);
 
   const queue = reviewQueue?.items ?? [];
+
+  const profileIsEmpty =
+    master !== undefined &&
+    master.experiences.length === 0 &&
+    !master.headline &&
+    !(master.resume_text ?? '').trim();
+
+  if (masterLoading || profileIsEmpty) {
+    return masterLoading ? <div className="skeleton h-64" aria-busy="true" /> : <StartHere />;
+  }
 
   return (
     <div className="space-y-6">

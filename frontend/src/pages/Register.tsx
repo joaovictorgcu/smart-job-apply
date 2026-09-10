@@ -64,7 +64,9 @@ export function Register() {
         password,
         full_name: fullName.trim() || null,
       });
-      navigate('/', { replace: true });
+      // A brand-new account has nothing to show on the dashboard. The first
+      // useful thing it can do is read the user's CV, so that is where it lands.
+      navigate('/onboarding', { replace: true });
     } catch (error) {
       setFormError(errorMessage(error, 'Não foi possível criar a conta.'));
     } finally {

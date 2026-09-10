@@ -185,6 +185,87 @@ export interface ProfileUpdate {
   answer_bank?: Record<string, unknown> | null;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Reading an uploaded resume                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One position read out of an uploaded CV.
+ *
+ * `is_complete` is false when the layout hid the role or the employer, which is
+ * the signal the confirm screen turns into "confira isto" instead of guessing.
+ */
+export interface ResumeIntakeExperience {
+  role: string;
+  company: string;
+  employment_type: string | null;
+  location: string | null;
+  /** ISO date (YYYY-MM-DD). */
+  started_on: string | null;
+  ended_on: string | null;
+  is_current: boolean;
+  /** The period exactly as the document prints it. */
+  period_text: string;
+  summary: string;
+  responsibilities: string[];
+  technologies: string[];
+  is_complete: boolean;
+}
+
+export interface ResumeIntakeEducation {
+  institution: string;
+  degree: string;
+  period_text: string;
+}
+
+export interface ResumeIntakeProject {
+  name: string;
+  description: string;
+  technologies: string[];
+}
+
+/** A proposal, never a saved profile: nothing here has been written. */
+export interface ResumeIntake {
+  full_name: string | null;
+  headline: string | null;
+  location: string | null;
+  email: string | null;
+  phone: string | null;
+  summary: string | null;
+  skills: string[];
+  languages: string[];
+  experiences: ResumeIntakeExperience[];
+  education: ResumeIntakeEducation[];
+  projects: ResumeIntakeProject[];
+  certifications: string[];
+  /** What could not be read. Shown as-is; the backend writes them in Portuguese. */
+  warnings: string[];
+  resume_text: string;
+  resume_filename: string | null;
+}
+
+/** What the user confirmed. Fields left out are not touched. */
+export interface IntakeApply {
+  full_name?: string | null;
+  headline?: string | null;
+  location?: string | null;
+  phone?: string | null;
+  summary?: string | null;
+  years_of_experience?: number | null;
+  resume_text?: string | null;
+  skills?: string[] | null;
+  preferred_languages?: string[] | null;
+  experiences?: ExperienceCreate[];
+  /** Destructive: removes the positions this account already has. */
+  replace_experiences?: boolean;
+}
+
+export interface IntakeApplied {
+  profile: Profile;
+  experiences_created: number;
+  experiences_removed: number;
+}
+
 export interface UserSettings {
   daily_cap: number;
   min_score: number;
