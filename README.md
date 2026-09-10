@@ -60,7 +60,8 @@ O que está verificado — e o que isso quer dizer:
 | Ritmo anti-detecção | Atrasos aleatórios cobertos por teste, com piso quando não é modo de demonstração |
 | Leitura do currículo enviado | Determinística e offline; um teste estrutural exige que **toda** string extraída seja um trecho do arquivo |
 | Preferências de vaga | Determinísticas; testes cobrem que nada é descartado por um motivo que o usuário não escreveu, e que uma vaga excluída não custa chamada de modelo |
-| Suíte | 860 backend + 25 navegador + 72 frontend + 9 Playwright, ruff, eslint, tsc, build, 8 guards |
+| "Por que esta vaga" | Determinística e sem modelo; testes cobrem que grafia equivalente não vira lacuna falsa e que um sinônimo aproximado não esconde lacuna real |
+| Suíte | 884 backend + 25 navegador + 80 frontend + 9 Playwright, ruff, eslint, tsc, build, 8 guards |
 
 O que **não** está verificado, e você deve assumir como não funcionando até provar:
 
@@ -136,8 +137,9 @@ O modo de teste (dry run) está ligado por padrão: o fluxo inteiro roda, até o
   center" num parágrafo sobre os clientes da empresa não faz de uma vaga backend um call center
 - Não dizer nada não descarta nada: preferência em branco deixa passar tudo, e uma vaga que não
   informa o modelo de trabalho nunca conta como incompatível
-- Tecnologias prioritárias só reordenam o que já está no seu currículo — uma que você não tem não
-  aparece em lugar nenhum
+- Tecnologias prioritárias só reordenam: elas põem na frente o que a vaga já pede **e** você já tem.
+  Uma prioridade que a vaga não menciona não muda nada, e uma que você não tem não aparece em lugar
+  nenhum — a lista que está sendo reordenada já era a interseção das duas
 
 **Busca e pontuação**
 
@@ -145,6 +147,13 @@ O modo de teste (dry run) está ligado por padrão: o fluxo inteiro roda, até o
   Simplificada, com um limite de resultados por execução para que as varreduras fiquem curtas
 - Pontuação de aderência por IA, 0–100, com os **motivos** da nota e uma lista explícita de **requisitos
   faltantes** — a segunda lista é a mais útil, porque diz o que um recrutador vai perguntar
+- **"Por que esta vaga?"** ao lado da nota: o que o anúncio pede e o seu currículo cobre, e o que ele
+  pede e o seu currículo não cobre. Sem IA nenhuma — é a interseção do anúncio com o seu texto, a
+  mesma que monta o currículo adaptado, então um termo destacado ali é um termo listado aqui. Ninguém
+  consegue conferir um "82"; essas duas listas dá para conferir
+- Grafias equivalentes não viram lacuna falsa: anúncio pedindo `postgres` contra currículo dizendo
+  `PostgreSQL` conta como coberto. Só sinônimos exatos — `java` e `javascript` continuam duas coisas,
+  e esconder uma lacuna real para parecer generoso seria pior do que apontá-la
 - Um limiar de nota mínima, para que combinações fracas sejam puladas em vez de recebermos candidatura
 - Deduplicação por `(usuário, id externo da vaga)`: rodar uma busca de novo nunca reprocessa um anúncio
 
@@ -495,8 +504,9 @@ você deliberadamente desligá-lo. Faça pelo menos uma passagem completa desse 
    anúncio aparece, `job.analyzed` conforme cada nota chega — ou o motivo, quando uma vaga bate num
    termo que você excluiu e é descartada sem análise. Nada recebe candidatura.
 
-8. **Revise as vagas pontuadas.** Ordene por nota. Leia os motivos e — mais importante — os requisitos
-   faltantes. É aqui que você decide, não o modelo. Pule as que você não quer de verdade.
+8. **Revise as vagas pontuadas.** Ordene por nota, mas decida pelas duas listas em cada card: o que a
+   vaga pede e você tem, e o que ela pede e você não tem. É aqui que você decide, não o modelo. Pule
+   as que você não quer de verdade.
 
 9. **Pré-visualize, depois prepare.** A pré-visualização informa quantas vagas seriam processadas, quantas já foram
    candidatadas e quanto do seu limite diário resta. Confirme, e a automação abre cada formulário de Candidatura

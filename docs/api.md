@@ -435,9 +435,43 @@ Um conjunto de filtros salvo. Salvo em vez de ad-hoc para que uma execução sej
 `score_reasons` e `missing_requirements` vêm direto do modelo. A segunda lista é a útil:
 ela diz o que um recrutador vai perguntar.
 
+#### `recommendation`
+
+Cada item desta listagem — e só desta e da página de uma vaga, que são as duas telas onde a pergunta
+é "vale a pena me candidatar?" — carrega também:
+
+```json
+{
+  "verdict": "strong",
+  "score": 87,
+  "covered": ["PostgreSQL", "Python", "FastAPI"],
+  "missing": ["Kubernetes"],
+  "prioritized": ["PostgreSQL"],
+  "covered_total": 3, "asked_total": 4, "coverage_pct": 75,
+  "has_evidence": true
+}
+```
+
+Diferente de `score_reasons`, **nada aqui vem do modelo**: as duas listas são a interseção do título e
+da descrição do anúncio com o texto do seu currículo, que é exatamente a mesma interseção que monta o
+currículo adaptado — um termo que aparece em `covered` é um termo que ganha destaque lá.
+
+- `covered` usa a **sua** grafia; `missing` usa a **do anúncio**, porque uma tecnologia que você nunca
+  escreveu não tem grafia sua
+- Grafias equivalentes contam como a mesma coisa: um anúncio pedindo `postgres` contra um currículo
+  dizendo `PostgreSQL` **não** é uma lacuna. Só sinônimos exatos — `java` e `javascript` continuam
+  sendo duas tecnologias, e esconder uma lacuna real para parecer generoso seria pior que apontá-la
+- `prioritized` é o subconjunto de `covered` que você marcou como prioridade. Nunca um acréscimo:
+  uma prioridade que o anúncio não pede não aparece
+- `has_evidence: false` quer dizer que o anúncio não citou nada comparável — não que você não atende
+  a nada
+- Nulo para um anúncio cuja descrição ainda não foi buscada
+
+Nenhuma frase vem daqui: a API manda termos e contagens, e o texto é montado no frontend.
+
 ### `GET /api/jobs/{id}`
 
-→ `JobDetail` — `JobRead` mais a `description` completa.
+→ `JobDetail` — `JobRead` mais a `description` completa. Também traz `recommendation`.
 
 ### `POST /api/jobs/{id}/skip`
 
