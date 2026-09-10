@@ -58,7 +58,8 @@ O que está verificado — e o que isso quer dizer:
 | Gate de aprovação | Coberto por testes de backend, de navegador e de UI; o guard `ASSISTED_MODE_ONLY` falha o build se afrouxar |
 | Provider de IA | 43 testes, incluindo os três modos de saída estruturada e o comportamento em recusa |
 | Ritmo anti-detecção | Atrasos aleatórios cobertos por teste, com piso quando não é modo de demonstração |
-| Suíte | 788 backend + 25 navegador + 61 frontend + 9 Playwright, ruff, eslint, tsc, build, 8 guards |
+| Leitura do currículo enviado | Determinística e offline; um teste estrutural exige que **toda** string extraída seja um trecho do arquivo |
+| Suíte | 832 backend + 25 navegador + 67 frontend + 9 Playwright, ruff, eslint, tsc, build, 8 guards |
 
 O que **não** está verificado, e você deve assumir como não funcionando até provar:
 
@@ -71,6 +72,10 @@ O que **não** está verificado, e você deve assumir como não funcionando até
   IA ficam indisponíveis. Uma linha no `.env` resolve — veja abaixo.
 - **`mypy` tem cerca de 20 erros pré-existentes**, advisory na CI, concentrados em `app/automation` e
   `app/services`.
+- **A leitura do currículo enviado nunca viu um corpus de PDFs reais.** Ela é exercitada contra layouts de
+  currículo escritos à mão nos testes, em português e inglês. O que ela *não pode* fazer é inventar — isso
+  é estrutural e testado. O que ela pode fazer é ler menos do que existe, e é por isso que a tela de
+  conferência existe e que os avisos são explícitos em vez de uma lista vazia.
 
 Duas lacunas funcionais conhecidas: a comparação item a item contra o currículo principal (ver Roteiro), e
 `GET /api/resumes/applications/{id}` responde 404 como estado vazio, o que o frontend trata certo mas aparece
@@ -102,6 +107,21 @@ operações diferentes que você invoca separadamente, e o endpoint que envia re
 O modo de teste (dry run) está ligado por padrão: o fluxo inteiro roda, até o clique final, e não envia nada.
 
 ## Funcionalidades
+
+**Comece pelo currículo, não por um formulário**
+
+- Envie o PDF que você já usa e o app **lê**: nome, título, localização, contato, resumo, tecnologias,
+  idiomas, experiências (cargo, empresa, período, atividades, tecnologias), formação, projetos e
+  certificações. Depois mostra tudo numa tela de conferência — "encontramos estas informações" — e você
+  corrige só o que estiver errado
+- **Nada é inventado, e é estrutural**: toda string extraída é um trecho literal do arquivo enviado, o que
+  um teste verifica campo a campo. Um currículo que nunca cita Kubernetes não produz Kubernetes em lugar
+  nenhum
+- **Nada é escondido**: um layout que o leitor não reconheceu aparece como aviso, nunca como uma lista
+  vazia. Uma experiência cujo cargo ou empresa o layout ocultou vem em branco para você preencher, e
+  bloqueia o salvamento até que venha
+- **Nada é gravado antes de você confirmar.** Ler o arquivo não move um único campo do seu perfil
+- Determinístico e offline: funciona igual num deploy sem chave de IA nenhuma
 
 **Busca e pontuação**
 
@@ -427,9 +447,12 @@ você deliberadamente desligá-lo. Faça pelo menos uma passagem completa desse 
    o login do próprio app e não tem nada a ver com o LinkedIn. Contas novas começam em modo de teste com aprovação
    manual obrigatória, então uma instalação nova não consegue enviar nada antes de você configurá-la.
 
-2. **Preencha o seu perfil e envie o seu currículo.** Título, localização, telefone, anos de experiência, habilidades e
-   um resumo. Envie o PDF que você realmente quer que os empregadores recebam — ele é anexado aos formulários de Candidatura Simplificada,
-   e o texto dele é o que a IA usa para pontuar as vagas. Um perfil raso produz notas fracas e cartas vagas.
+2. **Envie o seu currículo e confira o que encontramos.** Uma conta nova cai direto nessa tela. Envie o
+   PDF que você realmente quer que os empregadores recebam — ele é anexado aos formulários de Candidatura
+   Simplificada, e o texto dele é o que a IA usa para pontuar as vagas. O app lê o arquivo e mostra o que
+   achou; você corrige o que estiver errado e salva. Nada é gravado antes disso, e nada que não esteja no
+   arquivo entra no seu perfil. O que ele não conseguir ler aparece como aviso, para você completar à mão
+   em **Perfil**. Um perfil raso produz notas fracas e cartas vagas.
 
 3. **Preencha o banco de respostas.** Estes são os cinco minutos de maior valor que você vai gastar aqui. Pretensão
    salarial, aviso prévio, autorização de trabalho, anos com as suas principais tecnologias. Estas são as
@@ -560,12 +583,14 @@ backend/
 │   ├── automation/
 │   │   ├── contracts.py    # the dataclasses and the LinkedInService protocol
 │   │   ├── errors.py       # retryable vs stop-now
-│   │   ├── engine.py       # orchestration — no Playwright imports
+│   │   ├── engine/         # orchestration — no Playwright imports
 │   │   ├── throttle.py     # delays, daily cap, working hours
 │   │   ├── browser.py      # Playwright launch and lifecycle
 │   │   ├── selectors.py    # every CSS selector, in one file
 │   │   └── linkedin/       # service.py, search.py, job.py, apply.py
-│   ├── services/           # application, automation, job, search, stats, user
+│   ├── domain/             # the product rules, pure: scoring, resume, resume_intake,
+│   │                       # technologies, language — no database, no model call
+│   ├── services/           # application, automation, intake, job, resume, search, stats, user
 │   ├── database/           # async engine, session, UTC datetime handling
 │   ├── models/             # SQLAlchemy ORM + lifecycle enums
 │   ├── observability/      # structured logging, audit trail, events

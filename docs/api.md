@@ -198,6 +198,66 @@ curl -X POST http://localhost:8000/api/profile/resume \
 O arquivo é armazenado em `DATA_DIR/resumes/`, o texto dele é extraído para `resume_text`, e ambos são
 retornados no `ProfileRead` atualizado. O mesmo arquivo é anexado aos formulários de Candidatura Simplificada.
 
+### `POST /api/profile/intake`
+
+`multipart/form-data` com um campo `file` opcional. **Nada do perfil é escrito aqui.**
+
+Com um arquivo, ele é armazenado (é esse PDF que vai anexado às candidaturas) e lido. Sem arquivo, o
+`resume_text` que já está no perfil é lido no lugar.
+
+→ `ResumeIntakeRead` — uma **proposta**:
+
+```json
+{
+  "full_name": "João Victor Uchôa",
+  "headline": "Desenvolvedor Full Stack",
+  "location": "Recife, PE",
+  "email": "joao@example.com",
+  "phone": "+55 81 99999-1234",
+  "summary": "...",
+  "skills": ["C#", ".NET", "React"],
+  "languages": ["Português (nativo)", "Inglês (avançado)"],
+  "experiences": [
+    {
+      "role": "Desenvolvedor Full Stack",
+      "company": "GlobalThings",
+      "started_on": "2023-01-01", "ended_on": null, "is_current": true,
+      "period_text": "Jan 2023 - Presente",
+      "responsibilities": ["Construí APIs REST em .NET 8."],
+      "technologies": [".NET", "React"],
+      "is_complete": true
+    }
+  ],
+  "education": [{ "degree": "Bacharelado em Ciência da Computação",
+                  "institution": "CESAR School", "period_text": "2020 — 2024" }],
+  "projects": [], "certifications": [],
+  "warnings": [],
+  "resume_text": "...", "resume_filename": "user_1_resume.pdf"
+}
+```
+
+Duas propriedades valem mais que o formato. **Nada é inventado**: toda string devolvida é um trecho do
+arquivo enviado, o que é verificado estruturalmente nos testes — uma vaga que pede Kubernetes não faz
+Kubernetes aparecer num currículo que nunca o citou. E **nada é escondido**: um layout que o leitor não
+reconheceu volta em `warnings`, nunca como uma lista vazia. `is_complete: false` marca a experiência cujo
+cargo ou empresa o layout ocultou; ela vem em branco para o usuário preencher, jamais adivinhada.
+
+Determinístico e offline — este endpoint se comporta igual num deploy sem chave de IA.
+
+### `POST /api/profile/intake/apply`
+
+`IntakeApply` — a proposta como o usuário a corrigiu. Só o que está no corpo é escrito.
+
+| Campo | Efeito |
+|---|---|
+| `headline`, `location`, `phone`, `summary`, `years_of_experience`, `resume_text` | gravados no perfil; campos omitidos ficam intocados |
+| `skills`, `preferred_languages` | arrays de strings — substituídos por inteiro |
+| `full_name` | gravado na conta **apenas** quando ela ainda não tem nome |
+| `experiences` | `ExperienceCreate[]` — a mesma validação da tela de perfil; **acrescentadas**, não mescladas |
+| `replace_experiences` | destrutivo e opcional: remove as experiências desta conta antes de acrescentar |
+
+→ `IntakeApplied` com o `ProfileRead` atualizado, `experiences_created` e `experiences_removed`.
+
 ---
 
 ## Configurações
