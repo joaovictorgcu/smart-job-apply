@@ -121,15 +121,15 @@ def _form_fields() -> tuple[PortalField, ...]:
     )
 
 
-# Labels the demo form deliberately leaves out, and why:
+# Nothing is excluded from the demo form any more.
 #
-# * A cover-letter textarea is asked as a screening question by the engine
-#   *and* filled by the dedicated cover-letter path. The screening model has no
-#   sensible answer to "Cover letter" as a question, so it flags it, which sets
-#   `needs_human_input` and blocks approval on every form that has one. Correct
-#   behaviour on a real posting — a human should write that box — but it means a
-#   demo of the happy path cannot include the field.
-_EXCLUDED_FROM_DEMO_FORM = frozenset({"textarea-form-component-letter"})
+# The cover-letter textarea used to be, because the engine asked it as a
+# screening question *and* filled it from the cover-letter path: the screening
+# model flagged it, which set `needs_human_input` and blocked approval on every
+# form that had one. That was a real defect rather than a demo artefact, and it
+# is fixed at the source — `is_cover_letter_field` keeps the box out of the
+# screening set — so the demo form can carry the field again and prove it.
+_EXCLUDED_FROM_DEMO_FORM: frozenset[str] = frozenset()
 
 
 def default_steps() -> tuple[PortalStep, ...]:

@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.client import AIClient
-from app.automation.contracts import LinkedInService
+from app.automation.contracts import FormQuestion, LinkedInService
 from app.automation.errors import AutomationError
 from app.automation.linkedin.service import LinkedInBrowserService
 from app.models import (
@@ -568,3 +568,97 @@ class TestBatchPreparingPacesItself:
         pauses = self._long_pauses(sleep_spy)
         assert len(pauses) == 5, sorted(sleep_spy)
         assert len(set(pauses)) > 1, "the interval must vary, not repeat"
+
+
+class TestTheCoverLetterBoxDoesNotBlockApproval:
+    """The regression this guards is a gate that fires on every posting.
+
+    Most Easy Apply forms have a free-text box for a letter. Asked as a
+    screening question it comes back flagged, `needs_human_input` goes true, and
+    "Aprovar e enviar" is disabled — for a field the cover-letter path had
+    already filled. A gate that always fires is a gate nobody reads.
+
+    These run with dry_run off on purpose: in a dry run the form is never
+    opened, so there are no questions and the bug cannot appear.
+    """
+
+    COVER_LETTER = FormQuestion(
+        field_id="textarea-cover-letter",
+        label="Cover letter",
+        kind="textarea",
+    )
+    ANSWERABLE = FormQuestion(
+        field_id="numeric-years",
+        label="Years of Python experience?",
+        kind="number",
+        required=True,
+    )
+
+    @staticmethod
+    async def _prepared(
+        session: AsyncSession,
+        engine: Any,
+        fake_linkedin: FakeLinkedInService,
+        email: str,
+        questions: list[FormQuestion],
+    ) -> Any:
+        user = await create_user(session, email=email, settings={"dry_run": False})
+        job = await create_job(session, user, status=JobStatus.ANALYZED, score=90)
+        run = await prepare_run(session, user)
+        fake_linkedin.questions = questions
+
+        await engine.prepare_applications(user.id, run.id, [job.id])
+        return await application_for_job(session, job.id)
+
+    async def test_a_form_with_a_cover_letter_box_stays_approvable(
+        self, session: AsyncSession, automation_engine: Any, fake_linkedin: FakeLinkedInService
+    ) -> None:
+        application = await self._prepared(
+            session,
+            automation_engine,
+            fake_linkedin,
+            "cover1@example.com",
+            [self.ANSWERABLE, self.COVER_LETTER],
+        )
+
+        assert application is not None
+        assert application.status == ApplicationStatus.AWAITING_REVIEW
+        assert application.needs_human_input is False, (
+            "the cover-letter box must not count as an unanswered question: "
+            f"{application.screening_answers}"
+        )
+
+    async def test_the_box_is_not_recorded_as_a_screening_answer(
+        self, session: AsyncSession, automation_engine: Any, fake_linkedin: FakeLinkedInService
+    ) -> None:
+        application = await self._prepared(
+            session,
+            automation_engine,
+            fake_linkedin,
+            "cover2@example.com",
+            [self.ANSWERABLE, self.COVER_LETTER],
+        )
+
+        assert application is not None
+        labels = {entry["question"] for entry in application.screening_answers}
+        # The real question is still recorded; only the letter box drops out.
+        assert "Years of Python experience?" in labels
+        assert "Cover letter" not in labels
+
+    async def test_a_flagged_answer_still_blocks_approval(
+        self, session: AsyncSession, automation_engine: Any, fake_linkedin: FakeLinkedInService,
+        fake_ai: FakeAIClient,
+    ) -> None:
+        """The gate has to keep firing for the case it exists for."""
+        fake_ai.low_confidence = True
+
+        application = await self._prepared(
+            session,
+            automation_engine,
+            fake_linkedin,
+            "cover3@example.com",
+            [self.ANSWERABLE, self.COVER_LETTER],
+        )
+
+        assert application is not None
+        assert application.needs_human_input is True

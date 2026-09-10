@@ -21,6 +21,7 @@ from typing import Any
 
 from app.ai.schemas import ScreeningAnswer
 from app.automation.contracts import FormAnswer, FormQuestion, ProfileContext
+from app.automation.selectors import EasyApply
 from app.models import AnswerConfidence
 
 _EMAIL_HINTS = ("email", "e-mail")
@@ -30,6 +31,29 @@ _LAST_NAME_HINTS = ("last name", "surname", "family name", "sobrenome")
 _LOCATION_HINTS = ("city", "location", "cidade", "localidade", "where are you")
 _EXPERIENCE_HINTS = ("years of experience", "anos de experiência", "anos de experiencia")
 _FULL_NAME_HINTS = ("full name", "nome completo")
+
+
+def is_cover_letter_field(question: FormQuestion) -> bool:
+    """Whether this field is the form's cover-letter box.
+
+    It has to be told apart from a screening question because two different
+    parts of the system want it, and only one of them should get it. The
+    cover-letter generator writes it and `EasyApplyModal._fill_cover_letter`
+    types it in; the screening model has no sensible answer to "Cover letter"
+    phrased as a question and correctly flags it for review.
+
+    Left in the screening set, that flag sets `needs_human_input` and disables
+    approval on *every* posting whose form has such a box — which is most of
+    them. The gate then fires for a field that was already filled, which
+    teaches the operator to ignore it.
+
+    Matched on a free-text field whose label names a cover letter, using the
+    same label list the modal matches on, so the two stay in agreement.
+    """
+    if question.kind not in {"textarea", "text"}:
+        return False
+    label = _normalize(question.label)
+    return any(marker in label for marker in EasyApply.COVER_LETTER_LABELS)
 
 
 def _build_answers(

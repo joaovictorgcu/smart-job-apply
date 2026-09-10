@@ -16,6 +16,8 @@ from typing import Any
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.automation.contracts import FormQuestion
+from app.automation.engine.answers import is_cover_letter_field
 from app.automation.errors import AutomationError, ThrottleLimitError
 from app.automation.throttle import Throttle
 from app.database.base import utcnow
@@ -330,3 +332,57 @@ class TestDelays:
 
         assert later > first
         assert extreme <= 60.0
+
+
+class TestTheCoverLetterBoxIsNotAScreeningQuestion:
+    """Two parts of the system want that field; only one should get it.
+
+    The cover-letter generator writes it and the modal types it in. Asked as a
+    screening question it comes back flagged — the model has no answer to
+    "Cover letter" phrased as a question — and that flag sets
+    `needs_human_input`, disabling approval on every posting whose form has such
+    a box. Which is most of them, so the gate would fire for a field that was
+    already filled and teach the operator to ignore it.
+    """
+
+    @staticmethod
+    def _question(label: str, kind: str = "textarea") -> FormQuestion:
+        return FormQuestion(field_id=f"f-{label}", label=label, kind=kind)
+
+    @pytest.mark.parametrize(
+        "label",
+        [
+            "Cover letter",
+            "COVER LETTER",
+            "Carta de apresentação",
+            "Message to the hiring manager",
+            "Additional information",
+            "Informações adicionais",
+        ],
+    )
+    def test_a_cover_letter_box_is_recognised(self, label: str) -> None:
+        assert is_cover_letter_field(self._question(label)) is True
+
+    @pytest.mark.parametrize(
+        "label",
+        [
+            "Years of Python experience?",
+            "Are you authorized to work in this country?",
+            "Describe a production incident you owned",
+            "Level of English",
+        ],
+    )
+    def test_a_real_screening_question_is_not(self, label: str) -> None:
+        assert is_cover_letter_field(self._question(label)) is False
+
+    @pytest.mark.parametrize("kind", ["radio", "select", "checkbox", "number"])
+    def test_only_a_free_text_field_can_be_one(self, kind: str) -> None:
+        """A radio group named "cover letter" is not a place to paste a letter."""
+        assert is_cover_letter_field(self._question("Cover letter", kind)) is False
+
+    def test_the_labels_come_from_the_selector_module(self) -> None:
+        """The modal matches on this same list; two copies would drift apart."""
+        from app.automation.selectors import EasyApply
+
+        assert "cover letter" in EasyApply.COVER_LETTER_LABELS
+        assert is_cover_letter_field(self._question("Cover Letter")) is True

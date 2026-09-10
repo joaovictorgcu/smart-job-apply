@@ -29,7 +29,11 @@ from sqlalchemy import select
 
 from app.ai.schemas import ScreeningAnswer
 from app.automation.contracts import FormQuestion, ProfileContext
-from app.automation.engine.answers import _build_answers, _form_fingerprint
+from app.automation.engine.answers import (
+    _build_answers,
+    _form_fingerprint,
+    is_cover_letter_field,
+)
 from app.automation.engine.base import EngineBase
 from app.automation.errors import (
     AutomationError,
@@ -290,11 +294,18 @@ class PrepareMixin(EngineBase):
                     payload={"fields": [question.label for question in questions]},
                 )
 
-            screening = await self._ai_screening(user_id, job_id, profile, questions)
+            # The cover-letter box is filled by the cover-letter path, not by the
+            # screening model — see `is_cover_letter_field`. It stays in
+            # `questions` for the fingerprint and the event, because the form
+            # does contain it; it just does not become a question to answer.
+            screening_questions = [
+                question for question in questions if not is_cover_letter_field(question)
+            ]
+            screening = await self._ai_screening(user_id, job_id, profile, screening_questions)
             # Only the records are kept. The values to type are rebuilt at submit
             # time from the records as the user left them, which is the whole
             # point of the review step.
-            _, enriched = _build_answers(questions, screening, profile)
+            _, enriched = _build_answers(screening_questions, screening, profile)
 
             # Nothing stays open: the draft lives in the database from here on.
             await service.discard()
