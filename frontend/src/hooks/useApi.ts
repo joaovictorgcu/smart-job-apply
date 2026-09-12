@@ -34,6 +34,8 @@ import type {
   AdminPeriodQuery,
   AdminUserQuery,
   AdminUserRow,
+  AICredentialResult,
+  AIProviderOption,
   AIStatus,
   Application,
   ApplicationCard,
@@ -86,6 +88,7 @@ export const queryKeys = {
   // structured half of the master resume that lives next to it.
   experiences: () => ["profile", "experiences"] as const,
   settings: () => ["settings"] as const,
+  aiProviders: () => ["settings", "ai-providers"] as const,
   preferences: () => ["preferences"] as const,
   aiStatus: () => ["ai", "status"] as const,
   tailoredResume: (jobId: number) => ["ai", "tailored-cv", jobId] as const,
@@ -287,8 +290,32 @@ export function useUpdateSettings(
       // Caps and dry-run live in the session banner too.
       void client.invalidateQueries({ queryKey: queryKeys.session() });
       void client.invalidateQueries({ queryKey: queryKeys.stats() });
+      // Whether AI can run is now an answer about this account: storing a key
+      // turns it on, clearing one can turn it off.
+      void client.invalidateQueries({ queryKey: queryKeys.aiStatus() });
       options?.onSuccess?.(data, vars, context);
     },
+  });
+}
+
+export function useAIProviders(
+  options?: QueryOpts<AIProviderOption[]>,
+): UseQueryResult<AIProviderOption[], ApiError> {
+  return useQuery<AIProviderOption[], ApiError>({
+    queryKey: queryKeys.aiProviders(),
+    queryFn: ({ signal }) => profileService.fetchAIProviders(signal),
+    // The list changes when the server is upgraded, not while a form is open.
+    staleTime: Infinity,
+    ...options,
+  });
+}
+
+export function useTestAICredentials(
+  options?: MutationOpts<AICredentialResult, { provider?: string; api_key?: string }>,
+): UseMutationResult<AICredentialResult, ApiError, { provider?: string; api_key?: string }> {
+  return useMutation<AICredentialResult, ApiError, { provider?: string; api_key?: string }>({
+    mutationFn: (payload) => profileService.testAICredentials(payload),
+    ...options,
   });
 }
 

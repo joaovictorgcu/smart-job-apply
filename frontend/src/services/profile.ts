@@ -1,5 +1,7 @@
 import { api } from "@/services/client";
 import type {
+  AICredentialResult,
+  AIProviderOption,
   AIStatus,
   CoverLetterResponse,
   HealthResponse,
@@ -56,6 +58,24 @@ export function fetchSettings(signal?: AbortSignal): Promise<UserSettings> {
 /** PUT /api/settings */
 export function updateSettings(payload: UserSettingsUpdate): Promise<UserSettings> {
   return api.put<UserSettings>("/settings", payload);
+}
+
+/** GET /api/settings/ai/providers — the providers an account may bring a key for. */
+export function fetchAIProviders(signal?: AbortSignal): Promise<AIProviderOption[]> {
+  return api.get<AIProviderOption[]>("/settings/ai/providers", { signal });
+}
+
+/**
+ * POST /api/settings/ai/test — try a provider/key pair without saving it.
+ *
+ * An empty `api_key` tests the one already stored, which the UI cannot read
+ * back and therefore cannot resend.
+ */
+export function testAICredentials(payload: {
+  provider?: string;
+  api_key?: string;
+}): Promise<AICredentialResult> {
+  return api.post<AICredentialResult>("/settings/ai/test", payload);
 }
 
 /** GET /api/ai/status */

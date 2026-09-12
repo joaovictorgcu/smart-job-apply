@@ -1,4 +1,13 @@
-import { Bot, Info, Lock, Save, ShieldAlert, ShieldCheck, TriangleAlert } from 'lucide-react';
+import {
+  Bot,
+  Info,
+  KeyRound,
+  Lock,
+  Save,
+  ShieldAlert,
+  ShieldCheck,
+  TriangleAlert,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -16,9 +25,15 @@ import {
   Toggle,
 } from '@/components/primitives';
 import { useToast } from '@/components/ToastProvider';
-import { useSettings, useUpdateSettings } from '@/hooks/useApi';
+import {
+  useAIProviders,
+  useAIStatus,
+  useSettings,
+  useTestAICredentials,
+  useUpdateSettings,
+} from '@/hooks/useApi';
 import { errorMessage } from '@/services/client';
-import type { UserSettings, UserSettingsUpdate } from '@/types/api';
+import type { AICredentialResult, UserSettings, UserSettingsUpdate } from '@/types/api';
 
 const TONES = ['professional', 'friendly', 'direct', 'enthusiastic'] as const;
 
@@ -42,6 +57,22 @@ interface Errors {
   actionDelay?: string;
   applyDelay?: string;
   workingHours?: string;
+  aiKey?: string;
+}
+
+/** Empty means "use whatever provider the server configured". */
+const INHERIT_PROVIDER = '';
+
+const PROVIDER_LABELS: Record<string, string> = {
+  anthropic: 'Anthropic (Claude)',
+  groq: 'Groq',
+  gemini: 'Google Gemini',
+  openrouter: 'OpenRouter',
+  cerebras: 'Cerebras',
+};
+
+function providerLabel(name: string) {
+  return PROVIDER_LABELS[name] ?? name;
 }
 
 function ToggleRow({
@@ -75,22 +106,38 @@ function ToggleRow({
 export function Settings() {
   const toast = useToast();
   const { data: settings, isLoading } = useSettings();
+  const { data: aiStatus } = useAIStatus();
+  const { data: providers } = useAIProviders();
   const [draft, setDraft] = useState<UserSettings | null>(null);
   const [errors, setErrors] = useState<Errors>({});
+  // Kept out of `draft` on purpose: the key is write-only. It is never part of
+  // what the server sent back, so it must never be part of the object compared
+  // against it either.
+  const [apiKey, setApiKey] = useState('');
+  const [testResult, setTestResult] = useState<AICredentialResult | null>(null);
 
   useEffect(() => {
     if (settings) setDraft(settings);
   }, [settings]);
 
   const update = useUpdateSettings({
-    onSuccess: () => toast.success('Configurações salvas'),
+    onSuccess: () => {
+      setApiKey('');
+      setTestResult(null);
+      toast.success('Configurações salvas');
+    },
     onError: (error) => toast.error('Não foi possível salvar as configurações', errorMessage(error)),
+  });
+
+  const testCredentials = useTestAICredentials({
+    onSuccess: (result) => setTestResult(result),
+    onError: (error) => toast.error('Não foi possível testar a chave', errorMessage(error)),
   });
 
   const isDirty = useMemo(() => {
     if (!settings || !draft) return false;
-    return JSON.stringify(draft) !== JSON.stringify(settings);
-  }, [settings, draft]);
+    return JSON.stringify(draft) !== JSON.stringify(settings) || apiKey.length > 0;
+  }, [settings, draft, apiKey]);
 
   if (isLoading || !draft) {
     return (
@@ -122,14 +169,33 @@ export function Settings() {
     if (draft.working_hour_start >= draft.working_hour_end) {
       nextErrors.workingHours = 'A hora de início deve ser anterior à hora de término.';
     }
+    const provider = draft.ai_provider ?? INHERIT_PROVIDER;
+    const providerChanged = provider !== (settings?.ai_provider ?? INHERIT_PROVIDER);
+    if (provider && !apiKey && (providerChanged || !settings?.ai_key_set)) {
+      // The server refuses this too. Saying so here spares a round trip and,
+      // more to the point, spares the user retyping every other field.
+      // Two different problems: nothing stored at all, versus something stored
+      // that belongs to the provider being left behind.
+      nextErrors.aiKey =
+        settings?.ai_key_set && providerChanged
+          ? `A chave guardada é do provedor anterior. Cole uma chave de ${providerLabel(provider)}.`
+          : `Escolher ${providerLabel(provider)} exige uma chave de API.`;
+    }
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
     // dry_run is owned by the dedicated toggle, which has its own confirmation step.
     const payload: UserSettingsUpdate = { ...draft };
     delete payload.dry_run;
+    // Read-only: it says whether a key is stored, and is not a field to send back.
+    delete payload.ai_key_set;
+    if (apiKey) payload.ai_api_key = apiKey;
     update.mutate(payload);
   };
+
+  const provider = draft.ai_provider ?? INHERIT_PROVIDER;
+  const providerChanged = provider !== (settings?.ai_provider ?? INHERIT_PROVIDER);
+  const storedKeyUsable = Boolean(settings?.ai_key_set) && !providerChanged;
 
   return (
     <div className="space-y-5 pb-24">
@@ -332,14 +398,114 @@ export function Settings() {
       <Card>
         <CardHeader
           title="IA"
-          description="Como as vagas são pontuadas e como soa o texto gerado."
+          description="Quem responde, com a chave de quem, e como soa o texto gerado."
         />
         <div className="card-body space-y-4">
+          <div className="rounded-lg border border-line bg-surface-sunken px-3.5 py-3">
+            <p className="flex items-center gap-1.5 text-sm font-medium text-content">
+              <KeyRound aria-hidden className="h-3.5 w-3.5 text-content-subtle" />
+              Chave de IA
+            </p>
+            <p className="mt-0.5 text-xs leading-relaxed text-content-subtle">
+              Todo tier gratuito é limitado <strong>por chave</strong>. Usando a do servidor, você
+              divide esse limite com as outras contas; trazendo a sua, o limite é só seu e não custa
+              nada — Groq, Gemini, OpenRouter e Cerebras dão chave grátis em dois minutos.
+            </p>
+
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              <Field label="Provedor" htmlFor="settings-ai-provider">
+                <Select
+                  id="settings-ai-provider"
+                  value={provider}
+                  onChange={(event) => {
+                    setTestResult(null);
+                    setApiKey('');
+                    patch({ ai_provider: event.target.value || null });
+                  }}
+                >
+                  <option value={INHERIT_PROVIDER}>Usar o provedor do servidor</option>
+                  {(providers ?? []).map((option) => (
+                    <option key={option.name} value={option.name}>
+                      {providerLabel(option.name)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+
+              {provider ? (
+                <Field
+                  label="Chave de API"
+                  htmlFor="settings-ai-key"
+                  error={errors.aiKey}
+                  hint={
+                    storedKeyUsable
+                      ? 'Uma chave já está guardada. Deixe em branco para mantê-la.'
+                      : 'Guardada criptografada. Não é exibida de volta, nem mascarada.'
+                  }
+                >
+                  <Input
+                    id="settings-ai-key"
+                    type="password"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={apiKey}
+                    placeholder={storedKeyUsable ? '••••••••  (guardada)' : 'Cole a chave aqui'}
+                    onChange={(event) => {
+                      setTestResult(null);
+                      setApiKey(event.target.value);
+                    }}
+                  />
+                </Field>
+              ) : null}
+            </div>
+
+            {provider ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  loading={testCredentials.isPending}
+                  disabled={!apiKey && !storedKeyUsable}
+                  onClick={() => testCredentials.mutate({ provider, api_key: apiKey })}
+                >
+                  Testar chave
+                </Button>
+                {providers?.find((option) => option.name === provider)?.key_url ? (
+                  <span className="text-xs text-content-subtle">
+                    {providers.find((option) => option.name === provider)?.key_url}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+
+            {testResult ? (
+              <p
+                className={`mt-2.5 text-xs leading-relaxed ${
+                  testResult.ok ? 'text-success' : 'text-danger-strong'
+                }`}
+                role="status"
+              >
+                {testResult.ok
+                  ? `Respondeu: ${testResult.provider}/${testResult.model}. A chave ainda não foi salva — use "Salvar configurações".`
+                  : testResult.detail}
+              </p>
+            ) : null}
+
+            {aiStatus ? (
+              <p className="mt-2.5 text-xs text-content-subtle">
+                {aiStatus.configured
+                  ? `Agora respondendo: ${aiStatus.provider}/${aiStatus.model} — ${
+                      aiStatus.source === 'account' ? 'a sua chave' : 'a chave do servidor'
+                    }.`
+                  : aiStatus.detail || 'Nenhum provedor de IA disponível para esta conta.'}
+              </p>
+            ) : null}
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               label="Modelo"
               htmlFor="settings-model"
-              hint="Deixe vazio para usar o modelo configurado no servidor."
+              hint="Deixe vazio para usar o modelo padrão do provedor."
             >
               <Input
                 id="settings-model"

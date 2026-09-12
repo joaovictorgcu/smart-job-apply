@@ -333,13 +333,37 @@ export interface UserSettings {
   working_hour_end: number;
   require_manual_approval: boolean;
   dry_run: boolean;
+  /** The account's own provider, or null to use the one the server configured. */
+  ai_provider: string | null;
+  /** Whether a key is stored. The key itself is never returned, not even masked. */
+  ai_key_set: boolean;
   ai_model: string | null;
   cover_letter_tone: string;
   content_language: string;
   generate_cover_letter: boolean;
 }
 
-export type UserSettingsUpdate = Partial<UserSettings>;
+/**
+ * `ai_api_key` is write-only, which is why this is not simply `Partial<UserSettings>`.
+ *
+ * Sending it stores it; sending `""` clears it; omitting it leaves the stored
+ * one alone. Clearing `ai_provider` drops the key with it.
+ */
+export type UserSettingsUpdate = Partial<UserSettings> & { ai_api_key?: string };
+
+/** One provider an account may bring a key for (GET /api/settings/ai/providers). */
+export interface AIProviderOption {
+  name: string;
+  key_url: string;
+}
+
+/** The result of POST /api/settings/ai/test — a rejected key is `ok: false`, not an error. */
+export interface AICredentialResult {
+  ok: boolean;
+  provider: string;
+  model: string;
+  detail: string;
+}
 
 /** Metadata only: cookies and credentials never cross the API. */
 export interface LinkedInAccount {
@@ -566,6 +590,11 @@ export interface CoverLetterResponse {
 export interface AIStatus {
   configured: boolean;
   model: string;
+  provider: string;
+  /** "account" when this user brought a key, "deployment" when they inherit one. */
+  source: string;
+  /** Why `configured` is false, when that is knowable. */
+  detail: string;
 }
 
 export interface CVChange {
