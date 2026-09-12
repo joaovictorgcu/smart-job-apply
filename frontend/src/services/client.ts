@@ -62,7 +62,14 @@ export function clearToken(): void {
   }
 }
 
-function notifyUnauthorized(): void {
+/**
+ * Drop the token and tell the app the session is over.
+ *
+ * Exported because a 401 is not the only way a session ends: deleting the
+ * account ends it too, and the listener that clears the cached user is the same
+ * one either way.
+ */
+export function notifyUnauthorized(): void {
   clearToken();
   window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
 }
@@ -198,8 +205,11 @@ export const api = {
     request<T>(path, { ...options, method: "PUT", body }),
   patch: <T>(path: string, body?: unknown, options?: Omit<RequestOptions, "method" | "body">) =>
     request<T>(path, { ...options, method: "PATCH", body }),
-  delete: <T>(path: string, options?: Omit<RequestOptions, "method" | "body">) =>
-    request<T>(path, { ...options, method: "DELETE" }),
+  // A body on DELETE is unusual but legal, and one endpoint needs it: erasing
+  // an account takes the password as confirmation. Every existing caller passes
+  // the path alone, so the added parameter breaks none of them.
+  delete: <T>(path: string, body?: unknown, options?: Omit<RequestOptions, "method" | "body">) =>
+    request<T>(path, { ...options, method: "DELETE", body }),
   upload,
 };
 

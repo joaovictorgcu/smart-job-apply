@@ -11,6 +11,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
+import { DangerZone } from '@/components/DangerZone';
 import { DryRunToggle } from '@/components/DryRunToggle';
 import {
   Button,
@@ -564,6 +565,8 @@ export function Settings() {
           </Note>
         </div>
       </Card>
+
+      <DangerZone />
 
       <Note tone="warning" icon={<TriangleAlert aria-hidden className="h-3.5 w-3.5" />}>
         Nenhuma combinação dessas configurações torna a automação do LinkedIn permitida. Ela viola os
