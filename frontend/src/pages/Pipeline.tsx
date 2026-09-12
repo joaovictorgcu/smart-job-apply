@@ -7,6 +7,7 @@ import { CountUp } from '@/components/CountUp';
 import { EmptyState } from '@/components/EmptyState';
 import { Card, CardHeader, PageHeader, Select, Skeleton } from '@/components/primitives';
 import { ScoreBadge } from '@/components/ScoreBadge';
+import { ViewSwitch } from '@/components/ViewSwitch';
 import { useToast } from '@/components/ToastProvider';
 import { useBoard, useOutcomeStats, useSegmentStats, useUpdateOutcome } from '@/hooks/useApi';
 import { formatDate } from '@/lib/format';
@@ -72,6 +73,14 @@ export function Pipeline() {
       <PageHeader
         title="Funil"
         description="O que aconteceu depois que você se candidatou. Arraste um card, ou use o menu dele, para registrar o desfecho."
+      />
+
+      <ViewSwitch
+        label="Candidaturas"
+        options={[
+          { to: '/applications', label: 'Lista', end: true },
+          { to: '/pipeline', label: 'Funil' },
+        ]}
       />
 
       <OutcomeAnalytics

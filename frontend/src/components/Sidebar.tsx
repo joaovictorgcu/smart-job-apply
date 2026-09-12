@@ -1,9 +1,6 @@
 import {
-  Activity,
   Briefcase,
-  Columns3,
   LayoutDashboard,
-  Search,
   Send,
   Settings,
   ShieldCheck,
@@ -24,13 +21,22 @@ interface NavEntry {
   end?: boolean;
 }
 
+/*
+ * Five destinations, and each is a noun the user already has a word for.
+ *
+ * There were eight, three of which were the app's vocabulary rather than
+ * theirs. "Funil" is the same list as Candidaturas grouped by outcome, so it
+ * became a view there. "Buscas" is a machine concept — preferences produce the
+ * search, and the two screens that need it link to it. "Atividade" is a log,
+ * reached from the session card it describes.
+ *
+ * Every route still exists and every deep link still resolves. What changed is
+ * how many decisions the sidebar asks for before any work happens.
+ */
 const NAV: NavEntry[] = [
   { to: '/', label: 'Painel', icon: LayoutDashboard, end: true },
   { to: '/jobs', label: 'Vagas', icon: Briefcase },
   { to: '/applications', label: 'Candidaturas', icon: Send },
-  { to: '/pipeline', label: 'Funil', icon: Columns3 },
-  { to: '/searches', label: 'Buscas', icon: Search },
-  { to: '/activity', label: 'Atividade', icon: Activity },
   { to: '/profile', label: 'Perfil', icon: User },
   { to: '/settings', label: 'Configurações', icon: Settings },
 ];

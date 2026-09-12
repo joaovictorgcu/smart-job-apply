@@ -1,5 +1,6 @@
-import { Bot, CheckCircle2, Circle, Info, Linkedin, MonitorPlay, Power } from 'lucide-react';
+import { Activity, Bot, CheckCircle2, Circle, Info, Linkedin, MonitorPlay, Power } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 import { useSessionStatus, useStartSession, useStopSession } from '@/hooks/useApi';
 import { cn } from '@/lib/utils';
@@ -79,6 +80,14 @@ export function SessionStatusCard({ className }: { className?: string }) {
       <CardHeader
         title="Sessão"
         description={ready ? 'Pronta para buscar e preparar candidaturas.' : 'Ainda não está pronta.'}
+        actions={
+          // The event log describes this session, so it is reachable from it
+          // rather than from a sidebar entry of its own.
+          <Link to="/activity" className="btn btn-sm">
+            <Activity aria-hidden className="h-3.5 w-3.5" />
+            Histórico
+          </Link>
+        }
       />
 
       <div className="card-body">

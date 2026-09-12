@@ -1,21 +1,21 @@
 import { Download, Send } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { EmptyState } from '@/components/EmptyState';
 import { Pagination } from '@/components/Pagination';
 import { Button, Card, Field, PageHeader, Select, Skeleton } from '@/components/primitives';
 import { ScoreBadge } from '@/components/ScoreBadge';
+import { ViewSwitch } from '@/components/ViewSwitch';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useToast } from '@/components/ToastProvider';
-import { useApplications, useJobs } from '@/hooks/useApi';
+import { useApplications } from '@/hooks/useApi';
 import { downloadApplicationsCsv } from '@/services/applications';
 import { errorMessage } from '@/services/client';
 import { applicationStatusLabel, badgeClass, formatDateTime, formatNumber } from '@/lib/format';
-import { APPLICATION_STATUSES, type ApplicationStatus, type Job } from '@/types/api';
+import { APPLICATION_STATUSES, type ApplicationStatus } from '@/types/api';
 
 const PAGE_SIZE = 20;
-const JOB_JOIN_LIMIT = 200;
 
 function parseStatus(value: string | null): ApplicationStatus | 'all' {
   if (value && (APPLICATION_STATUSES as readonly string[]).includes(value)) {
@@ -47,16 +47,6 @@ export function Applications() {
     limit: PAGE_SIZE,
     offset,
   });
-  const { data: jobsPage } = useJobs({ limit: JOB_JOIN_LIMIT });
-
-  // Applications carry only a job_id, so the job columns are joined client-side.
-  const jobByApplication = useMemo(() => {
-    const map = new Map<number, Job>();
-    for (const job of jobsPage?.items ?? []) {
-      if (job.application_id !== null) map.set(job.application_id, job);
-    }
-    return map;
-  }, [jobsPage]);
 
   const changeStatus = (value: string) => {
     setOffset(0);
@@ -85,6 +75,14 @@ export function Applications() {
             Exportar CSV
           </Button>
         }
+      />
+
+      <ViewSwitch
+        label="Candidaturas"
+        options={[
+          { to: '/applications', label: 'Lista', end: true },
+          { to: '/pipeline', label: 'Funil' },
+        ]}
       />
 
       <Card className="px-4 py-3.5 sm:px-5">
@@ -150,7 +148,6 @@ export function Applications() {
               </thead>
               <tbody>
                 {items.map((application) => {
-                  const job = jobByApplication.get(application.id);
                   const flagged = application.screening_answers.filter(
                     (answer) => answer.needs_review,
                   ).length;
@@ -166,15 +163,15 @@ export function Applications() {
                         </div>
                       </td>
                       <td>
-                        <ScoreBadge score={job?.score ?? null} size="sm" />
+                        <ScoreBadge score={application.job_score} size="sm" />
                       </td>
                       <td className="max-w-[18rem]">
                         <Link
                           to={`/applications/${application.id}`}
                           className="block truncate font-medium text-content hover:text-accent-400 hover:underline"
-                          title={job?.title ?? undefined}
+                          title={application.job_title ?? undefined}
                         >
-                          {job?.title ?? `Candidatura #${application.id}`}
+                          {application.job_title ?? `Candidatura #${application.id}`}
                         </Link>
                         {flagged > 0 ? (
                           <span className="text-2xs text-warning">
@@ -183,7 +180,7 @@ export function Applications() {
                         ) : null}
                       </td>
                       <td className="max-w-[12rem]">
-                        <span className="block truncate">{job?.company ?? '—'}</span>
+                        <span className="block truncate">{application.job_company ?? '—'}</span>
                       </td>
                       <td className="tabular whitespace-nowrap text-xs">
                         {formatDateTime(application.updated_at ?? application.created_at)}
