@@ -118,11 +118,13 @@ test("cancelling the confirmation sends nothing", async ({ page, request }) => {
   expect((await readApplication(request, token, id)).status).toBe("awaiting_review");
 });
 
-test("the dashboard counts what is waiting for the operator", async ({ page }) => {
+test("the dashboard leads with what is waiting for the operator", async ({ page }) => {
   await signIn(page, token);
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: "Painel" })).toBeVisible();
-  await expect(page.getByText("Aguardando revisão")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Precisa da sua revisão" })).toBeVisible();
+  // The screen answers one question, and the work that cannot proceed without
+  // a human is the first thing under it.
+  await expect(page.getByRole("heading", { name: /O que você quer fazer hoje\?/ })).toBeVisible();
+  await expect(page.getByText(/candidatura[s]? espera[m]? você/)).toBeVisible();
+  await expect(page.getByRole("link", { name: /Revisar/ }).first()).toBeVisible();
 });

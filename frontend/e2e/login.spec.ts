@@ -17,9 +17,9 @@ test.describe("signing in", () => {
     await page.getByLabel("Senha").fill(DEMO_PASSWORD);
     await page.getByRole("button", { name: "Entrar" }).click();
 
-    await expect(page.getByRole("heading", { name: "Painel" })).toBeVisible();
-    // The dashboard says what the product does before anything is configured.
-    await expect(page.getByRole("link", { name: /Rodar uma busca/ })).toBeVisible();
+    // The dashboard asks the one question it answers, and offers the way in.
+    await expect(page.getByRole("heading", { name: /O que você quer fazer hoje\?/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Encontrar vagas/ })).toBeVisible();
   });
 
   test("a wrong password is reported without leaving the form", async ({ page }) => {
