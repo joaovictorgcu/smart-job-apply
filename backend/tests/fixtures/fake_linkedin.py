@@ -250,8 +250,16 @@ class FakeLinkedInService:
     # --- engine-facing extras ---------------------------------------------
 
     def configure(self, *, throttle: Any = None, resume_path: str | None = None) -> None:
-        self.throttle = throttle
-        self.resume_path = resume_path
+        """Mirror `LinkedInBrowserService.configure`: omitted means unchanged.
+
+        Assigning both unconditionally made a `configure(resume_path=...)` call
+        silently drop the throttle, which the real service does not do — and the
+        engine makes exactly that call before every form it opens.
+        """
+        if throttle is not None:
+            self.throttle = throttle
+        if resume_path is not None:
+            self.resume_path = resume_path
 
     def has_open_draft(self, external_id: str | None = None) -> bool:
         if self.current_external_id is None:

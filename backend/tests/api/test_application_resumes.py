@@ -869,3 +869,63 @@ class TestTheComparisonAgainstTheMaster:
         assert body["is_stale"] is True
         assert body["comparison"]["is_comparable"] is False
         assert body["comparison"]["moves"] == []
+
+
+class TestDownloadingTheAdaptedResume:
+    """The same bytes the form attaches, available to take somewhere else.
+
+    It matters most on the external channel, where nothing is submitted for the
+    user and the document has to leave the app by hand.
+    """
+
+    async def test_it_returns_the_pdf_the_form_would_attach(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        user = await seeded_user(session, "download@example.com")
+        job = await create_posting_job(session, user, "dotnet")
+        application = await create_application(session, user, job)
+        await session.commit()
+        headers = {"Authorization": f"Bearer {create_access_token(user.id)}"}
+
+        await client.post(APPLICATION.format(application_id=application.id), headers=headers)
+        response = await client.get(
+            f"/api/resumes/applications/{application.id}/pdf", headers=headers
+        )
+
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/pdf"
+        assert "attachment;" in response.headers["content-disposition"]
+        assert response.content.startswith(b"%PDF")
+
+    async def test_an_application_with_no_copy_says_so_rather_than_sending_a_blank(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        user = await seeded_user(session, "nocopy@example.com")
+        job = await create_posting_job(session, user, "dotnet")
+        application = await create_application(session, user, job)
+        await session.commit()
+        headers = {"Authorization": f"Bearer {create_access_token(user.id)}"}
+
+        response = await client.get(
+            f"/api/resumes/applications/{application.id}/pdf", headers=headers
+        )
+
+        assert response.status_code == 412
+
+    async def test_it_is_private_to_its_owner(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        user = await seeded_user(session, "owner-pdf@example.com")
+        intruder = await create_user(session, email="intruder-pdf@example.com")
+        job = await create_posting_job(session, user, "dotnet")
+        application = await create_application(session, user, job)
+        await session.commit()
+        owner = {"Authorization": f"Bearer {create_access_token(user.id)}"}
+        await client.post(APPLICATION.format(application_id=application.id), headers=owner)
+
+        response = await client.get(
+            f"/api/resumes/applications/{application.id}/pdf",
+            headers={"Authorization": f"Bearer {create_access_token(intruder.id)}"},
+        )
+
+        assert response.status_code in {403, 404, 412}

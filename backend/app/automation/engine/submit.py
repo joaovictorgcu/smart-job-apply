@@ -128,6 +128,13 @@ class SubmitMixin(EngineBase):
             # The browser is usually closed by now — the review happens in the
             # user's own time. Opening it here is deliberate and visible.
             service = await self._ready_service(user_id)
+            # Submission re-opens the form, so it re-uploads the file. It has to
+            # be the same one the review screen described, which means redrawing
+            # it from the copy as the user left it rather than trusting whatever
+            # the session was configured with.
+            service.configure(
+                resume_path=await self._application_resume_path(user_id, application_id)
+            )
             questions = await service.open_easy_apply(external_id)
 
             fingerprint = _form_fingerprint(questions)

@@ -9,7 +9,9 @@ Two properties are pinned down here:
 
 from __future__ import annotations
 
+import asyncio
 import inspect
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -29,7 +31,13 @@ from app.models import (
     UserSettings,
 )
 from tests.automation import FILTERS, application_for_job, jobs_of, reload_run
-from tests.fixtures.factories import create_job, create_run, create_search, create_user
+from tests.fixtures.factories import (
+    create_job,
+    create_resume_history,
+    create_run,
+    create_search,
+    create_user,
+)
 from tests.fixtures.fake_ai import FakeAIClient
 from tests.fixtures.fake_linkedin import FakeLinkedInService, make_postings
 
@@ -662,3 +670,67 @@ class TestTheCoverLetterBoxDoesNotBlockApproval:
 
         assert application is not None
         assert application.needs_human_input is True
+
+
+class TestTheFileTheFormAttaches:
+    """The employer receives the resume the user reviewed, not the generic upload.
+
+    Before this, every application attached `Profile.resume_filename` — one PDF
+    for every posting — while the screen showed a document adapted to each. The
+    gap between those two was the product's largest unkept promise.
+    """
+
+    @staticmethod
+    async def _prepare(
+        session: AsyncSession,
+        engine: Any,
+        fake_linkedin: FakeLinkedInService,
+        email: str,
+        **user_kwargs: Any,
+    ) -> Any:
+        user = await create_user(session, email=email, settings={"dry_run": False}, **user_kwargs)
+        await create_resume_history(session, user)
+        job = await create_job(session, user, status=JobStatus.ANALYZED, score=90)
+        run = await prepare_run(session, user)
+
+        await engine.prepare_applications(user.id, run.id, [job.id])
+        return user
+
+    async def test_the_attached_file_is_this_application_s_own(
+        self, session: AsyncSession, automation_engine: Any, fake_linkedin: FakeLinkedInService
+    ) -> None:
+        user = await self._prepare(session, automation_engine, fake_linkedin, "pdf1@example.com")
+
+        assert fake_linkedin.resume_path is not None
+        assert f"user_{user.id}_application_" in fake_linkedin.resume_path
+        content = await asyncio.to_thread(Path(fake_linkedin.resume_path).read_bytes)
+        assert content.startswith(b"%PDF")
+
+    async def test_it_falls_back_to_the_upload_when_there_is_nothing_to_draw(
+        self, session: AsyncSession, automation_engine: Any, fake_linkedin: FakeLinkedInService
+    ) -> None:
+        # No profile at all, so no master resume, so no snapshot and nothing
+        # honest to render. A submission must never be blocked by a layout
+        # engine: the session's own configuration — the uploaded PDF, or none —
+        # is what the form keeps.
+        user = await create_user(
+            session,
+            email="pdf2@example.com",
+            settings={"dry_run": False},
+            with_profile=False,
+        )
+        job = await create_job(session, user, status=JobStatus.ANALYZED, score=90)
+        run = await prepare_run(session, user)
+
+        await automation_engine.prepare_applications(user.id, run.id, [job.id])
+
+        assert fake_linkedin.resume_path is None or "application_" not in fake_linkedin.resume_path
+
+    async def test_configuring_the_file_does_not_drop_the_throttle(
+        self, session: AsyncSession, automation_engine: Any, fake_linkedin: FakeLinkedInService
+    ) -> None:
+        # The engine calls `configure(resume_path=...)` before every form. The
+        # real service leaves an omitted throttle alone, and so must the fake.
+        await self._prepare(session, automation_engine, fake_linkedin, "pdf3@example.com")
+
+        assert fake_linkedin.throttle is not None

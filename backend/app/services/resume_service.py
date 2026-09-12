@@ -18,8 +18,10 @@ Nothing here commits: the request session commits once, at the end.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
 from datetime import date
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import Select, func, select
@@ -27,9 +29,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.errors import NotFoundError, PreconditionFailedError, ValidationError
+from app.config import get_settings
 from app.database.base import utcnow
 from app.domain import resume as domain
-from app.domain import resume_diff
+from app.domain import resume_diff, resume_render
 from app.models import (
     Application,
     ApplicationEventType,
@@ -54,7 +57,7 @@ from app.schemas.resume import (
     ResumeComparisonRead,
     ResumeVersionSummary,
 )
-from app.services import preference_service, user_service
+from app.services import preference_service, resume_pdf, user_service
 
 logger = get_logger(__name__)
 
@@ -603,7 +606,11 @@ def _read_experience(raw: dict[str, Any]) -> AdaptedExperience:
 
 
 def _snapshot_of(row: ApplicationResume) -> resume_diff.Snapshot:
-    """The stored copy as the comparison sees it — plain data, exactly as saved."""
+    """The stored copy as plain data, exactly as saved.
+
+    Feeds both the comparison and the rendered document, so the PDF an employer
+    receives and the diff the user approved are built from one object.
+    """
     return resume_diff.Snapshot(
         summary=row.summary or "",
         skills=tuple(row.skills or []),
@@ -621,10 +628,98 @@ def _snapshot_of(row: ApplicationResume) -> resume_diff.Snapshot:
                 results=tuple(str(line) for line in (entry.get("results") or [])),
                 matched_terms=tuple(str(term) for term in (entry.get("matched_terms") or [])),
                 promoted=int(entry.get("promoted") or 0),
+                period=resume_render.period_text(
+                    _iso_date(entry.get("started_on")),
+                    _iso_date(entry.get("ended_on")),
+                    bool(entry.get("is_current")),
+                ),
+                location=entry.get("location"),
             )
             for entry in (row.experiences or [])
         ),
     )
+
+
+async def render_application_pdf(
+    session: AsyncSession, user_id: int, application_id: int
+) -> Path | None:
+    """Write this application's adapted resume as the PDF the form attaches.
+
+    Returns the path, or `None` when there is nothing honest to draw — no
+    snapshot yet, or one the renderer refused. The caller falls back to the
+    profile's uploaded PDF, which is what happened before this existed: a
+    submission must never be blocked by a layout engine.
+
+    Rewritten on every call rather than cached behind a timestamp. It is a page
+    of text, it costs milliseconds, and a stale file attached to a real
+    application is a far worse failure than the work of redrawing one.
+    """
+    result = await session.execute(
+        select(ApplicationResume).where(
+            ApplicationResume.application_id == application_id,
+            ApplicationResume.user_id == user_id,
+        )
+    )
+    row = result.scalar_one_or_none()
+    if row is None:
+        return None
+
+    user = await session.get(User, user_id)
+    profile = await user_service.get_or_create_profile(session, user) if user else None
+    contact = [
+        value
+        for value in (profile.location if profile else None, profile.phone if profile else None)
+        if value
+    ]
+
+    blocks = resume_render.render_blocks(
+        _snapshot_of(row),
+        full_name=user.full_name if user else None,
+        headline=row.headline,
+        contact=contact,
+    )
+    try:
+        content = resume_pdf.to_pdf(blocks)
+    except resume_pdf.ResumeRenderError:
+        # Already logged by the renderer. The caller attaches the uploaded PDF.
+        return None
+
+    target = get_settings().resumes_dir / application_pdf_name(user_id, application_id)
+    await asyncio.to_thread(target.parent.mkdir, parents=True, exist_ok=True)
+    await asyncio.to_thread(target.write_bytes, content)
+    logger.info(
+        "Adapted resume rendered.",
+        extra={
+            "action": "resume.pdf",
+            "status": "ok",
+            "user_id": user_id,
+            "application_id": application_id,
+            "bytes": len(content),
+        },
+    )
+    return target
+
+
+async def read_application_pdf(
+    session: AsyncSession, user: User, application_id: int
+) -> bytes:
+    """The adapted resume's PDF bytes, for a download.
+
+    Drawn on demand rather than served off disk: the stored copy is the source
+    of truth, and a file written before the user's last edit would hand them a
+    document that is not the one on their screen.
+    """
+    path = await render_application_pdf(session, user.id, application_id)
+    if path is None:
+        raise PreconditionFailedError(
+            "This application has no adapted resume to download yet. Adapt one first."
+        )
+    return await asyncio.to_thread(path.read_bytes)
+
+
+def application_pdf_name(user_id: int, application_id: int) -> str:
+    """The per-application file name. Scoped by user so no two accounts collide."""
+    return f"user_{user_id}_application_{application_id}.pdf"
 
 
 def build_comparison(

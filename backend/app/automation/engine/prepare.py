@@ -218,6 +218,11 @@ class PrepareMixin(EngineBase):
             #
             await resume_service.ensure_application_resume(session, user_id, application_id)
 
+        # Drawn from that copy, so the file the employer receives is the resume
+        # the user reviewed rather than the one generic upload. Falls back to the
+        # upload when there is nothing honest to draw.
+        resume_filename = await self._application_resume_path(user_id, application_id)
+
         await self._publish(
             user_id,
             EventName.APPLICATION_STARTED,
@@ -281,6 +286,10 @@ class PrepareMixin(EngineBase):
                 )
 
             service = await self._ready_service(user_id)
+            # The browser session was configured with the profile's upload when
+            # it opened. This application's own file is decided per posting, so
+            # it is set here, right before the form that uploads it.
+            service.configure(resume_path=resume_filename)
             questions = await service.open_easy_apply(external_id)
             async with session_scope() as session:
                 await self._record(

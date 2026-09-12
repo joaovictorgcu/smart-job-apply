@@ -12,7 +12,7 @@ deployment with no Anthropic key.
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 
 from app.api.deps import CurrentUser, SessionDep
 from app.schemas.resume import (
@@ -73,6 +73,27 @@ async def adapt_application_resume(
     """
     await resume_service.adapt_application_resume(session, user, application_id)
     return await resume_service.read_for_application(session, user, application_id)
+
+
+@router.get("/applications/{application_id}/pdf", response_class=Response)
+async def download_application_resume(
+    application_id: int, user: CurrentUser, session: SessionDep
+) -> Response:
+    """The adapted resume as the PDF this application attaches.
+
+    The same bytes the form uploads — drawn from the stored copy on every call,
+    so a hand edit made a minute ago is in the file a minute later. `409` when
+    there is nothing honest to draw yet: the application has no copy, or the
+    renderer refused it. That is the same condition under which the automation
+    falls back to the profile's upload.
+    """
+    content = await resume_service.read_application_pdf(session, user, application_id)
+    filename = f"curriculo-candidatura-{application_id}.pdf"
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.patch("/applications/{application_id}", response_model=ApplicationResumeRead)

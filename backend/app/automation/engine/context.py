@@ -16,6 +16,7 @@ from app.automation.throttle import Throttle
 from app.config import get_settings
 from app.database.session import session_scope
 from app.models import Profile, User, UserSettings
+from app.services import resume_service
 
 
 class ContextMixin(EngineBase):
@@ -38,6 +39,23 @@ class ContextMixin(EngineBase):
             return None
         path = get_settings().resumes_dir / filename
         return str(path) if path.exists() else None
+
+    async def _application_resume_path(self, user_id: int, application_id: int) -> str | None:
+        """The file this one application should attach.
+
+        The adapted document, drawn as a PDF, so the employer receives the
+        resume the user reviewed rather than the one generic upload. Falls back
+        to that upload whenever there is nothing honest to draw — no snapshot,
+        or a renderer that refused — because a submission must never be blocked
+        by a layout engine.
+        """
+        async with session_scope() as session:
+            rendered = await resume_service.render_application_pdf(
+                session, user_id, application_id
+            )
+        if rendered is not None:
+            return str(rendered)
+        return await self._resume_path(user_id)
 
     async def _profile_context(self, session: AsyncSession, user_id: int) -> ProfileContext:
         user = await session.get(User, user_id)
