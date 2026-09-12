@@ -70,7 +70,7 @@ describe("ApplicationResumePanel states", () => {
     render();
 
     expect(document.querySelector('[aria-busy="true"]')).toBeTruthy();
-    expect(screen.getByText("Currículo desta candidatura")).toBeInTheDocument();
+    expect(screen.getByText("Sua versão para esta vaga")).toBeInTheDocument();
   });
 
   it("offers to adapt when the application has no copy yet", async () => {
@@ -101,11 +101,18 @@ describe("ApplicationResumePanel states", () => {
 
 describe("ApplicationResumePanel document", () => {
   it("names the vacancy the copy was adapted to", async () => {
-    await renderAdapted();
+    const { container } = await renderAdapted();
 
-    expect(
-      screen.getByText(/adaptado para desenvolvedor backend \.net sênior/i),
-    ).toBeInTheDocument();
+    expect(container.textContent).toMatch(/adaptada para desenvolvedor backend \.net sênior/i);
+  });
+
+  it("says the attached PDF is not this document", async () => {
+    // The employer receives the profile's PDF. A panel titled after the
+    // vacancy, sitting on the application screen, would otherwise read as the
+    // thing being sent.
+    const { container } = await renderAdapted();
+
+    expect(container.textContent).toMatch(/o pdf anexado continua sendo o do seu perfil/i);
   });
 
   it("shows the adherence figure with the posting context", async () => {

@@ -70,8 +70,18 @@ describe("SubmissionSummary", () => {
 
     expect(screen.getByText("O que será enviado")).toBeInTheDocument();
     expect(screen.getByText("user_1_resume.pdf")).toBeInTheDocument();
+    await waitFor(() => expect(container.textContent).toMatch(/3 alterações/i));
+  });
+
+  it("does not let the adapted version read as the attached file", async () => {
+    // The employer receives the profile's PDF, the same one every time. The
+    // per-vacancy document is never rendered into it, and a reader who thinks
+    // otherwise is being misled at the exact moment they approve.
+    const { container } = render({ resume_filename: "user_1_resume.pdf" });
+
+    expect(container.textContent).toMatch(/é o pdf do seu perfil, igual em todas as candidaturas/i);
     await waitFor(() =>
-      expect(container.textContent).toMatch(/3 alterações em relação ao seu currículo principal/i),
+      expect(container.textContent).toMatch(/ele não entra no pdf anexado/i),
     );
   });
 

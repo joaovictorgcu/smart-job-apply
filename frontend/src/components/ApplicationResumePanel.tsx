@@ -522,11 +522,11 @@ export function ApplicationResumePanel({
 
   const header = (
     <CardHeader
-      title="Currículo desta candidatura"
+      title="Sua versão para esta vaga"
       description={
         title
-          ? `Adaptado para ${title}${company ? ` · ${company}` : ''}`
-          : 'Uma versão do seu currículo principal, adaptada a esta vaga.'
+          ? `Adaptada para ${title}${company ? ` · ${company}` : ''}. O PDF anexado continua sendo o do seu perfil.`
+          : 'Uma versão do seu currículo principal, adaptada a esta vaga. O PDF anexado continua sendo o do seu perfil.'
       }
       actions={
         <>

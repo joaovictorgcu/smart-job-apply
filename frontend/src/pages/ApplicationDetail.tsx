@@ -187,9 +187,11 @@ export function ApplicationDetail() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="space-y-4 lg:col-span-2">
-          {/* Above the review panel on purpose: "which resume is this
-              application sending" is the first question the screen has to
-              answer, before the letter and the screening answers. */}
+          {/* Above the review panel on purpose: "what does my resume look like
+              for this vacancy" is the first question the screen has to answer,
+              before the letter and the screening answers. It is not the file
+              that goes out — that is the profile's PDF, and the submission
+              summary in the panel below says so. */}
           <ApplicationResumePanel
             applicationId={application.id}
             jobTitle={job?.title ?? null}

@@ -1,4 +1,11 @@
-import { Briefcase, FileText, MailCheck, MessageSquare, ShieldAlert } from 'lucide-react';
+import {
+  Briefcase,
+  FileText,
+  ListOrdered,
+  MailCheck,
+  MessageSquare,
+  ShieldAlert,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { Card, CardHeader } from '@/components/primitives';
@@ -62,6 +69,12 @@ function Row({
  * It describes the **saved record**, not the draft on screen, because that
  * record is what the submission rebuilds from. Unsaved edits are a separate,
  * already-enforced gate: approval stays disabled while the draft is dirty.
+ *
+ * The attached file and the per-vacancy version are two rows on purpose. The
+ * employer receives the PDF from the profile — the same one every time — and
+ * the adapted document is never rendered into it. Stating them together would
+ * read as "the attachment carries these changes", which is the single most
+ * expensive thing this screen could get wrong.
  */
 export function SubmissionSummary({ application, className }: SubmissionSummaryProps) {
   const { data: resume } = useApplicationResume(application.id);
@@ -100,21 +113,32 @@ export function SubmissionSummary({ application, className }: SubmissionSummaryP
             </div>
           </li>
 
+          {/* Two rows, not one, and the wording is deliberate. The file the
+              employer receives is the PDF from the profile — the same one on
+              every application. The per-vacancy version is a document to read,
+              copy or attach by hand; it is never rendered into that file.
+              Folding them into a single "Currículo" row reads as though the
+              attachment carries the adaptation, which it does not. */}
           <Row
             icon={FileText}
-            label="Currículo"
+            label="Arquivo que vai anexado"
             value={application.resume_filename ?? 'Nenhum arquivo anexado'}
             tone={application.resume_filename ? 'neutral' : 'warn'}
-            detail={
-              comparison && comparison.is_comparable
-                ? `${comparison.changes_total} ${
-                    comparison.changes_total === 1 ? 'alteração' : 'alterações'
-                  } em relação ao seu currículo principal · ${invented.length} ${
-                    invented.length === 1 ? 'informação inventada' : 'informações inventadas'
-                  }`
-                : undefined
-            }
+            detail="É o PDF do seu perfil, igual em todas as candidaturas."
           />
+
+          {comparison && comparison.is_comparable ? (
+            <Row
+              icon={ListOrdered}
+              label="Versão para esta vaga"
+              value={`${comparison.changes_total} ${
+                comparison.changes_total === 1 ? 'alteração' : 'alterações'
+              } · ${invented.length} ${
+                invented.length === 1 ? 'informação inventada' : 'informações inventadas'
+              }`}
+              detail="Um documento para você ler e reaproveitar — ele não entra no PDF anexado."
+            />
+          ) : null}
 
           <Row
             icon={MailCheck}
