@@ -279,6 +279,15 @@ class AIClient:
                     effort=effort,
                     output_format=output_format,
                 )
+            except ProviderNotConfiguredError as exc:
+                # A credential the provider itself rejected. Translated here so
+                # the whole of `scoring.py` keeps working unchanged: every entry
+                # point there re-raises `AINotConfiguredError` and swallows the
+                # rest into a refusal, which is right for a model that declined
+                # and wrong for a key that will never work. This is what makes
+                # an expired key reach the user as a 503 instead of a 200 with
+                # yesterday's score on it.
+                raise AINotConfiguredError(str(exc)) from exc
             except Exception as exc:
                 if not _is_provider_failure(exc) or not _is_retryable(exc):
                     raise

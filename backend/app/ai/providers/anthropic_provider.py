@@ -43,6 +43,31 @@ def _mentions_output_config(error: Exception) -> bool:
     return "output_config" in message or "effort" in message
 
 
+def _as_configuration_error(error: Exception) -> Exception:
+    """Turn a rejected credential into `ProviderNotConfiguredError`.
+
+    The taxonomy in `providers/base.py` already separates "this provider is not
+    set up" from "this call failed, try again". A 401 belongs firmly in the
+    first: the key is present but the API will not accept it, and no retry and
+    no amount of waiting changes that. Only the operator can.
+
+    Everything else is returned untouched, so a rate limit stays retryable and
+    a genuine model refusal still degrades to manual input.
+    """
+    try:
+        import anthropic
+    except ImportError:  # pragma: no cover - dependency is declared
+        return error
+
+    rejected = (anthropic.AuthenticationError, anthropic.PermissionDeniedError)
+    if isinstance(error, rejected):
+        return ProviderNotConfiguredError(
+            f"The Anthropic API rejected this key: {error}. Check ANTHROPIC_API_KEY, "
+            "or point AI_PROVIDER at another provider."
+        )
+    return error
+
+
 def _note_shim_downgrade(error: Exception) -> None:
     """Disable `output_config` for this process, logging the downgrade once."""
     global _output_config_supported, _shim_logged
@@ -89,6 +114,33 @@ class AnthropicProvider:
         return self._client
 
     async def send(
+        self,
+        *,
+        system: str,
+        user_prompt: str,
+        max_tokens: int,
+        effort: str | None = None,
+        output_format: type[BaseModel] | None = None,
+    ) -> ProviderResponse:
+        try:
+            return await self._send(
+                system=system,
+                user_prompt=user_prompt,
+                max_tokens=max_tokens,
+                effort=effort,
+                output_format=output_format,
+            )
+        except Exception as exc:
+            # A key the API rejects is a *configuration* failure, not a model
+            # refusal and not something a retry fixes. Left untranslated it
+            # arrives upstairs as "the AI produced no score", and the app then
+            # reports a cheerful 200 with whatever score the job already had —
+            # so an expired key looks exactly like a working one. Raising the
+            # configured-wrong error instead reaches the user as a 503 that
+            # names the problem.
+            raise _as_configuration_error(exc) from exc
+
+    async def _send(
         self,
         *,
         system: str,
