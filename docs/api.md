@@ -375,6 +375,21 @@ outro documento é uma cópia que o candidato não consegue defender numa entrev
 - `is_comparable: false` quando a cópia está desatualizada: o principal mudou depois, e o diff atribuiria
   as edições do próprio usuário à adaptação
 
+### `GET /api/resumes/applications/{application_id}/pdf`
+
+→ `application/pdf`, como anexo. **São exatamente os bytes que o formulário envia.**
+
+Desenhado a partir da cópia armazenada a cada chamada, não servido de um arquivo em cache: a cópia é a
+fonte de verdade, e um PDF gravado antes da sua última edição entregaria um documento que não é o que
+está na sua tela.
+
+`412` quando não há nada honesto a desenhar — a candidatura ainda não tem cópia, ou o desenho falhou. É
+a mesma condição em que a automação volta a anexar o PDF do perfil: **uma candidatura nunca é bloqueada
+por um gerador de PDF.**
+
+Importa mais no canal externo, onde o app não envia nada por você e o documento precisa conseguir sair
+daqui.
+
 ### `PATCH /api/resumes/applications/{application_id}`
 
 Edita esta cópia, e só esta. Cargo, empresa e período **não** estão no corpo aceito: esta tela adapta um

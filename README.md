@@ -63,7 +63,8 @@ O que está verificado — e o que isso quer dizer:
 | Preferências de vaga | Determinísticas; testes cobrem que nada é descartado por um motivo que o usuário não escreveu, e que uma vaga excluída não custa chamada de modelo |
 | "Por que esta vaga" | Determinística e sem modelo; testes cobrem que grafia equivalente não vira lacuna falsa e que um sinônimo aproximado não esconde lacuna real |
 | Comparação com o currículo principal | O orçamento de mudanças é testado item a item, e a contagem de invenções é o guarda rodando sobre o documento inteiro — zero é medido, não assumido |
-| Suíte | 992 backend + 25 navegador + 138 frontend + 9 Playwright, ruff, eslint, tsc, build, 8 guards |
+| Currículo anexado ao formulário | Testes cobrem que o arquivo enviado é o da candidatura, que ele é um PDF de verdade, e que uma conta sem versão própria volta ao PDF do perfil em vez de falhar |
+| Suíte | 1.025 backend + 25 navegador + 138 frontend + 9 Playwright, ruff, eslint, tsc, build, 8 guards |
 
 O que **não** está verificado, e você deve assumir como não funcionando até provar:
 
@@ -191,17 +192,21 @@ O modo de teste (dry run) está ligado por padrão: o fluxo inteiro roda, até o
 - O último número é **medido**, não prometido: o guarda contra invenção roda sobre o documento inteiro,
   não só sobre a lista de tecnologias, porque uma ferramenta inventada dentro de um item é a que um
   empregador de fato lê. Zero é um resultado; qualquer outra coisa vira um alerta que nomeia os termos
-- **O arquivo anexado ao formulário continua sendo o PDF do seu perfil**, o mesmo em toda candidatura.
-  A versão por vaga é um documento para você ler, conferir e reaproveitar — copiar num campo de texto,
-  ou anexar à mão onde fizer sentido. Ela **não** é renderizada no PDF. A tela de revisão diz isso em
-  duas linhas separadas, porque juntá-las leria como "o anexo carrega estas mudanças"
+- **É essa versão que vai anexada.** O documento adaptado é desenhado em PDF e é ele que o formulário
+  envia — o empregador recebe o currículo que você revisou, não um arquivo genérico. Redesenhado a cada
+  envio, então uma edição sua de um minuto atrás está no arquivo um minuto depois
+- Se não houver nada honesto a desenhar — candidatura sem versão própria, ou desenho que falhou — o
+  anexo volta a ser o PDF do seu perfil. **Uma candidatura nunca é bloqueada por um gerador de PDF**
+- `GET /api/resumes/applications/{id}/pdf` entrega os mesmos bytes, o que é o que torna o canal externo
+  utilizável: lá nada é enviado por você, então o documento precisa conseguir sair do app
 
 **Revisão e controle**
 
 - Toda candidatura espera em `awaiting_review` com a carta e cada resposta editáveis antes de você aprovar
-- A tela abre com **o que será enviado** — vaga e nota, qual arquivo vai anexado, quantas alterações a
-  versão desta vaga tem, tamanho da carta, quantas respostas de triagem e quantas ainda precisam da sua
-  confirmação. Aprovar é uma decisão sobre o conjunto, então o conjunto vem antes dos editores
+- A tela abre com **o que será enviado** — vaga e nota, qual arquivo vai anexado e com quantas
+  alterações, tamanho da carta, quantas respostas de triagem e quantas ainda precisam da sua
+  confirmação, mais um link que abre o PDF exato que o formulário vai enviar. Aprovar é uma decisão
+  sobre o conjunto, então o conjunto vem antes dos editores
 - Se o guarda contra invenção achou qualquer termo que o seu currículo principal não sustenta, ele aparece
   ali em vermelho, nomeado, com "isto sai em seu nome" — não dá para passar batido
 - O botão de parar a automação fica na mesma linha de ações: é onde você está quando decide que ela não
@@ -502,8 +507,8 @@ você deliberadamente desligá-lo. Faça pelo menos uma passagem completa desse 
    manual obrigatória, então uma instalação nova não consegue enviar nada antes de você configurá-la.
 
 2. **Envie o seu currículo e confira o que encontramos.** Uma conta nova cai direto nessa tela. Envie o
-   PDF que você realmente quer que os empregadores recebam — ele é anexado aos formulários de Candidatura
-   Simplificada, e o texto dele é o que a IA usa para pontuar as vagas. O app lê o arquivo e mostra o que
+   PDF que você já usa — o texto dele é o que alimenta a pontuação das vagas e a versão adaptada de cada
+   candidatura, e é ele que volta a ser anexado quando não houver uma versão própria. O app lê o arquivo e mostra o que
    achou; você corrige o que estiver errado e salva. Nada é gravado antes disso, e nada que não esteja no
    arquivo entra no seu perfil. O que ele não conseguir ler aparece como aviso, para você completar à mão
    em **Perfil**. Um perfil raso produz notas fracas e cartas vagas.
@@ -677,7 +682,7 @@ a abertura dele antes de expor qualquer porta.
 As fronteiras de camadas, o modelo de dados completo e por que cada tabela existe, o fluxo de eventos do engine até a aba do navegador,
 e os trade-offs de projeto: **[docs/architecture.md](docs/architecture.md)**.
 
-**Stack** — Python 3.11+, FastAPI, SQLAlchemy 2 async, Alembic, Playwright, um provedor de IA plugável
+**Stack** — Python 3.11+, FastAPI, SQLAlchemy 2 async, Alembic, Playwright, ReportLab, um provedor de IA plugável
 (qualquer servidor compatível com OpenAI, ou o SDK da Anthropic), JWT + bcrypt + Fernet; React, Vite,
 Tailwind CSS.
 
