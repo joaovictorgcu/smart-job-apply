@@ -101,6 +101,50 @@ manual obrigatória — para que não consiga enviar nada antes de você configu
 
 ---
 
+## Conta
+
+### `GET /api/users/me`
+
+→ `UserRead`. Mesmo payload de `/api/auth/me`, para clientes que agrupam dados de usuário aqui.
+
+### `GET /api/users/me/audit`
+
+→ `AuditEventRead[]`, do mais recente. As mudanças de salvaguarda registradas para esta conta, com os campos
+que se moveram e quais deles foram afrouxados. `limit` ≤ 200.
+
+### `GET /api/users/me/linkedin`
+
+→ `LinkedInAccountRead` — só metadados. Os cookies criptografados nunca saem do servidor, e senha nenhuma é
+armazenada.
+
+### `DELETE /api/users/me`
+
+Apaga a conta e tudo que pende dela. **Irreversível**, sem carência e sem cópia do lado do servidor.
+
+```json
+{ "password": "..." }
+```
+
+A senha é exigida mesmo com um bearer token válido: um token é credencial ao portador — vaza de uma máquina
+compartilhada, de um `curl` copiado, de um print — e esta é a única requisição que não dá para desfazer.
+`401` quando ela está errada, com a mesma mensagem de um login recusado.
+
+Vão embora, em três etapas e nesta ordem: a automação é parada primeiro (uma execução viva segura linhas que
+estão prestes a sumir, e um navegador aberto segura o diretório de perfil); as linhas caem em cascata dentro da
+transação — perfil, currículo, preferências, buscas, vagas, candidaturas, a sessão do LinkedIn e a própria
+trilha de auditoria; e os **arquivos** caem depois do commit, numa background task — o PDF enviado, cada PDF
+gerado por candidatura e o diretório de perfil do navegador. Nessa ordem porque uma falha no meio deve deixar
+uma conta intacta, não uma conta sem currículo e sem sessão.
+
+Nada é retido. O e-mail volta a ficar livre para um novo cadastro, e o token para de funcionar na requisição
+seguinte — não há blacklist, simplesmente não existe mais a linha que ele aponta.
+
+Limitado à mesma taxa das rotas de auth: verifica senha, então é superfície de força bruta como o login.
+
+→ `204`, sem corpo.
+
+---
+
 ## Perfil
 
 O seu currículo e o banco de respostas de que a IA se vale. Tudo aqui é opcional, mas um perfil raso produz notas

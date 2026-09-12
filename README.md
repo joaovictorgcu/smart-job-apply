@@ -226,6 +226,10 @@ O modo de teste (dry run) está ligado por padrão: o fluxo inteiro roda, até o
   para. Sem repetição, sem contorno, sem opção para pular — você resolve você mesmo
 - **Sessão do LinkedIn criptografada em repouso** com Fernet, com chave derivada via HKDF-SHA256. Nenhuma senha é armazenada, e
   nenhum cookie jamais é retornado pela API
+- **Apagar a conta apaga mesmo.** Em Configurações, confirmando com a sua senha: o perfil, o currículo
+  enviado, cada PDF gerado, as vagas, as candidaturas, a sessão do LinkedIn com o diretório de perfil do
+  navegador, a chave de IA e a própria trilha de auditoria. Sem carência, sem cópia do nosso lado, e o
+  e-mail volta a ficar livre. Os arquivos em disco são parte disso — nenhuma cascata de banco alcança eles
 - Log estruturado em JSON com contexto por execução, para que as linhas de log de uma execução sejam pesquisáveis com grep
 - Contabilidade de tokens e custo em cada chamada de IA
 - Um **modelo de dados multiusuário** — o isolamento que mantém os cookies e o feed de eventos de uma pessoa longe dos de
