@@ -191,14 +191,17 @@ O modo de teste (dry run) está ligado por padrão: o fluxo inteiro roda, até o
 - O último número é **medido**, não prometido: o guarda contra invenção roda sobre o documento inteiro,
   não só sobre a lista de tecnologias, porque uma ferramenta inventada dentro de um item é a que um
   empregador de fato lê. Zero é um resultado; qualquer outra coisa vira um alerta que nomeia os termos
+- **O arquivo anexado ao formulário continua sendo o PDF do seu perfil**, o mesmo em toda candidatura.
+  A versão por vaga é um documento para você ler, conferir e reaproveitar — copiar num campo de texto,
+  ou anexar à mão onde fizer sentido. Ela **não** é renderizada no PDF. A tela de revisão diz isso em
+  duas linhas separadas, porque juntá-las leria como "o anexo carrega estas mudanças"
 
 **Revisão e controle**
 
 - Toda candidatura espera em `awaiting_review` com a carta e cada resposta editáveis antes de você aprovar
-- A tela abre com **o que será enviado** — vaga e nota, arquivo anexado e quantas alterações ele tem em
-  relação ao seu currículo principal, tamanho da carta, quantas respostas de triagem e quantas ainda
-  precisam da sua confirmação. Aprovar é uma decisão sobre o conjunto, então o conjunto vem antes dos
-  editores
+- A tela abre com **o que será enviado** — vaga e nota, qual arquivo vai anexado, quantas alterações a
+  versão desta vaga tem, tamanho da carta, quantas respostas de triagem e quantas ainda precisam da sua
+  confirmação. Aprovar é uma decisão sobre o conjunto, então o conjunto vem antes dos editores
 - Se o guarda contra invenção achou qualquer termo que o seu currículo principal não sustenta, ele aparece
   ali em vermelho, nomeado, com "isto sai em seu nome" — não dá para passar batido
 - O botão de parar a automação fica na mesma linha de ações: é onde você está quando decide que ela não
@@ -242,10 +245,13 @@ aceita por fé.
 
 | | |
 |---|---|
-| ![Painel — contadores de enviadas-hoje e aguardando-revisão, nota média, feed de atividade ao vivo](docs/images/dashboard.png) | ![Lista de vagas — notas, motivos, requisitos faltantes](docs/images/jobs.png) |
-| **Painel** — contadores, nota média, o que está esperando por você | **Vagas** — pontuadas, com motivos e lacunas |
+| ![Painel — a fila de trabalho: as candidaturas que esperam revisão listadas com o botão que as abre, as vagas prontas para preparar, e os números do funil numa linha embaixo](docs/images/dashboard.png) | ![Lista de vagas — o que a vaga pede e você tem, o que ela pede e você não tem](docs/images/jobs.png) |
+| **Painel** — o que precisa de você agora, e a ação ao lado de cada coisa | **Vagas** — as duas listas que dá para conferir, não só a nota |
 | ![Revisão de candidatura — o portão de aprovação: carta editável, respostas de triagem com uma de baixa confiança sinalizada e a linha do tempo de eventos completa](docs/images/review.png) | ![Configurações — salvaguardas e preferências de IA](docs/images/settings.png) |
-| **Revisão** — o portão de aprovação, uma resposta sinalizada e a linha do tempo de auditoria | **Configurações** — salvaguardas, chave do modo de teste |
+| **Revisão** — o que será enviado primeiro, depois o portão de aprovação e a linha do tempo | **Configurações** — salvaguardas, chave do modo de teste |
+
+> As capturas acima são anteriores à reformulação do painel e da tela de revisão; as legendas descrevem o
+> que as telas mostram hoje. Refazê-las está na lista.
 
 Para capturar as suas próprias: rode o app, popule-o com uma busca em modo de teste para que as telas tenham conteúdo real, então
 tire uma captura da viewport em 1440×900 (`Ctrl/Cmd+Shift+P` → "Capture screenshot" no Chrome DevTools) e
