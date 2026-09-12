@@ -194,6 +194,47 @@ def spelling_in(haystack: str, term: str) -> str:
     return match.group(0) if match is not None else term
 
 
+def flag_unsupported_skills(source_text: str, tailored_text: str) -> list[str]:
+    """Technologies present in the tailored resume but absent from the source.
+
+    A programmatic safety net for the "never invent" rule: it does not trust the
+    model to have obeyed. It targets the most checkable class of invention —
+    fabricated tools and technologies — by comparing tech-shaped tokens in the
+    tailored text against everything the candidate actually provided.
+
+    It cannot catch an invented *achievement* phrased in plain words, and it errs
+    toward over-flagging (a company name in CamelCase may surface). That is by
+    design: every item is a "verify this yourself" prompt to the human, never an
+    automatic block. Missing a real invention is the failure to avoid.
+
+    Lived in `app.ai.client` while the model's output was the only thing worth
+    checking. It is domain knowledge — the deterministic derivation and the
+    original-versus-this-vacancy comparison need the same guarantee, and a
+    second copy of this would drift within a release. `app.ai.client` re-exports
+    the name for its own callers.
+    """
+    source = fold(source_text or "")
+    source_words = set(ALPHA_WORD.findall(source))
+
+    def supported(token: str) -> bool:
+        folded = fold(token)
+        # Whole-word membership, or a substring for multi-part tokens the word
+        # split would break apart (e.g. "node.js" folding to "node js").
+        return folded in source_words or folded in source
+
+    flagged: dict[str, str] = {}  # folded -> original casing (first seen)
+    for match in CAMELCASE.findall(tailored_text) + ALNUM_TOKEN.findall(tailored_text):
+        if not supported(match):
+            flagged.setdefault(fold(match), match)
+
+    for token in ORIG_WORD.findall(tailored_text):
+        folded = fold(token)
+        if folded in KNOWN_TECHNOLOGIES and not supported(token):
+            flagged.setdefault(folded, token)
+
+    return sorted(flagged.values(), key=str.lower)
+
+
 def job_technologies(text: str, extra_vocabulary: Iterable[str] = ()) -> list[str]:
     """The technologies a posting names, ordered by where it first names them.
 
@@ -215,6 +256,7 @@ __all__ = [
     "ORIG_WORD",
     "covers",
     "equivalents",
+    "flag_unsupported_skills",
     "job_technologies",
     "owned_spelling",
     "mentioned_terms",

@@ -184,6 +184,46 @@ class FitFactor(BaseModel):
     terms: list[str] = Field(default_factory=list)
 
 
+class ExperienceMoveRead(BaseModel):
+    """One position that changed place between the master and this copy.
+
+    1-based, because it is read as "3ª → 1ª" and nobody counts their own CV
+    from zero.
+    """
+
+    experience_id: int | None = None
+    company: str = ""
+    role: str = ""
+    from_position: int
+    to_position: int
+    promoted_bullets: int = 0
+    matched_terms: list[str] = Field(default_factory=list)
+
+
+class ResumeComparisonRead(BaseModel):
+    """How far this copy is from the master — deliberately, how little.
+
+    The four counters are the budget a reviewer checks at a glance before
+    approving. `invented` is measured by running the invention guard over the
+    copy against the master's own words, so an empty list is a result rather
+    than a promise; anything in it is the signal to stop and read.
+
+    `is_comparable` is false when the master changed after this copy was
+    derived. The diff would then blame the adaptation for the user's own
+    profile edits, which is worse than showing nothing and saying why.
+    """
+
+    moves: list[ExperienceMoveRead] = Field(default_factory=list)
+    highlighted_technologies: list[str] = Field(default_factory=list)
+    promoted_bullets: int = 0
+    invented: list[str] = Field(default_factory=list)
+    experiences_reordered: int = 0
+    sections_adjusted: int = 0
+    changes_total: int = 0
+    is_clean: bool = True
+    is_comparable: bool = True
+
+
 class ApplicationResumeRead(BaseModel):
     """The resume one application is using, with the report of how it got there."""
 
@@ -208,6 +248,11 @@ class ApplicationResumeRead(BaseModel):
     fit_score: int = 0
     fit_factors: list[FitFactor] = Field(default_factory=list)
     uncovered_requirements: list[str] = Field(default_factory=list)
+
+    # The original-versus-this-vacancy diff, and the change budget behind it.
+    # Only on the single-application read: the version list is metadata, and
+    # computing a diff per row there would buy nothing.
+    comparison: ResumeComparisonRead | None = None
 
     model: str | None = None
     was_edited: bool = False

@@ -775,3 +775,97 @@ class TestVersionList:
         rows = (await client.get(VERSIONS, headers=auth_headers)).json()
 
         assert rows[0]["application_status"] == "submitted"
+
+
+class TestTheComparisonAgainstTheMaster:
+    """Original versus this vacancy, and how few edits separate them.
+
+    The feature's claim is that an adapted resume still reads as the same
+    document. The change budget is what lets a reviewer check that in a glance
+    instead of taking it on trust.
+    """
+
+    async def test_the_copy_reports_its_own_change_budget(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        user = await seeded_user(session, "budget@example.com")
+        job = await create_posting_job(session, user, "dotnet")
+        application = await create_application(session, user, job)
+        await session.commit()
+        headers = {"Authorization": f"Bearer {create_access_token(user.id)}"}
+
+        await client.post(APPLICATION.format(application_id=application.id), headers=headers)
+        body = (
+            await client.get(APPLICATION.format(application_id=application.id), headers=headers)
+        ).json()
+
+        comparison = body["comparison"]
+        assert comparison is not None
+        assert comparison["is_comparable"] is True
+        assert comparison["changes_total"] == (
+            comparison["experiences_reordered"]
+            + len(comparison["highlighted_technologies"])
+            + comparison["sections_adjusted"]
+        )
+
+    async def test_a_moved_experience_says_where_it_came_from(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        user = await seeded_user(session, "moved@example.com")
+        job = await create_posting_job(session, user, "dotnet")
+        application = await create_application(session, user, job)
+        await session.commit()
+        headers = {"Authorization": f"Bearer {create_access_token(user.id)}"}
+
+        await client.post(APPLICATION.format(application_id=application.id), headers=headers)
+        body = (
+            await client.get(APPLICATION.format(application_id=application.id), headers=headers)
+        ).json()
+
+        moves = body["comparison"]["moves"]
+        assert moves, "the seeded history has several positions to order"
+        for move in moves:
+            assert move["from_position"] >= 1 and move["to_position"] >= 1
+            assert move["company"]
+
+    async def test_nothing_is_invented_and_it_is_measured(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        user = await seeded_user(session, "clean@example.com")
+        job = await create_posting_job(session, user, "fullstack")
+        application = await create_application(session, user, job)
+        await session.commit()
+        headers = {"Authorization": f"Bearer {create_access_token(user.id)}"}
+
+        await client.post(APPLICATION.format(application_id=application.id), headers=headers)
+        body = (
+            await client.get(APPLICATION.format(application_id=application.id), headers=headers)
+        ).json()
+
+        assert body["comparison"]["invented"] == []
+        assert body["comparison"]["is_clean"] is True
+
+    async def test_a_stale_copy_declines_to_compare_rather_than_blaming_the_adaptation(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        user = await seeded_user(session, "stale@example.com")
+        job = await create_posting_job(session, user, "dotnet")
+        application = await create_application(session, user, job)
+        await session.commit()
+        headers = {"Authorization": f"Bearer {create_access_token(user.id)}"}
+
+        await client.post(APPLICATION.format(application_id=application.id), headers=headers)
+        # Editing the master is what makes the copy stale.
+        await client.post(
+            EXPERIENCES,
+            headers=headers,
+            json={"company": "Nova Empresa", "role": "Staff Engineer"},
+        )
+
+        body = (
+            await client.get(APPLICATION.format(application_id=application.id), headers=headers)
+        ).json()
+
+        assert body["is_stale"] is True
+        assert body["comparison"]["is_comparable"] is False
+        assert body["comparison"]["moves"] == []

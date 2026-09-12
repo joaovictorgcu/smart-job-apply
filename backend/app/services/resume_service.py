@@ -29,6 +29,7 @@ from sqlalchemy.orm import selectinload
 from app.api.errors import NotFoundError, PreconditionFailedError, ValidationError
 from app.database.base import utcnow
 from app.domain import resume as domain
+from app.domain import resume_diff
 from app.models import (
     Application,
     ApplicationEventType,
@@ -44,11 +45,13 @@ from app.schemas.resume import (
     ApplicationResumeRead,
     ApplicationResumeUpdate,
     ExperienceCreate,
+    ExperienceMoveRead,
     ExperienceRead,
     ExperienceUpdate,
     FitFactor,
     MasterResumeRead,
     ResumeChange,
+    ResumeComparisonRead,
     ResumeVersionSummary,
 )
 from app.services import preference_service, user_service
@@ -599,8 +602,76 @@ def _read_experience(raw: dict[str, Any]) -> AdaptedExperience:
     )
 
 
+def _snapshot_of(row: ApplicationResume) -> resume_diff.Snapshot:
+    """The stored copy as the comparison sees it — plain data, exactly as saved."""
+    return resume_diff.Snapshot(
+        summary=row.summary or "",
+        skills=tuple(row.skills or []),
+        emphasized_technologies=tuple(row.emphasized_technologies or []),
+        experiences=tuple(
+            resume_diff.SnapshotExperience(
+                experience_id=entry.get("experience_id"),
+                company=str(entry.get("company") or ""),
+                role=str(entry.get("role") or ""),
+                summary=str(entry.get("summary") or ""),
+                responsibilities=tuple(
+                    str(line) for line in (entry.get("responsibilities") or [])
+                ),
+                technologies=tuple(str(term) for term in (entry.get("technologies") or [])),
+                results=tuple(str(line) for line in (entry.get("results") or [])),
+                matched_terms=tuple(str(term) for term in (entry.get("matched_terms") or [])),
+                promoted=int(entry.get("promoted") or 0),
+            )
+            for entry in (row.experiences or [])
+        ),
+    )
+
+
+def build_comparison(
+    row: ApplicationResume, master: domain.MasterResume, *, is_stale: bool
+) -> ResumeComparisonRead:
+    """Diff this copy against the master it came from, and count the edits.
+
+    Skipped when the copy is stale: the master has moved since, so the diff
+    would attribute the user's own profile edits to the adaptation.
+    """
+    result = resume_diff.compare(
+        master_experience_ids=[entry.experience_id for entry in master.experiences],
+        master_skills=list(master.skills),
+        master_text=master.searchable(),
+        snapshot=_snapshot_of(row),
+        is_comparable=not is_stale,
+    )
+    return ResumeComparisonRead(
+        moves=[
+            ExperienceMoveRead(
+                experience_id=move.experience_id,
+                company=move.company,
+                role=move.role,
+                from_position=move.from_position,
+                to_position=move.to_position,
+                promoted_bullets=move.promoted_bullets,
+                matched_terms=list(move.matched_terms),
+            )
+            for move in result.moves
+        ],
+        highlighted_technologies=list(result.highlighted_technologies),
+        promoted_bullets=result.promoted_bullets,
+        invented=list(result.invented),
+        experiences_reordered=result.experiences_reordered,
+        sections_adjusted=result.sections_adjusted,
+        changes_total=result.changes_total,
+        is_clean=result.is_clean,
+        is_comparable=result.is_comparable,
+    )
+
+
 def to_read(
-    row: ApplicationResume, *, job: Job | None, current_fingerprint: str | None
+    row: ApplicationResume,
+    *,
+    job: Job | None,
+    current_fingerprint: str | None,
+    comparison: ResumeComparisonRead | None = None,
 ) -> ApplicationResumeRead:
     """Build the response, computing staleness against the master resume now."""
     return ApplicationResumeRead(
@@ -639,6 +710,7 @@ def to_read(
             for factor in (row.fit_factors or [])
         ],
         uncovered_requirements=list(row.uncovered_requirements or []),
+        comparison=comparison,
         model=row.model,
         was_edited=row.was_edited,
         is_stale=_is_stale(row, current_fingerprint),
@@ -657,8 +729,11 @@ async def read_for_application(
         raise NotFoundError("This application has no adapted resume yet.")
     application = await _load_application(session, user.id, application_id)
     master = await build_master(session, user)
+    current = domain.fingerprint(master)
+    stale = _is_stale(row, current)
     return to_read(
         row,
         job=application.job if application else None,
-        current_fingerprint=domain.fingerprint(master),
+        current_fingerprint=current,
+        comparison=build_comparison(row, master, is_stale=stale),
     )

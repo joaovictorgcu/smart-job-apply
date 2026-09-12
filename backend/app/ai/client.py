@@ -62,11 +62,7 @@ from app.config import get_settings
 # have always reached it through this module and still do.
 from app.domain.language import detect_language, fold, squash
 from app.domain.technologies import (
-    ALNUM_TOKEN,
-    ALPHA_WORD,
-    CAMELCASE,
-    KNOWN_TECHNOLOGIES,
-    ORIG_WORD,
+    flag_unsupported_skills as _flag_unsupported_skills,
 )
 from app.models.enums import AnswerConfidence
 from app.observability import get_logger
@@ -112,52 +108,24 @@ _FREE_MODELS = frozenset({"stub-offline"})
 _NUMERIC_ANSWER = re.compile(r"^-?\d+([.,]\d+)?$")
 
 
+_AI_NOT_CONFIGURED = (
+    "AI features are not configured. Add your own free provider key under "
+    "Settings, or set AI_PROVIDER for the whole deployment (ollama runs locally "
+    "and needs no key)."
+)
+
+
 class AINotConfiguredError(RuntimeError):
     """The selected AI provider cannot run, so AI features are unavailable."""
 
-    def __init__(
-        self,
-        message: str = (
-            "AI features are not configured. Set AI_PROVIDER to a free provider "
-            "(ollama runs locally and needs no key), or set ANTHROPIC_API_KEY."
-        ),
-    ) -> None:
+    def __init__(self, message: str = _AI_NOT_CONFIGURED) -> None:
         super().__init__(message)
 
 
-def flag_unsupported_skills(source_text: str, tailored_text: str) -> list[str]:
-    """Technologies present in the tailored resume but absent from the source.
-
-    A programmatic safety net for the "never invent" rule: it does not trust the
-    model to have obeyed. It targets the most checkable class of invention —
-    fabricated tools and technologies — by comparing tech-shaped tokens in the
-    tailored text against everything the candidate actually provided.
-
-    It cannot catch an invented *achievement* phrased in plain words, and it errs
-    toward over-flagging (a company name in CamelCase may surface). That is by
-    design: every item is a "verify this yourself" prompt to the human, never an
-    automatic block. Missing a real invention is the failure to avoid.
-    """
-    source = fold(source_text or "")
-    source_words = set(ALPHA_WORD.findall(source))
-
-    def supported(token: str) -> bool:
-        folded = fold(token)
-        # Whole-word membership, or a substring for multi-part tokens the word
-        # split would break apart (e.g. "node.js" folding to "node js").
-        return folded in source_words or folded in source
-
-    flagged: dict[str, str] = {}  # folded -> original casing (first seen)
-    for match in CAMELCASE.findall(tailored_text) + ALNUM_TOKEN.findall(tailored_text):
-        if not supported(match):
-            flagged.setdefault(fold(match), match)
-
-    for token in ORIG_WORD.findall(tailored_text):
-        folded = fold(token)
-        if folded in KNOWN_TECHNOLOGIES and not supported(token):
-            flagged.setdefault(folded, token)
-
-    return sorted(flagged.values(), key=str.lower)
+# The invention guard lives in `app.domain.technologies` — the deterministic
+# derivation and the resume comparison need the same guarantee, and two copies
+# of it would drift. Re-exported here because this is where callers found it.
+flag_unsupported_skills = _flag_unsupported_skills
 
 
 def _is_retryable(error: Exception) -> bool:
@@ -214,14 +182,20 @@ class AIClient:
         *,
         model: str | None = None,
         provider: ChatProvider | None = None,
+        credentials: Any | None = None,
     ) -> None:
-        self._settings = get_settings()
+        # `credentials` is anything shaped like `Settings` for the provider layer
+        # — in practice an `app.ai.credentials.AICredentials`, which is how one
+        # account's own key reaches the provider without a branch down here.
+        # Typed loosely on purpose: importing that module would be a cycle, and
+        # the provider layer already reads this object by attribute name only.
+        self._settings = credentials if credentials is not None else get_settings()
         self._provider = provider
         self._model_override = model
 
     @property
     def is_configured(self) -> bool:
-        return self._settings.ai_enabled
+        return bool(self._settings.ai_enabled)
 
     @property
     def model(self) -> str:
@@ -236,10 +210,19 @@ class AIClient:
     def provider_name(self) -> str:
         return describe_provider(self._settings)
 
+    @property
+    def credentials_source(self) -> str:
+        """"deployment" or "account" — whose key this client would spend."""
+        return str(getattr(self._settings, "source", "deployment"))
+
     def _require_provider(self) -> ChatProvider:
         if self._provider is None:
             if not self.is_configured:
-                raise AINotConfiguredError
+                # The credentials say why they are unusable when they know; a
+                # bare `Settings` does not, and falls back to the generic text.
+                raise AINotConfiguredError(
+                    str(getattr(self._settings, "reason", "") or _AI_NOT_CONFIGURED)
+                )
             try:
                 self._provider = build_provider(self._settings)
             except ProviderNotConfiguredError as exc:
@@ -716,10 +699,13 @@ def estimate_cost_usd(usage: AIUsage) -> float | None:
 
 
 def get_ai_client(
-    model: str | None = None, *, provider: ChatProvider | None = None
+    model: str | None = None,
+    *,
+    provider: ChatProvider | None = None,
+    credentials: Any | None = None,
 ) -> AIClient:
-    """Build a client, optionally overriding the configured model or provider."""
-    return AIClient(model=model, provider=provider)
+    """Build a client, optionally overriding the model, provider or credentials."""
+    return AIClient(model=model, provider=provider, credentials=credentials)
 
 
 __all__ = [
