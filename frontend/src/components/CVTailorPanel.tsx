@@ -55,7 +55,7 @@ export function CVTailorPanel({ jobId, aiConfigured }: CVTailorPanelProps) {
     <Card>
       <CardHeader
         title="Rascunho em prosa para esta vaga"
-        description="Uma redação livre, útil para copiar num campo de texto. Nenhum dos dois entra no PDF anexado — esse é sempre o do seu perfil. A versão estruturada, com o que mudou item a item, fica na tela da candidatura."
+        description="Uma redação livre, útil para copiar num campo de texto. Não é o que vai anexado — o PDF da candidatura é montado a partir da versão estruturada, na tela da candidatura, onde dá para conferir o que mudou."
         actions={
           <Button
             loading={busy}

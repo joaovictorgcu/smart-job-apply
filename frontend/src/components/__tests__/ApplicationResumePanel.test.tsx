@@ -106,13 +106,13 @@ describe("ApplicationResumePanel document", () => {
     expect(container.textContent).toMatch(/adaptada para desenvolvedor backend \.net sênior/i);
   });
 
-  it("says the attached PDF is not this document", async () => {
-    // The employer receives the profile's PDF. A panel titled after the
-    // vacancy, sitting on the application screen, would otherwise read as the
-    // thing being sent.
+  it("says this document is what gets attached", async () => {
+    // The form attaches this document, drawn as a PDF. Saying so on the panel
+    // that shows it is what closes the gap between what the user reviews and
+    // what the employer receives.
     const { container } = await renderAdapted();
 
-    expect(container.textContent).toMatch(/o pdf anexado continua sendo o do seu perfil/i);
+    expect(container.textContent).toMatch(/é este documento que vai anexado, em pdf/i);
   });
 
   it("shows the adherence figure with the posting context", async () => {

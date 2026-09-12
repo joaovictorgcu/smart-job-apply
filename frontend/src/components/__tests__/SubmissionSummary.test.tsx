@@ -65,24 +65,37 @@ beforeEach(() => {
 });
 
 describe("SubmissionSummary", () => {
-  it("names the vacancy and the file that go out", async () => {
+  it("names the vacancy and the file that goes out", async () => {
     const { container } = render({ resume_filename: "user_1_resume.pdf" });
 
     expect(screen.getByText("O que será enviado")).toBeInTheDocument();
-    expect(screen.getByText("user_1_resume.pdf")).toBeInTheDocument();
     await waitFor(() => expect(container.textContent).toMatch(/3 alterações/i));
   });
 
-  it("does not let the adapted version read as the attached file", async () => {
-    // The employer receives the profile's PDF, the same one every time. The
-    // per-vacancy document is never rendered into it, and a reader who thinks
-    // otherwise is being misled at the exact moment they approve.
+  it("says the adapted version is the file, once there is one", async () => {
+    // Getting this wrong in either direction misleads the reader at the exact
+    // moment they decide what an employer receives.
     const { container } = render({ resume_filename: "user_1_resume.pdf" });
 
-    expect(container.textContent).toMatch(/é o pdf do seu perfil, igual em todas as candidaturas/i);
     await waitFor(() =>
-      expect(container.textContent).toMatch(/ele não entra no pdf anexado/i),
+      expect(container.textContent).toMatch(/a sua versão para esta vaga, em pdf/i),
     );
+    expect(screen.getByRole("link", { name: /ver o pdf que será anexado/i })).toHaveAttribute(
+      "href",
+      "/api/resumes/applications/5/pdf",
+    );
+  });
+
+  it("falls back to the uploaded PDF when there is no copy to draw from", async () => {
+    // A 404 is the normal "no copy yet" state; the hook maps it to null.
+    mocked.fetchApplicationResume.mockResolvedValue(
+      null as unknown as ReturnType<typeof buildApplicationResume>,
+    );
+
+    const { container } = render({ resume_filename: "user_1_resume.pdf" });
+
+    await waitFor(() => expect(container.textContent).toMatch(/user_1_resume/));
+    expect(container.textContent).toMatch(/ainda não tem uma versão própria/i);
   });
 
   it("counts the letter rather than restating it", () => {

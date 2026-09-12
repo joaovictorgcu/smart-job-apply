@@ -525,8 +525,8 @@ export function ApplicationResumePanel({
       title="Sua versão para esta vaga"
       description={
         title
-          ? `Adaptada para ${title}${company ? ` · ${company}` : ''}. O PDF anexado continua sendo o do seu perfil.`
-          : 'Uma versão do seu currículo principal, adaptada a esta vaga. O PDF anexado continua sendo o do seu perfil.'
+          ? `Adaptada para ${title}${company ? ` · ${company}` : ''}. É este documento que vai anexado, em PDF.`
+          : 'Uma versão do seu currículo principal, adaptada a esta vaga. É ela que vai anexada, em PDF.'
       }
       actions={
         <>

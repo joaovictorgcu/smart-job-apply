@@ -1,7 +1,7 @@
 import {
   Briefcase,
+  Download,
   FileText,
-  ListOrdered,
   MailCheck,
   MessageSquare,
   ShieldAlert,
@@ -70,11 +70,11 @@ function Row({
  * record is what the submission rebuilds from. Unsaved edits are a separate,
  * already-enforced gate: approval stays disabled while the draft is dirty.
  *
- * The attached file and the per-vacancy version are two rows on purpose. The
- * employer receives the PDF from the profile — the same one every time — and
- * the adapted document is never rendered into it. Stating them together would
- * read as "the attachment carries these changes", which is the single most
- * expensive thing this screen could get wrong.
+ * The resume row says which of two files this application will send: the
+ * adapted document, drawn as a PDF, or the profile's upload when there is no
+ * copy to draw from. That mirrors the engine's own fallback, and getting it
+ * wrong here would be the single most expensive mistake on the screen — the
+ * reader is deciding what an employer receives.
  */
 export function SubmissionSummary({ application, className }: SubmissionSummaryProps) {
   const { data: resume } = useApplicationResume(application.id);
@@ -85,6 +85,10 @@ export function SubmissionSummary({ application, className }: SubmissionSummaryP
   const flagged = answers.filter((answer) => answer.needs_review).length;
   const comparison = resume?.comparison ?? null;
   const invented = comparison?.invented ?? [];
+  // The form attaches the adapted document when there is one, and falls back to
+  // the profile's upload when there is not — the same rule the engine follows,
+  // so the row says which of the two this application will actually send.
+  const hasAdapted = Boolean(resume) && comparison !== null && comparison.is_comparable;
 
   const isExternal = application.channel === 'external';
 
@@ -113,31 +117,38 @@ export function SubmissionSummary({ application, className }: SubmissionSummaryP
             </div>
           </li>
 
-          {/* Two rows, not one, and the wording is deliberate. The file the
-              employer receives is the PDF from the profile — the same one on
-              every application. The per-vacancy version is a document to read,
-              copy or attach by hand; it is never rendered into that file.
-              Folding them into a single "Currículo" row reads as though the
-              attachment carries the adaptation, which it does not. */}
           <Row
             icon={FileText}
-            label="Arquivo que vai anexado"
-            value={application.resume_filename ?? 'Nenhum arquivo anexado'}
-            tone={application.resume_filename ? 'neutral' : 'warn'}
-            detail="É o PDF do seu perfil, igual em todas as candidaturas."
+            label="Currículo anexado"
+            value={
+              hasAdapted
+                ? 'A sua versão para esta vaga, em PDF'
+                : (application.resume_filename ?? 'Nenhum arquivo anexado')
+            }
+            tone={hasAdapted || application.resume_filename ? 'neutral' : 'warn'}
+            detail={
+              hasAdapted
+                ? `${comparison.changes_total} ${
+                    comparison.changes_total === 1 ? 'alteração' : 'alterações'
+                  } em relação ao seu currículo principal · ${invented.length} ${
+                    invented.length === 1 ? 'informação inventada' : 'informações inventadas'
+                  }`
+                : 'O PDF do seu perfil — esta candidatura ainda não tem uma versão própria.'
+            }
           />
 
-          {comparison && comparison.is_comparable ? (
-            <Row
-              icon={ListOrdered}
-              label="Versão para esta vaga"
-              value={`${comparison.changes_total} ${
-                comparison.changes_total === 1 ? 'alteração' : 'alterações'
-              } · ${invented.length} ${
-                invented.length === 1 ? 'informação inventada' : 'informações inventadas'
-              }`}
-              detail="Um documento para você ler e reaproveitar — ele não entra no PDF anexado."
-            />
+          {hasAdapted ? (
+            <li className="pl-[26px]">
+              <a
+                className="btn btn-sm"
+                href={`/api/resumes/applications/${application.id}/pdf`}
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                <Download aria-hidden className="h-3.5 w-3.5" />
+                Ver o PDF que será anexado
+              </a>
+            </li>
           ) : null}
 
           <Row
