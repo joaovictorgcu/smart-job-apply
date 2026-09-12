@@ -128,6 +128,18 @@ class AuditEventRead(ORMModel):
     created_at: datetime
 
 
+class AccountDeleteRequest(BaseModel):
+    """Confirmation for the one request that cannot be undone.
+
+    The password, not a typed-out phrase: a phrase proves the user read the
+    warning, a password proves it is the account holder typing. The bearer token
+    alone does not — it outlives a shared machine, a copied `curl` and a
+    screenshot.
+    """
+
+    password: str = Field(min_length=1, max_length=72)
+
+
 class LinkedInAccountRead(ORMModel):
     """Metadata only. No cookie or credential ever leaves through the API."""
 

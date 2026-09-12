@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import io
+import shutil
+from collections.abc import Sequence
 from pathlib import Path
 
 from sqlalchemy import select
@@ -336,6 +338,103 @@ def _check_ai_credentials(
 def resume_path(filename: str) -> Path:
     """Absolute path of a stored resume (the name already carries the user id)."""
     return get_settings().resumes_dir / filename
+
+
+# --------------------------------------------------------------------------- #
+# Deleting the account
+# --------------------------------------------------------------------------- #
+
+
+def account_file_paths(user_id: int) -> list[Path]:
+    """Everything this account owns on disk, which no cascade can reach.
+
+    Two places, and both hold personal data: the resumes directory keeps the
+    uploaded CV (`user_7_resume.pdf`) and one rendered PDF per application
+    (`user_7_application_12.pdf`), and the browser profile directory keeps the
+    Chromium profile the LinkedIn session was logged into.
+
+    The trailing underscore in the prefix is what makes the glob safe: `user_1_`
+    cannot match `user_10_resume.pdf`, because the character after `user_1` is
+    `0` there and `_` in the pattern. Without it, deleting account 1 would take
+    accounts 10 through 19 with it.
+    """
+    settings = get_settings()
+    paths = sorted(settings.resumes_dir.glob(f"user_{user_id}_*"))
+    profile_dir = settings.browser_profiles_dir / f"user_{user_id}"
+    if profile_dir.exists():
+        paths.append(profile_dir)
+    return paths
+
+
+async def delete_account(session: AsyncSession, user: User, *, password: str) -> list[Path]:
+    """Erase the account, returning the files the caller must purge afterwards.
+
+    The password is required even though the request already carries a valid
+    token. A token is a bearer credential — it leaks from a shared machine, a
+    copied `curl`, a screenshot — and this is the one request that cannot be
+    undone. Re-typing the password proves the person at the keyboard is the
+    account holder, which is the same bar the login itself sets.
+
+    Rows go through the ORM cascade, which is only real because SQLite now runs
+    with `PRAGMA foreign_keys=ON` (see `app.database.session`); the audit trail
+    goes with them, because an append-only record of a deleted person's activity
+    is the one thing a deletion is supposed to remove.
+
+    **Files are the caller's job, and deliberately so.** They are deleted after
+    the transaction commits, from a response background task — delete them here
+    and a rollback further along would leave an account with no CV and no
+    session, which is worse than an orphaned file. The list is collected now, not
+    then, because after the commit there is no row left to derive it from.
+    """
+    if not verify_password(password, user.hashed_password):
+        # Same message and same status as a failed login: an attacker holding a
+        # stolen token learns nothing about the password from the wording.
+        raise AuthenticationError("Incorrect password.")
+
+    user_id = user.id
+    email = user.email
+    paths = account_file_paths(user_id)
+
+    await session.delete(user)
+    await session.flush()
+
+    # A log line rather than an audit row: the audit table is scoped to a user
+    # that no longer exists, and re-creating the record there would defeat the
+    # deletion. The operator still needs to know an account was erased, and by
+    # whose request.
+    logger.warning(
+        "Account deleted at the owner's request.",
+        extra={
+            "action": "account.delete",
+            "status": "ok",
+            "user_id": user_id,
+            "email": email,
+            "files": len(paths),
+        },
+    )
+    return paths
+
+
+async def purge_account_files(paths: Sequence[Path]) -> None:
+    """Remove what `delete_account` left on disk. Best effort, never raising.
+
+    Runs after the response, when there is no longer a request to fail: a file
+    that will not delete — a browser profile Windows still holds open, most
+    likely — must be reported for an operator to clear, not turned into a 500 on
+    a deletion that already happened.
+    """
+    for path in paths:
+        try:
+            if path.is_dir():
+                await asyncio.to_thread(shutil.rmtree, path, ignore_errors=False)
+            else:
+                await asyncio.to_thread(path.unlink, missing_ok=True)
+        except OSError as exc:
+            logger.error(
+                "A deleted account left a file behind.",
+                exc_info=exc,
+                extra={"action": "account.purge", "status": "error", "path": str(path)},
+            )
 
 
 # The extracted text is fed to the AI on every scoring call, so it is capped: past
