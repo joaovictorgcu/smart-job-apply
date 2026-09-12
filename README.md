@@ -64,7 +64,7 @@ O que está verificado — e o que isso quer dizer:
 | "Por que esta vaga" | Determinística e sem modelo; testes cobrem que grafia equivalente não vira lacuna falsa e que um sinônimo aproximado não esconde lacuna real |
 | Comparação com o currículo principal | O orçamento de mudanças é testado item a item, e a contagem de invenções é o guarda rodando sobre o documento inteiro — zero é medido, não assumido |
 | Currículo anexado ao formulário | Testes cobrem que o arquivo enviado é o da candidatura, que ele é um PDF de verdade, e que uma conta sem versão própria volta ao PDF do perfil em vez de falhar |
-| Suíte | 1.025 backend + 25 navegador + 138 frontend + 9 Playwright, ruff, eslint, tsc, build, 8 guards |
+| Suíte | 1.010 backend + 25 navegador + 139 frontend + 9 Playwright, ruff, eslint, tsc, build, 8 guards |
 
 O que **não** está verificado, e você deve assumir como não funcionando até provar:
 
@@ -657,9 +657,11 @@ backend/
 │   │   ├── browser.py      # Playwright launch and lifecycle
 │   │   ├── selectors.py    # every CSS selector, in one file
 │   │   └── linkedin/       # service.py, search.py, job.py, apply.py
-│   ├── domain/             # the product rules, pure: scoring, resume, resume_intake,
+│   ├── domain/             # the product rules, pure: scoring, preferences, recommendation,
+│   │                       # resume, resume_diff, resume_intake, resume_render,
 │   │                       # technologies, language — no database, no model call
-│   ├── services/           # application, automation, intake, job, resume, search, stats, user
+│   ├── services/           # application, automation, intake, job, preference, resume,
+│   │                       # resume_pdf, search, stats, user
 │   ├── database/           # async engine, session, UTC datetime handling
 │   ├── models/             # SQLAlchemy ORM + lifecycle enums
 │   ├── observability/      # structured logging, audit trail, events
