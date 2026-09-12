@@ -718,6 +718,36 @@ export interface FitFactor {
   terms: string[];
 }
 
+/** One position that changed place between the master and this copy. 1-based. */
+export interface ExperienceMove {
+  experience_id: number | null;
+  company: string;
+  role: string;
+  from_position: number;
+  to_position: number;
+  promoted_bullets: number;
+  matched_terms: string[];
+}
+
+/**
+ * How far this copy is from the master — deliberately, how little.
+ *
+ * `invented` is measured by running the invention guard over the copy against
+ * the master's own words, so an empty list is a result rather than a promise.
+ * `is_comparable` is false when the master moved after this copy was frozen.
+ */
+export interface ResumeComparison {
+  moves: ExperienceMove[];
+  highlighted_technologies: string[];
+  promoted_bullets: number;
+  invented: string[];
+  experiences_reordered: number;
+  sections_adjusted: number;
+  changes_total: number;
+  is_clean: boolean;
+  is_comparable: boolean;
+}
+
 export interface ApplicationResume {
   application_id: number;
   job_id: number;
@@ -738,6 +768,9 @@ export interface ApplicationResume {
   fit_score: number;
   fit_factors: FitFactor[];
   uncovered_requirements: string[];
+
+  /** Only on the single-application read; the version list is metadata. */
+  comparison?: ResumeComparison | null;
 
   model: string | null;
   was_edited: boolean;

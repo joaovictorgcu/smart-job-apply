@@ -13,6 +13,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { EmptyState } from '@/components/EmptyState';
+import { ResumeComparisonPanel } from '@/components/ResumeComparisonPanel';
 import {
   Button,
   Card,
@@ -269,16 +270,26 @@ function ChangeReport({ resume }: { resume: ApplicationResume }) {
 
   if (resume.changes.length === 0) {
     return (
-      <EmptyState
-        compact
-        title="Nada foi reorganizado"
-        description="O anúncio não menciona nenhuma tecnologia que este currículo reconheça, então a ordem do currículo principal foi mantida."
-      />
+      <div className="space-y-4">
+        {/* Still shown with no changes: "nothing moved" is the strongest form
+            of "this is still your resume", and the invention count is worth
+            stating either way. */}
+        <ResumeComparisonPanel comparison={resume.comparison} />
+        <EmptyState
+          compact
+          title="Nada foi reorganizado"
+          description="O anúncio não menciona nenhuma tecnologia que este currículo reconheça, então a ordem do currículo principal foi mantida."
+        />
+      </div>
     );
   }
 
   return (
     <div className="space-y-4">
+      {/* Before the adherence bars: how much changed is what the reviewer has
+          to sign off on, and the score is context for it. */}
+      <ResumeComparisonPanel comparison={resume.comparison} />
+
       {resume.fit_factors.length > 0 ? (
         <div className="rounded-lg border border-line bg-surface-sunken px-3.5 py-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
