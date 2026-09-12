@@ -62,7 +62,7 @@ O que está verificado — e o que isso quer dizer:
 | Preferências de vaga | Determinísticas; testes cobrem que nada é descartado por um motivo que o usuário não escreveu, e que uma vaga excluída não custa chamada de modelo |
 | "Por que esta vaga" | Determinística e sem modelo; testes cobrem que grafia equivalente não vira lacuna falsa e que um sinônimo aproximado não esconde lacuna real |
 | Comparação com o currículo principal | O orçamento de mudanças é testado item a item, e a contagem de invenções é o guarda rodando sobre o documento inteiro — zero é medido, não assumido |
-| Suíte | 898 backend + 25 navegador + 88 frontend + 9 Playwright, ruff, eslint, tsc, build, 8 guards |
+| Suíte | 898 backend + 25 navegador + 94 frontend + 9 Playwright, ruff, eslint, tsc, build, 8 guards |
 
 O que **não** está verificado, e você deve assumir como não funcionando até provar:
 
@@ -194,6 +194,14 @@ O modo de teste (dry run) está ligado por padrão: o fluxo inteiro roda, até o
 **Revisão e controle**
 
 - Toda candidatura espera em `awaiting_review` com a carta e cada resposta editáveis antes de você aprovar
+- A tela abre com **o que será enviado** — vaga e nota, arquivo anexado e quantas alterações ele tem em
+  relação ao seu currículo principal, tamanho da carta, quantas respostas de triagem e quantas ainda
+  precisam da sua confirmação. Aprovar é uma decisão sobre o conjunto, então o conjunto vem antes dos
+  editores
+- Se o guarda contra invenção achou qualquer termo que o seu currículo principal não sustenta, ele aparece
+  ali em vermelho, nomeado, com "isto sai em seu nome" — não dá para passar batido
+- O botão de parar a automação fica na mesma linha de ações: é onde você está quando decide que ela não
+  deve continuar sem você
 - Uma **linha do tempo de auditoria por vaga**: cada passo do formulário, cada pergunta respondida, cada erro, com data e um
   payload JSON. É o que transforma "a candidatura falhou" num evento diagnosticável
 - **Atividade ao vivo via WebSocket** — vagas encontradas, notas conforme chegam, o momento em que uma candidatura está pronta para
@@ -518,10 +526,10 @@ você deliberadamente desligá-lo. Faça pelo menos uma passagem completa desse 
    candidatadas e quanto do seu limite diário resta. Confirme, e a automação abre cada formulário de Candidatura
    Simplificada, preenche, anexa o seu currículo e **para na etapa de revisão**.
 
-10. **Leia o rascunho direito.** A carta de apresentação e cada resposta de triagem, com as de baixa confiança
-    destacadas. Corrija o que estiver errado. **Não pule isto** — a carta sai em seu nome, e as
-    respostas são declarações sobre você. Se diz oito anos de Python e você tem quatro, mude
-    antes de aprovar.
+10. **Leia o rascunho direito.** A tela abre com o resumo do que será enviado; abaixo dele, a carta de
+    apresentação e cada resposta de triagem, com as de baixa confiança destacadas. Corrija o que estiver
+    errado. **Não pule isto** — a carta sai em seu nome, e as respostas são declarações sobre você. Se diz
+    oito anos de Python e você tem quatro, mude antes de aprovar.
 
 11. **Aprove.** Uma candidatura, um clique deliberado. Ela é enviada, a trilha de auditoria registra quem aprovou
     o quê e quando, e a vaga passa para `applied`.
