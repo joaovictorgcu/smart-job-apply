@@ -6,10 +6,11 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.ai import scoring
+from app.ai.credentials import for_settings_row
+from app.ai.providers import describe_provider
 from app.ai.schemas import DraftReview
 from app.api.deps import CurrentUser, SessionDep
 from app.api.errors import NotFoundError, UpstreamError
-from app.config import get_settings
 from app.schemas.tailoring import TailoredResumeRead, TailoredResumeUpdate
 from app.services import application_service, job_service, tailoring_service, user_service
 
@@ -19,6 +20,12 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 class AIStatus(BaseModel):
     configured: bool
     model: str
+    #: Which provider will answer, and on whose key — "account" when this user
+    #: brought one, "deployment" when they inherit the server's.
+    provider: str = ""
+    source: str = "deployment"
+    #: Why `configured` is False, when that is knowable. Empty when it is True.
+    detail: str = ""
 
 
 class CoverLetterResponse(BaseModel):
@@ -32,12 +39,21 @@ class InterviewPrepResponse(BaseModel):
 
 @router.get("/status", response_model=AIStatus)
 async def read_status(user: CurrentUser, session: SessionDep) -> AIStatus:
-    """Whether an API key is configured, and which model this account would use."""
-    settings = get_settings()
+    """Whether AI can run **for this account**, and on which provider.
+
+    Per account rather than per deployment: an account with its own key works on
+    a server that configured none, and an account whose key stopped decrypting
+    does not work on a server where everyone else's does. Reporting the
+    deployment's answer to both would be wrong in opposite directions.
+    """
     user_settings = await user_service.get_or_create_settings(session, user)
+    resolved = for_settings_row(user_settings)
     return AIStatus(
-        configured=settings.ai_enabled,
-        model=user_settings.ai_model or settings.anthropic_model,
+        configured=resolved.ai_enabled,
+        model=describe_provider(resolved).split("/", 1)[-1],
+        provider=resolved.ai_provider,
+        source=resolved.source,
+        detail=resolved.reason,
     )
 
 

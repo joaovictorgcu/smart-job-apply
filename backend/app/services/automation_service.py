@@ -30,6 +30,7 @@ from fastapi import BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.credentials import for_settings_row
 from app.api.errors import (
     ConflictError,
     NotFoundError,
@@ -314,7 +315,9 @@ async def session_status(session: AsyncSession, user: User) -> SessionStatus:
         applications_today=await application_service.count_submitted_today(session, user),
         daily_cap=user_settings.daily_cap,
         dry_run=user_settings.dry_run,
-        ai_configured=get_settings().ai_enabled,
+        # This account's answer, not the deployment's: an account that brought
+        # its own key has AI even where the server configured none.
+        ai_configured=for_settings_row(user_settings).ai_enabled,
     )
 
 
@@ -370,8 +373,11 @@ async def build_preview(session: AsyncSession, user: User, job_ids: list[int]) -
     warnings: list[str] = []
     if user_settings.dry_run:
         warnings.append("Dry-run mode is ON — nothing will be submitted.")
-    if not get_settings().ai_enabled:
-        warnings.append("AI is not configured; scores and answers will not be generated.")
+    ai = for_settings_row(user_settings)
+    if not ai.ai_enabled:
+        warnings.append(
+            ai.reason or "AI is not configured; scores and answers will not be generated."
+        )
 
     state = await _engine_state(user)
     if not state.browser_open:

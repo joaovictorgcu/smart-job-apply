@@ -57,6 +57,10 @@ class UserSettingsRead(ORMModel):
     working_hour_end: int
     require_manual_approval: bool
     dry_run: bool
+    ai_provider: str | None = None
+    # Whether a key is stored — never the key, not even masked. A mask is still
+    # a leak of length and prefix, and nothing in the UI needs either.
+    ai_key_set: bool = False
     ai_model: str | None = None
     cover_letter_tone: str
     content_language: str
@@ -75,6 +79,10 @@ class UserSettingsUpdate(BaseModel):
     working_hour_end: int | None = Field(default=None, ge=1, le=24)
     require_manual_approval: bool | None = None
     dry_run: bool | None = None
+    # Write-only, both of them. `""` is meaningful and distinct from absent:
+    # sending the empty string clears the value, sending nothing leaves it be.
+    ai_provider: str | None = Field(default=None, max_length=30)
+    ai_api_key: str | None = Field(default=None, max_length=400)
     ai_model: str | None = Field(default=None, max_length=100)
     cover_letter_tone: str | None = Field(default=None, max_length=50)
     content_language: str | None = Field(default=None, max_length=20)

@@ -13,8 +13,9 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.credentials import USER_SELECTABLE_PROVIDERS, key_hint
 from app.api.errors import AuthenticationError, ConflictError, ValidationError
-from app.auth.crypto import encrypt_json
+from app.auth.crypto import encrypt_json, encrypt_text
 from app.auth.security import hash_password, verify_password
 from app.automation.contracts import ProfileContext
 from app.config import get_settings
@@ -27,6 +28,10 @@ logger = get_logger(__name__)
 
 MAX_RESUME_BYTES = 5 * 1024 * 1024
 ALLOWED_RESUME_SUFFIXES = (".pdf", ".docx")
+
+# "The client did not send this field" — distinct from "the client sent an empty
+# string", which is how a stored API key is cleared.
+_UNSET = object()
 
 
 async def get_by_email(session: AsyncSession, email: str) -> User | None:
@@ -181,6 +186,10 @@ async def update_settings(
     """
     user_settings = await get_or_create_settings(session, user)
     changes = payload.model_dump(exclude_unset=True)
+    # Pulled out before anything generic touches it: the key is the one field
+    # that must never be `setattr`-ed from a dict, never read back, and never
+    # copied into the audit trail. What it becomes is a marker, below.
+    key_change = changes.pop("ai_api_key", _UNSET)
     # Read the old values before `setattr` overwrites them; the audit record is
     # written only after validation, so a rejected change never enters the trail
     # as if it had happened.
@@ -191,8 +200,16 @@ async def update_settings(
             "Manual approval cannot be disabled: this deployment runs in assisted mode only."
         )
 
+    if "ai_provider" in changes:
+        changes["ai_provider"] = _validated_provider(changes["ai_provider"])
+
     for field, value in changes.items():
         setattr(user_settings, field, value)
+
+    key_marker = _apply_ai_key(user_settings, key_change)
+    provider_changed = (
+        "ai_provider" in changes and changes["ai_provider"] != previous["ai_provider"]
+    )
 
     if user_settings.action_delay_min > user_settings.action_delay_max:
         raise ValidationError("action_delay_min cannot be greater than action_delay_max.")
@@ -201,7 +218,18 @@ async def update_settings(
     if user_settings.working_hour_start >= user_settings.working_hour_end:
         raise ValidationError("working_hour_start must be smaller than working_hour_end.")
 
+    if _check_ai_credentials(
+        user_settings, provider_changed=provider_changed, key_supplied=key_marker == "set"
+    ):
+        key_marker = "cleared"
+
     before = {field: old for field, old in previous.items() if changes[field] != old}
+    after = {field: changes[field] for field in before}
+    if key_marker is not None:
+        # The marker, never the secret: which way the key moved is what an audit
+        # of "who could spend whose quota" actually needs.
+        before["ai_api_key"] = "***"
+        after["ai_api_key"] = key_marker
     if before:
         # A request that re-sends the values already stored changed nothing, and an
         # audit trail full of no-ops is one nobody reads.
@@ -212,7 +240,7 @@ async def update_settings(
             subject_type="user_settings",
             subject_id=user_settings.id,
             before=before,
-            after={field: changes[field] for field in before},
+            after=after,
         )
 
     await session.flush()
@@ -222,10 +250,87 @@ async def update_settings(
             "action": "settings.update",
             "status": "ok",
             "user_id": user.id,
-            "fields": sorted(changes),
+            "fields": sorted([*changes, *(["ai_api_key"] if key_marker else [])]),
         },
     )
     return user_settings
+
+
+def _validated_provider(value: str | None) -> str | None:
+    """The account's provider choice, or None to inherit the deployment's.
+
+    Rejecting an unknown name here rather than at call time is the difference
+    between "that provider cannot be selected per account" on the settings
+    screen and a scoring run that fails an hour later with nobody watching.
+    """
+    provider = (value or "").strip().lower()
+    if not provider:
+        return None
+    if provider not in USER_SELECTABLE_PROVIDERS:
+        raise ValidationError(
+            f"{provider!r} cannot be selected per account. Choose one of: "
+            f"{', '.join(sorted(USER_SELECTABLE_PROVIDERS))}, or leave it empty to use "
+            "the provider this deployment configured."
+        )
+    return provider
+
+
+def _apply_ai_key(user_settings: UserSettings, value: object) -> str | None:
+    """Store, clear or leave the account's API key. Returns the audit marker.
+
+    Encrypted with the same Fernet key as the LinkedIn cookies, for the same
+    reason: a database dump is not supposed to hand out working credentials.
+    """
+    if value is _UNSET:
+        return None
+    key = str(value or "").strip()
+    if not key:
+        if not user_settings.ai_api_key_encrypted:
+            return None
+        user_settings.ai_api_key_encrypted = None
+        return "cleared"
+    user_settings.ai_api_key_encrypted = encrypt_text(key)
+    return "set"
+
+
+def _check_ai_credentials(
+    user_settings: UserSettings, *, provider_changed: bool, key_supplied: bool
+) -> bool:
+    """Settle the provider/key pair. Returns True if the stored key was dropped.
+
+    Three cases, all settled here rather than at the next scoring run — an hour
+    later, with nobody watching:
+
+    * a provider selected with no key stored: rejected, nothing would answer;
+    * a provider swapped while the previous key is still there: rejected. That
+      key belongs to the old service, so sending it to the new one is a 401 at
+      best. The new key has to arrive in the same request as the new provider;
+    * the provider cleared back to the deployment's: the stored key is dropped
+      rather than kept. It is a secret nothing will use again, and a secret at
+      rest with no reader is pure liability.
+    """
+    provider = (user_settings.ai_provider or "").strip().lower()
+
+    if not provider:
+        if user_settings.ai_api_key_encrypted:
+            user_settings.ai_api_key_encrypted = None
+            return True
+        return False
+
+    if not user_settings.ai_api_key_encrypted:
+        hint = key_hint(provider)
+        raise ValidationError(
+            f"Selecting {provider} needs an API key for it in the same request."
+            + (f" {hint}." if hint else "")
+        )
+
+    if provider_changed and not key_supplied:
+        hint = key_hint(provider)
+        raise ValidationError(
+            f"Switching to {provider} needs a key for {provider}: the one stored "
+            "belongs to the provider you are leaving." + (f" {hint}." if hint else "")
+        )
+    return False
 
 
 def resume_path(filename: str) -> Path:

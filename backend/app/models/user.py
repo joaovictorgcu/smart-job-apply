@@ -122,6 +122,15 @@ class UserSettings(Base, TimestampMixin):
     dry_run: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # --- AI ---
+    # The account's own provider, or NULL to inherit the deployment's. Only the
+    # keyed presets are accepted here (see `app.ai.credentials`): a local or
+    # custom-endpoint provider is a deployment decision, because on a hosted
+    # install "localhost" is the server and an arbitrary base URL is an SSRF.
+    ai_provider: Mapped[str | None] = mapped_column(String(30), default=None)
+    # Fernet, same as the LinkedIn cookies. Never returned by the API, never
+    # written to the audit trail, never logged — `ai_key_set` is all the rest of
+    # the app is allowed to know.
+    ai_api_key_encrypted: Mapped[str | None] = mapped_column(Text, default=None)
     ai_model: Mapped[str | None] = mapped_column(String(100), default=None)
     cover_letter_tone: Mapped[str] = mapped_column(String(50), default="professional")
     # "job" = follow the job posting's language; or pin "pt-BR" / "en".
@@ -129,6 +138,11 @@ class UserSettings(Base, TimestampMixin):
     generate_cover_letter: Mapped[bool] = mapped_column(Boolean, default=True)
 
     user: Mapped[User] = relationship(back_populates="settings")
+
+    @property
+    def ai_key_set(self) -> bool:
+        """Whether a key is stored, which is the only thing a reader may learn."""
+        return bool(self.ai_api_key_encrypted)
 
 
 class JobPreferences(Base, TimestampMixin):

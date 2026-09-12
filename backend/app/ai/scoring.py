@@ -27,6 +27,7 @@ from app.ai.client import (
     estimate_cost_usd,
     get_ai_client,
 )
+from app.ai.credentials import for_settings_row
 from app.ai.schemas import (
     AIUsage,
     CoverLetter,
@@ -636,8 +637,17 @@ def _answer_from_bank(
 
 
 def get_ai_client_for(settings_row: Any) -> AIClient:
-    """Build a client honoring the user's per-account model override."""
-    return get_ai_client(getattr(settings_row, "ai_model", None) if settings_row else None)
+    """Build the client this account's work runs on.
+
+    The single seam where an account's own provider and key enter the AI layer:
+    every capability call in this module resolves its client here, so bringing a
+    key is one row read rather than an argument threaded through six functions.
+    An account that brought none inherits the deployment's credentials, model
+    override included.
+    """
+    credentials = for_settings_row(settings_row)
+    model = getattr(settings_row, "ai_model", None) if settings_row else None
+    return get_ai_client(model or None, credentials=credentials)
 
 
 __all__ = [

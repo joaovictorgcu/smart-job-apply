@@ -229,6 +229,22 @@ class AIClient:
                 raise AINotConfiguredError(str(exc)) from exc
         return self._provider
 
+    async def probe(self) -> str:
+        """One minimal call, to prove these credentials actually answer.
+
+        Exists so a user who pastes a key finds out on the settings screen, not
+        on the job that needed it. Deliberately tiny and unstructured: it is
+        checking a credential and an endpoint, not a model's ability to follow a
+        schema, and it should cost a rounding error of anyone's free quota.
+        """
+        response = await self._send(
+            system="Reply with the single word OK.",
+            user_prompt="OK",
+            max_tokens=16,
+            effort=None,
+        )
+        return _first_text(response).strip() or str(getattr(response, "model", "")) or "OK"
+
     async def aclose(self) -> None:
         """Release the provider's transport. Safe to call more than once."""
         if self._provider is not None:
