@@ -104,10 +104,58 @@ async def seed(email: str, password: str) -> int | None:
                 user_id: int | None = getattr(user, "id", None)
             except ConflictError:
                 user_id = None
+            await _seed_demo_resume(session, email)
             await _open_demo_guardrails(session, email)
             return user_id
     finally:
         await dispose_engine()
+
+
+async def _seed_demo_resume(session: object, email: str) -> None:
+    """Give the demo account the master resume the product is built around.
+
+    Without one the dashboard is right to show "Comece pelo seu currículo" and
+    nothing else: every screen downstream — scoring, the adapted resume, the
+    screening answers — is derived from it. A demo that opens on an upload
+    prompt demonstrates the empty state, not the product.
+
+    Reuses `app.demo`, the same fixture `scripts/seed_demo.py` and the test
+    suite read, so what a demo shows and what the tests assert cannot drift.
+
+    Only fills an empty profile. Re-running the demo server must not overwrite
+    a resume somebody edited while trying the app out.
+    """
+    from sqlalchemy import select
+
+    from app.demo import demo_experiences, demo_profile_fields
+    from app.models import Experience, User
+    from app.schemas.resume import ExperienceCreate
+    from app.schemas.user import ProfileUpdate
+    from app.services import resume_service, user_service
+
+    found = await session.execute(  # type: ignore[attr-defined]
+        select(User).where(User.email == email.strip().lower())
+    )
+    user = found.scalar_one_or_none()
+    if user is None:
+        return
+
+    profile = await user_service.get_or_create_profile(session, user)  # type: ignore[arg-type]
+    already = (
+        await session.execute(  # type: ignore[attr-defined]
+            select(Experience).where(Experience.user_id == user.id)
+        )
+    ).scalars().first()
+    if already is not None or (profile.resume_text or "").strip():
+        return
+
+    await user_service.update_profile(  # type: ignore[arg-type]
+        session, user, ProfileUpdate(**demo_profile_fields())
+    )
+    for entry in demo_experiences():
+        await resume_service.create_experience(  # type: ignore[arg-type]
+            session, user, ExperienceCreate(**entry)
+        )
 
 
 async def _open_demo_guardrails(session: object, email: str) -> None:
