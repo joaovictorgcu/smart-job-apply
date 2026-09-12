@@ -399,10 +399,14 @@ salvaguarda estão em [configuration.md](configuration.md#per-user-settings-user
   "apply_delay_min": 45.0, "apply_delay_max": 120.0,
   "working_hour_start": 8, "working_hour_end": 20,
   "require_manual_approval": true, "dry_run": true,
+  "ai_provider": null, "ai_key_set": false,
   "ai_model": null, "cover_letter_tone": "profissional",
   "content_language": "job", "generate_cover_letter": true
 }
 ```
+
+`ai_key_set` é tudo o que se pode saber sobre a chave guardada. Ela nunca é devolvida, nem mascarada — um
+prefixo e um comprimento também vazam.
 
 ### `PUT /api/settings`
 
@@ -410,7 +414,43 @@ salvaguarda estão em [configuration.md](configuration.md#per-user-settings-user
 `action_delay_min ≤ action_delay_max`, `apply_delay_min ≤ apply_delay_max` e
 `working_hour_start < working_hour_end`.
 
+`ai_api_key` é só de escrita: enviar guarda (criptografada), enviar `""` apaga, omitir mantém. `ai_provider`
+aceita apenas os nomes de `GET /api/settings/ai/providers`; limpá-lo apaga a chave junto. Escolher um provedor
+sem chave, ou trocar de provedor sem mandar a chave nova na mesma requisição, retorna `422` dizendo qual é o
+problema.
+
 → `UserSettingsRead`.
+
+### `GET /api/settings/ai/providers`
+
+Os provedores que uma conta pode escolher, e onde tirar chave de cada um.
+
+```json
+[{ "name": "groq", "key_url": "Create a free key at https://console.groq.com/keys" }]
+```
+
+Provedores locais (`ollama`, `llamacpp`) e endpoints customizados não aparecem: numa instalação hospedada
+`localhost` é o servidor, e uma URL escolhida pelo usuário é uma requisição que o servidor faria por ele.
+
+### `POST /api/settings/ai/test`
+
+Manda uma chamada mínima com essas credenciais e conta o que aconteceu. **Nada é gravado** — testar e salvar são
+atos separados. Limitado à mesma taxa das rotas de autenticação.
+
+```json
+{ "provider": "groq", "api_key": "gsk-..." }
+```
+
+`api_key` vazia testa a que já está guardada (a UI não consegue relê-la para reenviar).
+
+→ `AICredentialResult`:
+
+```json
+{ "ok": true, "provider": "groq", "model": "llama-3.3-70b-versatile", "detail": "" }
+```
+
+Uma chave recusada é `200` com `ok: false` e `detail` nas palavras do próprio provedor — "invalid api key",
+"model not found" e "quota exceeded" são três correções diferentes.
 
 ---
 
@@ -904,11 +944,18 @@ Status: `pending`, `running`, `paused`, `completed`, `stopped` (botão de parada
 ### `GET /api/ai/status`
 
 ```json
-{ "configured": true, "model": "claude-opus-5" }
+{
+  "configured": true, "model": "llama-3.3-70b-versatile",
+  "provider": "groq", "source": "account", "detail": ""
+}
 ```
 
-`configured: false` significa que `ANTHROPIC_API_KEY` não está definida. A busca e o preenchimento de formulários ainda funcionam; pontuação, cartas de
-apresentação e sugestões de resposta não.
+Responde **por conta**, não por deployment: uma conta com chave própria tem IA num servidor que não configurou
+nenhuma, e uma conta cuja chave parou de descriptografar não tem num servidor onde todo mundo tem. `source` diz
+com a chave de quem — `account` ou `deployment`.
+
+`configured: false` traz o motivo em `detail`. A busca e o preenchimento de formulários continuam funcionando;
+pontuação, cartas de apresentação e sugestões de resposta não.
 
 ### `POST /api/ai/cover-letter/{job_id}`
 

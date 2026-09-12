@@ -57,12 +57,13 @@ O que está verificado — e o que isso quer dizer:
 | Camada Playwright (seletores, navegação de passos, "preenche mas nunca envia") | 25 testes de navegador com Chromium real |
 | Gate de aprovação | Coberto por testes de backend, de navegador e de UI; o guard `ASSISTED_MODE_ONLY` falha o build se afrouxar |
 | Provider de IA | 43 testes, incluindo os três modos de saída estruturada e o comportamento em recusa |
+| Chave de IA por conta | Testes cobrem que a chave nunca volta pela API nem entra na auditoria, que um endpoint escolhido pelo usuário não é aceito, e que uma chave que não descriptografa **não** cai de volta na chave do servidor |
 | Ritmo anti-detecção | Atrasos aleatórios cobertos por teste, com piso quando não é modo de demonstração |
 | Leitura do currículo enviado | Determinística e offline; um teste estrutural exige que **toda** string extraída seja um trecho do arquivo |
 | Preferências de vaga | Determinísticas; testes cobrem que nada é descartado por um motivo que o usuário não escreveu, e que uma vaga excluída não custa chamada de modelo |
 | "Por que esta vaga" | Determinística e sem modelo; testes cobrem que grafia equivalente não vira lacuna falsa e que um sinônimo aproximado não esconde lacuna real |
 | Comparação com o currículo principal | O orçamento de mudanças é testado item a item, e a contagem de invenções é o guarda rodando sobre o documento inteiro — zero é medido, não assumido |
-| Suíte | 898 backend + 25 navegador + 94 frontend + 9 Playwright, ruff, eslint, tsc, build, 8 guards |
+| Suíte | 992 backend + 25 navegador + 138 frontend + 9 Playwright, ruff, eslint, tsc, build, 8 guards |
 
 O que **não** está verificado, e você deve assumir como não funcionando até provar:
 
@@ -307,6 +308,14 @@ qual — inclusive gratuitos:
 
 Deixe `AI_PROVIDER` vazio e o app decide: Anthropic se `ANTHROPIC_API_KEY` estiver definida, senão o provedor
 offline — então um clone novo funciona de ponta a ponta sem você se cadastrar em nada.
+
+**Com mais de uma pessoa usando a mesma instalação, cada conta traz a própria chave.** Todo tier grátis acima é
+limitado *por chave*: uma chave compartilhada por dez contas é um `429` para as dez. Em **Configurações → IA** a
+conta escolhe provedor e cola a chave dela; fica guardada criptografada, nunca é devolvida pela API, e é ela que
+paga as chamadas daquela conta. Quem não escolhe nada herda o provedor do servidor. O que uma conta *não* pode
+escolher é o endereço do provedor (`AI_BASE_URL`) nem um provedor local — numa instalação hospedada, `localhost`
+é o servidor, e uma URL escolhida pelo usuário é uma requisição que o servidor faria por ele. Detalhes em
+[docs/configuration.md](docs/configuration.md#credenciais-de-ia-por-conta).
 
 **O seu currículo e as suas respostas de triagem são dados pessoais.** Por isso a recomendação é `ollama`: um
 modelo local não manda nada para fora. Instale de [ollama.com](https://ollama.com), rode

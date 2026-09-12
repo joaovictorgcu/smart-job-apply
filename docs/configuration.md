@@ -83,6 +83,11 @@ fica em disco. Quem tem esse acesso enxerga as métricas de todas as contas.
 
 Um usuário pode sobrescrever o modelo para a própria conta com `UserSettings.ai_model`; quando isso é nulo, o modelo do provedor se aplica.
 
+**`AI_API_KEY` é a chave de todo mundo.** Todo tier grátis aqui é limitado *por chave*: com vários usuários numa
+mesma instalação, um 429 é um 429 para todos. Por isso cada conta pode guardar a própria — veja
+[Credenciais de IA por conta](#credenciais-de-ia-por-conta). As variáveis acima passam a ser o *padrão* que uma
+conta sem chave própria herda.
+
 **`Settings.ai_enabled` agora depende do provedor resolvido**, não só da chave da Anthropic: `stub`, `ollama` e
 `llamacpp` não precisam de nada, os hospedados precisam de `AI_API_KEY`, e `anthropic` precisa de
 `ANTHROPIC_API_KEY`. Um clone novo sem nenhuma configuração resolve para `stub` e roda de ponta a ponta — o
@@ -200,7 +205,9 @@ abrindo mão.
 
 | Campo | Tipo | Padrão | O que faz |
 |---|---|---|---|
-| `ai_model` | string \| null | `null` | Sobrescreve `ANTHROPIC_MODEL` para este usuário. Nulo usa o valor do ambiente. Máx. 100 caracteres. |
+| `ai_provider` | string \| null | `null` | O provedor desta conta. Nulo herda o do deployment. Só os presets com chave são aceitos aqui: `anthropic`, `groq`, `gemini`, `openrouter`, `cerebras`. |
+| `ai_api_key` | string | — | **Só escrita.** Guardada criptografada com Fernet e nunca devolvida pela API. Enviar `""` apaga; omitir mantém. `ai_key_set` é o que a leitura devolve no lugar. |
+| `ai_model` | string \| null | `null` | Sobrescreve o modelo do provedor para este usuário. Nulo usa o padrão do provedor. Máx. 100 caracteres. |
 | `cover_letter_tone` | string | `profissional` | Dica de tom passada ao prompt da carta de apresentação. Qualquer descritor curto funciona — `professional`, `direct`, `warm`. Máx. 50 caracteres. |
 | `content_language` | string | `job` | `job` escreve a carta e as respostas no idioma detectado do anúncio. Fixe numa tag como `en` ou `pt-BR` para sempre usar aquele idioma. Máx. 20 caracteres. |
 | `generate_cover_letter` | bool | `true` | Se deve gerar uma carta de apresentação durante a preparação. Desligue se preferir escrever a sua, ou para economizar tokens. |
@@ -217,6 +224,48 @@ curl -X PUT http://localhost:8000/api/settings \
   -H "Content-Type: application/json" \
   -d '{"daily_cap": 10, "min_score": 75, "content_language": "en", "dry_run": true}'
 ```
+
+---
+
+## Credenciais de IA por conta
+
+Cada conta pode trazer a própria chave de um tier gratuito. O motivo é quota, não preferência: o limite é por
+chave, então uma chave por conta é uma fila por conta — e o deployment não paga nada.
+
+```bash
+# Guardar (a chave é criptografada em repouso e nunca volta pela API)
+curl -X PUT http://localhost:8000/api/settings \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"ai_provider": "groq", "ai_api_key": "gsk-..."}'
+
+# Testar antes de salvar — uma chamada mínima, nada é gravado
+curl -X POST http://localhost:8000/api/settings/ai/test \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"provider": "groq", "api_key": "gsk-..."}'
+
+# Voltar a usar o provedor do servidor (a chave guardada é apagada junto)
+curl -X PUT http://localhost:8000/api/settings \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"ai_provider": ""}'
+```
+
+O que uma conta **não** pode escolher, e por quê:
+
+- **`AI_BASE_URL`.** Um endpoint escolhido pelo usuário é uma requisição que *o servidor* faz em nome dele —
+  SSRF com passos a mais. As URLs dos provedores selecionáveis são compiladas nos presets.
+- **`ollama` / `llamacpp`.** São `localhost`, e numa instalação hospedada `localhost` é o servidor, não a máquina
+  do usuário. Um deployment que roda modelo local seleciona isso globalmente e as contas herdam.
+- **`openai_compat` / `stub`.** Precisam de endpoint próprio ou não respondem de verdade; ambos são decisão do
+  deployment.
+
+Regras que o servidor aplica, em [`app/ai/credentials.py`](../backend/app/ai/credentials.py):
+
+- Escolher um provedor sem chave é rejeitado na hora, com o link de onde tirar uma.
+- Trocar de provedor exige a chave nova na mesma requisição — a guardada é do serviço que está sendo deixado.
+- Limpar `ai_provider` apaga a chave: um segredo em repouso sem nenhum leitor é só passivo.
+- Uma chave que não descriptografa (`ENCRYPTION_KEY` rotacionada) **não** cai de volta na chave do servidor. A
+  conta fica sem IA, com o motivo dito na tela — o contrário seria gastar a quota alheia em silêncio.
+- A trilha de auditoria registra que a chave mudou (`"set"` / `"cleared"`), nunca o valor.
 
 ---
 
