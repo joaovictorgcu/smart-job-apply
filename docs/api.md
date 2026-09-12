@@ -313,6 +313,76 @@ de trabalho nunca conta como incompatível.
 
 ---
 
+## Currículo por candidatura
+
+Um currículo principal, e uma cópia própria por candidatura. A derivação é **determinística e offline**
+(`app.domain.resume`) — estes endpoints se comportam igual num deploy sem chave de IA.
+
+### `GET /api/resumes/master`
+
+→ `MasterResumeRead` — o texto e as competências do perfil mais as posições estruturadas, com o
+`fingerprint` contra o qual toda cópia decide se está desatualizada.
+
+### `GET /api/resumes/versions`
+
+→ `ResumeVersionSummary[]`, mais recente primeiro. Só metadados: a vaga a que cada cópia foi adaptada, a
+aderência e se foi editada à mão. Ler uma versão é abrir a candidatura dela.
+
+### `POST /api/resumes/applications/{application_id}`
+
+Adapta (ou readapta) o currículo desta candidatura. Substitui **só** a cópia desta candidatura e
+incrementa a `version`. Nenhuma outra cópia e nenhuma parte do currículo principal é tocada — é isso que
+torna "adaptar de novo" seguro de apertar.
+
+`412` quando o currículo principal está vazio: não há nada a reorganizar, e um documento vazio seria uma
+resposta pior do que pedir que você preencha a sua experiência primeiro.
+
+### `GET /api/resumes/applications/{application_id}`
+
+→ `ApplicationResumeRead`, ou `404` quando nenhuma cópia foi derivada ainda — que é um estado normal, não
+uma falha: candidaturas criadas antes desta funcionalidade não têm um snapshot honesto, e a tela de
+revisão oferece a ação.
+
+Além do documento e do relatório de mudanças, traz a **comparação com o currículo principal**:
+
+```json
+{
+  "comparison": {
+    "moves": [
+      { "experience_id": 3, "company": "Initech", "role": "Backend Developer",
+        "from_position": 3, "to_position": 1,
+        "promoted_bullets": 2, "matched_terms": [".NET", "React"] }
+    ],
+    "highlighted_technologies": [".NET", "React"],
+    "promoted_bullets": 2,
+    "invented": [],
+    "experiences_reordered": 2,
+    "sections_adjusted": 1,
+    "changes_total": 5,
+    "is_clean": true,
+    "is_comparable": true
+  }
+}
+```
+
+O que vale ler aqui é **o tamanho** das mudanças, não o fato de haver mudanças: uma cópia que se lê como
+outro documento é uma cópia que o candidato não consegue defender numa entrevista.
+
+- Posições são 1-based — "3ª → 1ª" é como se lê, e ninguém conta o próprio currículo a partir de zero
+- `invented` é **medido**, não prometido: o guarda contra invenção roda sobre o documento inteiro, não só
+  sobre a lista de tecnologias, porque uma ferramenta inventada dentro de um item é a que um empregador
+  de fato lê. Lista vazia é um resultado; qualquer coisa nela é motivo para parar e conferir
+- `is_comparable: false` quando a cópia está desatualizada: o principal mudou depois, e o diff atribuiria
+  as edições do próprio usuário à adaptação
+
+### `PATCH /api/resumes/applications/{application_id}`
+
+Edita esta cópia, e só esta. Cargo, empresa e período **não** estão no corpo aceito: esta tela adapta um
+currículo, não inventa um histórico. `experiences` é posicional e precisa bater com o tamanho
+armazenado — um editor construído contra uma derivação antiga moveria os itens de um emprego para outro.
+
+---
+
 ## Configurações
 
 Salvaguardas e preferências de IA por usuário. Os significados campo a campo, faixas e o risco de afrouxar cada
@@ -894,6 +964,119 @@ Sem auth necessária.
 ```json
 { "status": "ok", "version": "0.1.0" }
 ```
+
+---
+
+## Administração
+
+Toda a área abaixo exige uma conta com `is_admin`. A autorização está no router
+(`get_current_admin`), não em cada endpoint: uma conta comum recebe **403** em qualquer
+caminho `/api/admin/*`, venha o pedido do painel ou de um `curl`. O papel só é concedido
+por `python scripts/create_admin.py` — nenhuma requisição escreve `users.is_admin`.
+
+Nada aqui devolve currículo, carta de apresentação, resposta de triagem, sessão do
+LinkedIn ou hash de senha: os schemas em `backend/app/schemas/admin.py` não têm campo
+para isso. São agregados e contadores.
+
+### Período
+
+Cinco endpoints aceitam o mesmo filtro:
+
+| Parâmetro | Valores |
+| --- | --- |
+| `period` | `today`, `7d`, `30d`, `90d`, `custom` (padrão: `7d`) |
+| `start`, `end` | obrigatórios com `custom`, datas ISO (`YYYY-MM-DD`), `end` inclusivo |
+
+A comparação ("vs. período anterior") é sempre uma janela de **igual duração imediatamente
+anterior**, nunca o mês ou a semana do calendário — em `today`, ontem até a mesma hora.
+`custom` sem as duas datas, invertido ou maior que 366 dias responde **422**.
+
+### `GET /api/admin/overview`
+
+A tela inteira do painel em uma resposta: um pedido em vez de nove, para que todos os
+números venham do mesmo instante. O resultado é memoizado por ~30 s por janela;
+`refresh=true` recalcula (é o que o botão "Atualizar dados" envia).
+
+→ `AdminOverview` (abreviado):
+
+```json
+{
+  "period": { "period": "7d", "start": "...", "end": "...", "previous_start": "...", "days": 7 },
+  "generated_at": "2026-09-12T14:30:00Z",
+  "headline": [
+    { "key": "users", "value": 1248, "unit": "count", "previous": 1093,
+      "delta_pct": 0.142, "trend": "up", "has_data": true }
+  ],
+  "operational": [{ "key": "awaiting_review", "value": 2, "unit": "count" }],
+  "product": [{ "key": "submit_rate", "value": 0.62, "unit": "percent" }],
+  "funnel": [{ "key": "jobs_found", "count": 128, "conversion_from_previous": null }],
+  "growth": [{ "date": "2026-09-12", "users": 1, "jobs": 14, "applications": 3 }],
+  "automation": { "status": "healthy", "next_run_at": null, "scheduling": "on_demand" },
+  "ai": { "status": "healthy", "provider": "anthropic", "cost_usd": null },
+  "health": { "status": "healthy", "services": [{ "service": "database", "status": "online" }] },
+  "alerts": [],
+  "usage": [{ "user_id": 3, "applications": 12 }],
+  "errors": [{ "id": "automation:12", "source": "automation", "summary": "..." }],
+  "activity": [{ "id": "user:9", "kind": "user_registered", "summary": "Novo usuário (a***@x.com)" }]
+}
+```
+
+Três detalhes que são decisões, não lacunas:
+
+- **`delta_pct` muda de significado com `unit`.** Para `count` é variação relativa
+  (`(novo - antigo) / antigo`); para `percent` é a diferença em **pontos percentuais**.
+  Reportar a variação relativa de uma taxa transforma "de 54% para 62%" num elogioso
+  "+14,8%".
+- **`has_data: false`** significa "nada registrado", não zero. Uma instalação nova mostra
+  "sem dados" em vez de uma taxa de sucesso de 0%.
+- **`automation.next_run_at` é sempre `null`.** Nada agenda execuções — cada uma é
+  iniciada por um usuário, que é a garantia do modo assistido. `scheduling` diz isso.
+
+O primeiro acesso de cada administrador no dia grava um `AuditEvent` com ação
+`admin_access`; recarregar a página não grava outro.
+
+### `GET /api/admin/users`
+
+Parâmetros: o filtro de período, mais `search` (e-mail ou nome), `filter`
+(`all` | `active` | `inactive` | `new` | `with_applications` | `without_applications`),
+`limit` (≤ 100) e `offset`.
+
+→ `Page<AdminUserRow>` — contato, status, datas e os contadores vitalícios de vagas,
+candidaturas e envios. O período só afeta o filtro `new`.
+
+### `GET /api/admin/jobs`
+
+→ `JobInsights`: volumes, nota média, parcela com candidatura simplificada e os
+principais cargos, empresas, localidades, origens e tecnologias.
+
+`top_technologies` é o único campo que lê texto em vez de agregar: é extraído das vagas
+com o vocabulário de `app/domain/technologies.py`, limitado às 300 mais recentes da
+janela. `technologies_sampled` informa quantas foram lidas — é amostra, não censo.
+
+### `GET /api/admin/errors`
+
+Falhas recentes das três fontes (execuções da automação, chamadas de IA e o histórico das
+candidaturas), mescladas e ordenadas da mais recente. `limit` ≤ 100.
+
+`summary` é a primeira linha da mensagem, truncada. Stack traces vão para os logs com
+`exc_info` e nunca chegam a uma coluna, então não há nenhum aqui para vazar.
+
+### `GET /api/admin/activity`
+
+Linha do tempo dos eventos relevantes: cadastros, execuções encerradas e marcos das
+candidaturas. E-mails de cadastros aparecem mascarados (`a***@exemplo.com`).
+
+### `GET /api/admin/health`
+
+Status por serviço (`api`, `database`, `ai`, `automation`, `queue`, `frontend`) para o
+operador. Distinto de `GET /api/health`, que continua sendo a sonda pública de liveness —
+esta consulta o banco e reporta o provider de IA, o que um endpoint aberto não deveria
+carregar.
+
+### `GET /api/admin/audit`
+
+Os acessos administrativos registrados, do mais recente. Mesmo formato de
+`GET /api/users/me/audit`.
 
 ---
 

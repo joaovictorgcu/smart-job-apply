@@ -61,7 +61,8 @@ O que está verificado — e o que isso quer dizer:
 | Leitura do currículo enviado | Determinística e offline; um teste estrutural exige que **toda** string extraída seja um trecho do arquivo |
 | Preferências de vaga | Determinísticas; testes cobrem que nada é descartado por um motivo que o usuário não escreveu, e que uma vaga excluída não custa chamada de modelo |
 | "Por que esta vaga" | Determinística e sem modelo; testes cobrem que grafia equivalente não vira lacuna falsa e que um sinônimo aproximado não esconde lacuna real |
-| Suíte | 884 backend + 25 navegador + 80 frontend + 9 Playwright, ruff, eslint, tsc, build, 8 guards |
+| Comparação com o currículo principal | O orçamento de mudanças é testado item a item, e a contagem de invenções é o guarda rodando sobre o documento inteiro — zero é medido, não assumido |
+| Suíte | 898 backend + 25 navegador + 88 frontend + 9 Playwright, ruff, eslint, tsc, build, 8 guards |
 
 O que **não** está verificado, e você deve assumir como não funcionando até provar:
 
@@ -79,9 +80,8 @@ O que **não** está verificado, e você deve assumir como não funcionando até
   é estrutural e testado. O que ela pode fazer é ler menos do que existe, e é por isso que a tela de
   conferência existe e que os avisos são explícitos em vez de uma lista vazia.
 
-Duas lacunas funcionais conhecidas: a comparação item a item contra o currículo principal (ver Roteiro), e
-`GET /api/resumes/applications/{id}` responde 404 como estado vazio, o que o frontend trata certo mas aparece
-como erro no console do navegador.
+Uma lacuna funcional conhecida: `GET /api/resumes/applications/{id}` responde 404 como estado vazio, o que
+o frontend trata certo mas aparece como erro no console do navegador.
 
 ## Por que existe
 
@@ -183,7 +183,13 @@ O modo de teste (dry run) está ligado por padrão: o fluxo inteiro roda, até o
 - **Nada vaza entre candidaturas**: editar o currículo principal muda o que as próximas vão derivar e não toca
   nenhuma que já exista; editar o de uma candidatura não mexe nas outras nem no principal
 - Cargo, empresa e período **não são editáveis** na versão de uma candidatura — uma versão reenfatiza o passado,
-  não o reescreve; e a tela mostra, lado a lado, o que difere do currículo principal
+  não o reescreve
+- **Currículo original vs. currículo para esta vaga**, com o orçamento de mudanças em cima: quantas
+  alterações no total, quantas tecnologias ganharam destaque, quantos trechos foram reordenados e quantas
+  informações foram inventadas. Depois o item a item — "3ª → 1ª, por causa de .NET e React"
+- O último número é **medido**, não prometido: o guarda contra invenção roda sobre o documento inteiro,
+  não só sobre a lista de tecnologias, porque uma ferramenta inventada dentro de um item é a que um
+  empregador de fato lê. Zero é um resultado; qualquer outra coisa vira um alerta que nomeia os termos
 
 **Revisão e controle**
 
@@ -703,9 +709,10 @@ Mais, incluindo problemas por plataforma: [docs/installation.md](docs/installati
 Ordem aproximada, sem datas. Qualquer coisa que reduza a supervisão humana está permanentemente fora de escopo.
 
 - ~~Sugestões de adaptação de currículo por vaga — destacando qual da sua experiência existente colocar em primeiro
-  plano, sem inventar nada~~ — feito em parte: cada candidatura mantém a sua própria versão do currículo principal,
-  e a aba "O que foi adaptado" relata o que a derivação fez. O que **falta** é a comparação item a item contra o
-  currículo principal — posição 3ª→1ª, descrição antes/depois, tecnologias promovidas versus adicionadas à mão
+  plano, sem inventar nada~~ — feito: cada candidatura mantém a sua própria versão do currículo principal, e a aba
+  "O que foi adaptado" abre com a comparação item a item — quantas alterações no total, quais tecnologias ganharam
+  destaque, qual experiência foi da 3ª para a 1ª e por causa de quê, e quantas informações foram inventadas (medido,
+  não prometido)
 - Lembretes de acompanhamento de candidatura e rastreamento de desfecho (respondeu / entrevista / rejeitado), para que o modelo de nota
   tenha uma referência real para se conferir
 - Melhor correspondência do banco de respostas, para que perguntas recorrentes parem de ser reperguntadas ao modelo
