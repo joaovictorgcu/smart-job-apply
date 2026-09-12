@@ -64,7 +64,7 @@ O que está verificado — e o que isso quer dizer:
 | "Por que esta vaga" | Determinística e sem modelo; testes cobrem que grafia equivalente não vira lacuna falsa e que um sinônimo aproximado não esconde lacuna real |
 | Comparação com o currículo principal | O orçamento de mudanças é testado item a item, e a contagem de invenções é o guarda rodando sobre o documento inteiro — zero é medido, não assumido |
 | Currículo anexado ao formulário | Testes cobrem que o arquivo enviado é o da candidatura, que ele é um PDF de verdade, e que uma conta sem versão própria volta ao PDF do perfil em vez de falhar |
-| Suíte | 1.010 backend + 25 navegador + 139 frontend + 9 Playwright, ruff, eslint, tsc, build, 8 guards |
+| Suíte | 1.010 backend + 25 navegador + 142 frontend + 9 Playwright, ruff, eslint, tsc, build, 8 guards |
 
 O que **não** está verificado, e você deve assumir como não funcionando até provar:
 
@@ -233,18 +233,25 @@ O modo de teste (dry run) está ligado por padrão: o fluxo inteiro roda, até o
 - **SQLite por padrão**, nenhum servidor de banco para instalar; **PostgreSQL** suportado trocando uma variável de
   ambiente
 
-## Capturas de tela
+## As telas
 
-**Currículo adaptado com um guarda contra invenção.** A IA reorganiza e reenfatiza o seu currículo para um anúncio —
-nunca adiciona experiência que você não tem — e um guarda sinaliza qualquer tecnologia que apareça no texto adaptado
-mas não no seu perfil, para que uma invenção não passe despercebida.
+Cinco destinos, e cada um é uma palavra que você já tem: **Painel** (o que precisa de você agora),
+**Vagas**, **Candidaturas** (com o Funil como segunda visão da mesma lista), **Perfil** e
+**Configurações**. Buscas salvas e o histórico da automação continuam existindo, alcançados de onde
+fazem sentido — o painel e o cartão da sessão — em vez de pedirem um item de menu cada.
+
+**Currículo adaptado com um guarda contra invenção.** A adaptação reorganiza e reenfatiza o seu
+currículo para um anúncio — nunca adiciona experiência que você não tem — e um guarda sinaliza qualquer
+tecnologia que apareça no texto adaptado mas não no seu perfil, para que uma invenção não passe
+despercebida.
 
 ![Painel de adaptação de currículo — a lista de mudanças, requisitos que o currículo não cobre e um alerta sinalizando "Kubernetes" como presente no CV adaptado mas não no perfil](docs/images/cv-tailoring.png)
 
-**Funil — uma nota maior leva mesmo a uma entrevista?** As candidaturas que você enviou se movem
-por colunas de desfecho (Enviada → Entrevista → Proposta → Rejeitada → Sem resposta), e o quadro mede a
-taxa de entrevista para cada faixa de nota de aderência, para que a nota da IA seja confrontada com resultados reais em vez de
-aceita por fé.
+**Funil — uma nota maior leva mesmo a uma entrevista?** A segunda forma de ler a mesma lista de
+candidaturas, num alternador dentro de **Candidaturas**: as que você enviou se movem por colunas de
+desfecho (Enviada → Entrevista → Proposta → Rejeitada → Sem resposta), e o quadro mede a taxa de
+entrevista para cada faixa de nota de aderência, para que a nota da IA seja confrontada com resultados
+reais em vez de aceita por fé.
 
 ![Funil — colunas Kanban de candidaturas enviadas por desfecho e um gráfico da taxa de entrevista por faixa de nota de aderência, mostrando que faixas mais altas entrevistam com mais frequência](docs/images/pipeline.png)
 
