@@ -38,6 +38,7 @@ import {
   useSkipJob,
 } from '@/hooks/useApi';
 import { badgeClass, formatDate, humanizeSnakeCase } from '@/lib/format';
+import { safeExternalUrl } from '@/lib/utils';
 import { errorMessage } from '@/services/client';
 import type { GateName, ScoreDimensionName } from '@/types/api';
 
@@ -131,6 +132,9 @@ export function JobDetail() {
   // A posting with no Easy Apply form, or one from a portal the automation does
   // not drive, is answered on the company's own page.
   const isExternalJob = !job.easy_apply || job.source !== 'linkedin';
+  // Third-party input: the Gupy adapter copies this straight out of that
+  // portal's response. See `safeExternalUrl`.
+  const jobUrl = safeExternalUrl(job.url);
   // Preparing works for both channels now: for an external job it drafts the
   // letter and creates the application the user will complete themselves, which
   // is what keeps it out of the statistics' blind spot.
@@ -163,9 +167,9 @@ export function JobDetail() {
                   {job.location}
                 </span>
               ) : null}
-              {job.url ? (
+              {jobUrl ? (
                 <a
-                  href={job.url}
+                  href={jobUrl}
                   target="_blank"
                   rel="noreferrer noopener"
                   className="inline-flex items-center gap-1.5 text-accent-400 hover:underline"
@@ -225,8 +229,8 @@ export function JobDetail() {
             Pular
           </Button>
 
-          {isExternalJob && job.url ? (
-            <a href={job.url} target="_blank" rel="noreferrer noopener" className="btn">
+          {isExternalJob && jobUrl ? (
+            <a href={jobUrl} target="_blank" rel="noreferrer noopener" className="btn">
               <ExternalLink aria-hidden className="h-4 w-4" />
               Candidatar-se no site da empresa
             </a>

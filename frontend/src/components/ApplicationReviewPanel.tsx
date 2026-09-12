@@ -24,7 +24,7 @@ import {
   useUpdateApplication,
 } from '@/hooks/useApi';
 import { applicationStatusLabel, badgeClass } from '@/lib/format';
-import { cn } from '@/lib/utils';
+import { cn, safeExternalUrl } from '@/lib/utils';
 import { reviewApplication } from '@/services/applications';
 import { errorMessage } from '@/services/client';
 import type {
@@ -297,16 +297,17 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
   const canMarkApplied = !isBusy && isReviewable;
   const jobTitle = application.job?.title ?? `vaga #${application.job_id}`;
   const company = application.job?.company ?? 'esta empresa';
-  const jobUrl = application.job?.url ?? null;
+  // The posting's own URL, and it is third-party input — see `safeExternalUrl`.
+  const jobUrl = safeExternalUrl(application.job?.url);
 
   return (
     <div className={cn('space-y-4', className)}>
-      <Card>
       {/* First, and above every editor: approving is a decision about the whole
           document, and scrolling through the parts is not the same as seeing
           it. Hidden once the decision has been made. */}
       {!isClosed ? <SubmissionSummary application={application} /> : null}
 
+      <Card>
         <CardHeader
           title="Carta de apresentação"
           description="Edite à vontade — este texto exato é o que será colado no formulário."

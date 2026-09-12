@@ -10,7 +10,7 @@ import { ScoreBadge } from '@/components/ScoreBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useApplication } from '@/hooks/useApi';
 import { badgeClass, enumLabel, formatDateTime, formatTime } from '@/lib/format';
-import { cn } from '@/lib/utils';
+import { cn, safeExternalUrl } from '@/lib/utils';
 import type { ApplicationEvent } from '@/types/api';
 
 function Timeline({ events }: { events: ApplicationEvent[] }) {
@@ -99,6 +99,8 @@ export function ApplicationDetail() {
   }
 
   const job = application.job;
+  // The portal's URL, not ours — see `safeExternalUrl`.
+  const jobUrl = safeExternalUrl(job?.url);
   const showSteps =
     application.total_steps !== null &&
     application.total_steps > 0 &&
@@ -134,9 +136,9 @@ export function ApplicationDetail() {
                   Detalhes da vaga
                 </Link>
               ) : null}
-              {job?.url ? (
+              {jobUrl ? (
                 <a
-                  href={job.url}
+                  href={jobUrl}
                   target="_blank"
                   rel="noreferrer noopener"
                   className="inline-flex items-center gap-1.5 text-accent-400 hover:underline"

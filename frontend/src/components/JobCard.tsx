@@ -2,7 +2,7 @@ import { Building2, ExternalLink, MapPin, Quote, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { badgeClass, enumLabel, formatRelativeTime, truncate } from '@/lib/format';
-import { cn } from '@/lib/utils';
+import { cn, safeExternalUrl } from '@/lib/utils';
 import type { Job } from '@/types/api';
 
 import { MatchSummary } from './MatchSummary';
@@ -26,6 +26,8 @@ export function JobCard({
 }: JobCardProps) {
   const topReason = job.score_reasons[0];
   const checkboxId = `job-select-${job.id}`;
+  // The posting's URL comes from the portal, not from us — see `safeExternalUrl`.
+  const jobUrl = safeExternalUrl(job.url);
 
   return (
     <article
@@ -78,9 +80,9 @@ export function JobCard({
               <span className="truncate">{job.location}</span>
             </span>
           ) : null}
-          {job.url ? (
+          {jobUrl ? (
             <a
-              href={job.url}
+              href={jobUrl}
               target="_blank"
               rel="noreferrer noopener"
               className="inline-flex items-center gap-1 text-content-subtle hover:text-accent-400 hover:underline"

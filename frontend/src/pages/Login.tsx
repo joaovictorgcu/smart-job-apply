@@ -7,6 +7,7 @@ import { Button, Field, Input, Note } from '@/components/primitives';
 import { FullPageSpinner } from '@/components/Spinner';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/lib/theme';
+import { safeRedirectPath } from '@/lib/utils';
 import { errorMessage } from '@/services/client';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -31,7 +32,11 @@ export function Login() {
   if (isLoading) return <FullPageSpinner label="Restaurando sessão" />;
   if (user) return <Navigate to="/" replace />;
 
-  const redirectTo = (location.state as { from?: string } | null)?.from ?? '/';
+  // Where the guard said the visitor was heading — which the address bar, not
+  // this app, ultimately decides. `safeRedirectPath` refuses the
+  // protocol-relative "//evil.com" that would turn signing in into a redirect
+  // off-site.
+  const redirectTo = safeRedirectPath((location.state as { from?: string } | null)?.from);
 
   const validate = (): boolean => {
     const next: FieldErrors = {};
