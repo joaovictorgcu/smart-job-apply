@@ -14,7 +14,6 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { ConfirmPreviewDialog } from '@/components/ConfirmPreviewDialog';
-import { CVTailorPanel } from '@/components/CVTailorPanel';
 import { EmptyState } from '@/components/EmptyState';
 import {
   Button,
@@ -446,8 +445,6 @@ export function JobDetail() {
           é o registro que a coloca no funil e nas estatísticas.
         </Note>
       ) : null}
-
-      <CVTailorPanel jobId={job.id} aiConfigured={Boolean(session?.ai_configured)} />
 
       <ConfirmPreviewDialog
         open={dialogOpen}

@@ -34,11 +34,20 @@ vi.mock("@/services/resumes", () => ({
   deleteExperience: vi.fn(),
 }));
 
+vi.mock("@/services/tailoring", () => ({
+  fetchTailoredResume: vi.fn(),
+  createTailoredResume: vi.fn(),
+  updateTailoredResume: vi.fn(),
+}));
+
 import * as resumesService from "@/services/resumes";
+import * as tailoringService from "@/services/tailoring";
 
 const mocked = vi.mocked(resumesService);
+const tailoring = vi.mocked(tailoringService);
 
 const APPLICATION_ID = 5;
+const JOB_ID = 10;
 
 function notFound(): Error & { status: number } {
   return Object.assign(new Error("Not found"), { status: 404 });
@@ -48,7 +57,9 @@ function render() {
   // No MemoryRouter here: `renderWithProviders` already supplies one, and
   // nesting two routers is a hard error in react-router. The wrapper came from
   // a branch whose test utils did not provide one.
-  return renderWithProviders(<ApplicationResumePanel applicationId={APPLICATION_ID} />);
+  return renderWithProviders(
+    <ApplicationResumePanel applicationId={APPLICATION_ID} jobId={JOB_ID} aiConfigured />,
+  );
 }
 
 async function renderAdapted(overrides: Partial<ApplicationResume> = {}) {
@@ -61,6 +72,9 @@ async function renderAdapted(overrides: Partial<ApplicationResume> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocked.listResumeVersions.mockResolvedValue([]);
+  tailoring.fetchTailoredResume.mockResolvedValue(
+    null as unknown as Awaited<ReturnType<typeof tailoringService.fetchTailoredResume>>,
+  );
 });
 
 describe("ApplicationResumePanel states", () => {
@@ -373,5 +387,18 @@ describe("ApplicationResumePanel with an empty master resume", () => {
 
     expect(screen.queryByText(/de relação com a vaga/i)).not.toBeInTheDocument();
     expect(screen.getByText(/·\s*Globalthings/)).toBeInTheDocument();
+  });
+});
+
+describe("ApplicationResumePanel prose tab", () => {
+  it("keeps the prose draft one tab away from the document that gets attached", async () => {
+    // It used to live on the job page, under a name close enough to this one
+    // that nobody could tell which resume an employer would receive.
+    const user = userEvent.setup();
+    await renderAdapted();
+
+    await user.click(screen.getByRole("tab", { name: /rascunho em prosa/i }));
+
+    expect(screen.getByText(/rascunho em prosa para esta vaga/i)).toBeInTheDocument();
   });
 });

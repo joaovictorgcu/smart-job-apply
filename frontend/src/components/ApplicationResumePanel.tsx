@@ -12,6 +12,7 @@ import {
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
+import { CVTailorPanel } from '@/components/CVTailorPanel';
 import { EmptyState } from '@/components/EmptyState';
 import { ResumeComparisonPanel } from '@/components/ResumeComparisonPanel';
 import {
@@ -51,11 +52,12 @@ import type {
   ResumeChange,
 } from '@/types/api';
 
-type TabKey = 'resume' | 'changes' | 'versions';
+type TabKey = 'resume' | 'changes' | 'prose' | 'versions';
 
 const TABS: ReadonlyArray<{ key: TabKey; label: string }> = [
   { key: 'resume', label: 'Currículo' },
   { key: 'changes', label: 'O que foi adaptado' },
+  { key: 'prose', label: 'Rascunho em prosa' },
   { key: 'versions', label: 'Outras versões' },
 ];
 
@@ -454,17 +456,24 @@ function VersionList({ applicationId }: { applicationId: number }) {
 
 export interface ApplicationResumePanelProps {
   applicationId: number;
+  /** Needed by the prose tab, which is keyed on the posting rather than the application. */
+  jobId?: number | null;
   jobTitle?: string | null;
   jobCompany?: string | null;
+  aiConfigured?: boolean;
   className?: string;
 }
 
 /**
  * The resume one application presents, and why it looks the way it does.
  *
- * Three tabs rather than three screens, because the questions a reviewer asks
- * here are about one document: what does this application send, what was
- * reorganised for this posting, and how does it relate to my other versions.
+ * Tabs rather than screens, because the questions a reviewer asks here are all
+ * about one document: what does this application send, what was reorganised for
+ * this posting, how does it relate to my other versions — and the prose draft,
+ * which used to live on the *job* page under a name so close to this one that
+ * nobody could tell which resume an employer would receive. It is a draft to
+ * copy into a text box; this panel is the document that gets attached, and now
+ * they sit one tab apart instead of two screens apart.
  *
  * Editing writes only this application's copy. The master resume is a different
  * document (linked from "Outras versões") and every sibling application is a
@@ -474,8 +483,10 @@ export interface ApplicationResumePanelProps {
  */
 export function ApplicationResumePanel({
   applicationId,
+  jobId,
   jobTitle,
   jobCompany,
+  aiConfigured = false,
   className,
 }: ApplicationResumePanelProps) {
   const toast = useToast();
@@ -798,6 +809,18 @@ export function ApplicationResumePanel({
         ) : null}
 
         {tab === 'changes' ? <ChangeReport resume={resume} /> : null}
+        {tab === 'prose' ? (
+          jobId ? (
+            <CVTailorPanel jobId={jobId} aiConfigured={aiConfigured} />
+          ) : (
+            <EmptyState
+              compact
+              title="Anúncio indisponível"
+              description="O rascunho em prosa é escrito a partir do anúncio, e esta candidatura perdeu o dela."
+            />
+          )
+        ) : null}
+
         {tab === 'versions' ? <VersionList applicationId={applicationId} /> : null}
       </div>
     </Card>

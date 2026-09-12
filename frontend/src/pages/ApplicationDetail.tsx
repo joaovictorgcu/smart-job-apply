@@ -8,7 +8,7 @@ import { InterviewPanel } from '@/components/InterviewPanel';
 import { Card, CardHeader, MetaRow, Note, Skeleton } from '@/components/primitives';
 import { ScoreBadge } from '@/components/ScoreBadge';
 import { StatusBadge } from '@/components/StatusBadge';
-import { useApplication } from '@/hooks/useApi';
+import { useApplication, useSessionStatus } from '@/hooks/useApi';
 import { badgeClass, enumLabel, formatDateTime, formatTime } from '@/lib/format';
 import { cn, safeExternalUrl } from '@/lib/utils';
 import type { ApplicationEvent } from '@/types/api';
@@ -67,6 +67,8 @@ export function ApplicationDetail() {
   const params = useParams<{ id: string }>();
   const applicationId = Number(params.id);
   const { data: application, isLoading, isError } = useApplication(applicationId);
+  // Only the prose tab needs it, and only to disable its one button.
+  const { data: session } = useSessionStatus();
 
   if (isLoading) {
     return (
@@ -189,13 +191,15 @@ export function ApplicationDetail() {
         <div className="space-y-4 lg:col-span-2">
           {/* Above the review panel on purpose: "what does my resume look like
               for this vacancy" is the first question the screen has to answer,
-              before the letter and the screening answers. It is not the file
-              that goes out — that is the profile's PDF, and the submission
-              summary in the panel below says so. */}
+              before the letter and the screening answers — and it is the
+              document the form attaches, so it is also the one with the most
+              riding on being read. */}
           <ApplicationResumePanel
             applicationId={application.id}
+            jobId={job?.id ?? null}
             jobTitle={job?.title ?? null}
             jobCompany={job?.company ?? null}
+            aiConfigured={Boolean(session?.ai_configured)}
           />
           <ApplicationReviewPanel application={application} />
         </div>
