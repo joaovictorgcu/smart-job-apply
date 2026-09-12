@@ -3,7 +3,6 @@ import {
   CheckCircle2,
   FileText,
   Info,
-  Sparkles,
   TriangleAlert,
   Upload,
 } from 'lucide-react';
@@ -602,7 +601,7 @@ export function Onboarding() {
               aria-hidden
               className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-accent-500/40 bg-accent-500/10 text-accent-400"
             >
-              <Sparkles className="h-5 w-5" />
+              <CheckCircle2 className="h-5 w-5" />
             </span>
             <p className="text-md font-semibold text-content">
               Seu currículo é a base de tudo daqui em diante.

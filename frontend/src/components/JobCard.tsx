@@ -1,4 +1,4 @@
-import { Building2, ExternalLink, MapPin, Sparkles, Zap } from 'lucide-react';
+import { Building2, ExternalLink, MapPin, Quote, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { badgeClass, enumLabel, formatRelativeTime, truncate } from '@/lib/format';
@@ -115,7 +115,7 @@ export function JobCard({
 
         {topReason ? (
           <p className="mt-2.5 flex items-start gap-1.5 text-xs leading-relaxed text-content-muted">
-            <Sparkles aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-400" />
+            <Quote aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0 text-content-subtle" />
             <span>{truncate(topReason, 180)}</span>
           </p>
         ) : job.skip_reason ? (

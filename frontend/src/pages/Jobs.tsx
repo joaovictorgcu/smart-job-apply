@@ -1,4 +1,4 @@
-import { CheckSquare, Square, Wand2 } from 'lucide-react';
+import { CheckSquare, Send, Square } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -171,7 +171,7 @@ export function Jobs() {
                   : 'Pré-visualize o que preencher esses formulários faria'
               }
               onClick={openPreview}
-              icon={<Wand2 aria-hidden className="h-4 w-4" />}
+              icon={<Send aria-hidden className="h-4 w-4" />}
             >
               Preparar candidaturas…
             </Button>

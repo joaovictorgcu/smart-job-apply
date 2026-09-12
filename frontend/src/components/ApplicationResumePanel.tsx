@@ -2,12 +2,12 @@ import {
   ArrowUpRight,
   CircleAlert,
   FileText,
+  ListOrdered,
   Pencil,
   RefreshCw,
   Save,
   Star,
   TriangleAlert,
-  Wand2,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -544,7 +544,7 @@ export function ApplicationResumePanel({
               resume ? (
                 <RefreshCw aria-hidden className="h-3.5 w-3.5" />
               ) : (
-                <Wand2 aria-hidden className="h-3.5 w-3.5" />
+                <ListOrdered aria-hidden className="h-3.5 w-3.5" />
               )
             }
           >
@@ -596,7 +596,7 @@ export function ApplicationResumePanel({
                 variant="primary"
                 loading={adapt.isPending}
                 onClick={() => adapt.mutate()}
-                icon={<Wand2 aria-hidden className="h-4 w-4" />}
+                icon={<ListOrdered aria-hidden className="h-4 w-4" />}
               >
                 Adaptar currículo para esta vaga
               </Button>

@@ -3,10 +3,11 @@ import {
   ClipboardCheck,
   ExternalLink,
   Info,
+  PenLine,
+  Quote,
   Save,
   ScanSearch,
   Send,
-  Sparkles,
   Trash2,
   TriangleAlert,
   XCircle,
@@ -227,7 +228,7 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
       ? { state: 'ok', label: `Vaga analisada — nota ${application.job.score}/100` }
       : {
           state: 'warn',
-          label: 'Vaga não analisada pela IA',
+          label: 'Vaga ainda não comparada com o seu perfil',
           detail: 'Opcional — você ainda pode enviar.',
         },
     application.resume_filename
@@ -315,9 +316,9 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
               loading={generate.isPending}
               disabled={isBusy}
               onClick={() => generate.mutate(application.job_id)}
-              icon={<Sparkles aria-hidden className="h-3.5 w-3.5" />}
+              icon={<PenLine aria-hidden className="h-3.5 w-3.5" />}
             >
-              Gerar com IA
+              Escrever carta
             </Button>
           }
         />
@@ -385,14 +386,14 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
               onClick={() => review.mutate()}
               icon={<ScanSearch aria-hidden className="h-3.5 w-3.5" />}
             >
-              {review.data ? 'Revisar de novo' : 'Revisar com IA'}
+              {review.data ? 'Revisar de novo' : 'Pedir uma segunda leitura'}
             </Button>
           }
         />
         {review.data ? (
           <div className="card-body space-y-4">
             {review.data.summary ? (
-              <Note tone="accent" icon={<Sparkles aria-hidden className="h-3.5 w-3.5" />}>
+              <Note tone="accent" icon={<Quote aria-hidden className="h-3.5 w-3.5" />}>
                 {review.data.summary}
               </Note>
             ) : null}

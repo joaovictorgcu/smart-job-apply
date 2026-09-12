@@ -90,8 +90,8 @@ export function Login() {
               </span>
             </div>
             <p className="text-sm leading-relaxed text-content-muted">
-              Encontra vagas de Candidatura Simplificada, pontua com IA e preenche o formulário —
-              depois para e espera você aprovar cada envio.
+              Encontra vagas de Candidatura Simplificada, compara cada uma com o seu currículo e
+              preenche o formulário — depois para e espera você aprovar cada envio.
             </p>
           </div>
 

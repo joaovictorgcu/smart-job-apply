@@ -1,4 +1,4 @@
-import { FileText, RefreshCw, Save, ShieldCheck, Sparkles, TriangleAlert, Wand2 } from 'lucide-react';
+import { FileText, PenLine, Quote, RefreshCw, Save, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import {
@@ -54,8 +54,8 @@ export function CVTailorPanel({ jobId, aiConfigured }: CVTailorPanelProps) {
   return (
     <Card>
       <CardHeader
-        title="Currículo adaptado pela IA (texto)"
-        description="Uma redação em prosa desta vaga, escrita pela IA. O currículo que a candidatura realmente apresenta é montado na tela da candidatura, sem chamada de modelo."
+        title="Rascunho em prosa para esta vaga"
+        description="Uma redação livre, útil para copiar num campo de texto. O currículo que a candidatura realmente apresenta é montado na tela da candidatura, a partir do seu — e é lá que dá para conferir o que mudou."
         actions={
           <Button
             loading={busy}
@@ -66,7 +66,7 @@ export function CVTailorPanel({ jobId, aiConfigured }: CVTailorPanelProps) {
               data ? (
                 <RefreshCw aria-hidden className="h-4 w-4" />
               ) : (
-                <Wand2 aria-hidden className="h-4 w-4" />
+                <PenLine aria-hidden className="h-4 w-4" />
               )
             }
           >
@@ -199,7 +199,7 @@ export function CVTailorPanel({ jobId, aiConfigured }: CVTailorPanelProps) {
               <span className="ml-auto inline-flex items-center gap-1.5 text-[11px] text-content-subtle">
                 {data.model ? (
                   <>
-                    <Sparkles aria-hidden className="h-3.5 w-3.5" />
+                    <Quote aria-hidden className="h-3.5 w-3.5" />
                     {data.model}
                   </>
                 ) : (

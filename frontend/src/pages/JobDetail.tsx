@@ -4,11 +4,11 @@ import {
   CircleAlert,
   ExternalLink,
   MapPin,
+  Quote,
+  ScanSearch,
   Send,
   SkipForward,
-  Sparkles,
   TriangleAlert,
-  Wand2,
 } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -73,7 +73,10 @@ export function JobDetail() {
 
   const analyze = useAnalyzeJob({
     onSuccess: (updated) =>
-      toast.success('Análise concluída', `A IA deu a esta vaga a nota ${updated.score ?? 0}/100.`),
+      toast.success(
+        'Comparação concluída',
+        `Esta vaga tem ${updated.score ?? 0}/100 de aderência ao seu perfil.`,
+      ),
     onError: (error) => toast.error('A análise falhou', errorMessage(error)),
   });
 
@@ -208,9 +211,9 @@ export function JobDetail() {
                 : 'Nenhuma chave de API de IA configurada'
             }
             onClick={() => analyze.mutate(job.id)}
-            icon={<Sparkles aria-hidden className="h-4 w-4" />}
+            icon={<ScanSearch aria-hidden className="h-4 w-4" />}
           >
-            {job.score === null ? 'Analisar com IA' : 'Analisar de novo'}
+            {job.score === null ? 'Comparar com meu perfil' : 'Comparar de novo'}
           </Button>
 
           <Button
@@ -249,7 +252,7 @@ export function JobDetail() {
                 setDialogOpen(true);
                 preview.mutate({ job_ids: [job.id] });
               }}
-              icon={<Wand2 aria-hidden className="h-4 w-4" />}
+              icon={<Send aria-hidden className="h-4 w-4" />}
             >
               Preparar candidatura…
             </Button>
@@ -379,7 +382,7 @@ export function JobDetail() {
                             key={reason}
                             className="flex items-start gap-2 text-xs leading-relaxed text-content-muted"
                           >
-                            <Sparkles aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-400" />
+                            <Quote aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0 text-content-subtle" />
                             <span>{reason}</span>
                           </li>
                         ))}

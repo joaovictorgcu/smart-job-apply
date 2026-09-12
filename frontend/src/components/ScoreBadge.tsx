@@ -32,8 +32,12 @@ export function ScoreBadge({ score, size = 'md', className }: ScoreBadgeProps) {
 
   return (
     <span
-      aria-label={unscored ? 'Ainda não analisada' : `Nota de aderência da IA ${value} de 100`}
-      title={unscored ? 'Ainda não analisada pela IA' : `Nota de aderência da IA: ${value}/100`}
+      aria-label={unscored ? 'Ainda não comparada com o seu perfil' : `Aderência ao seu perfil: ${value} de 100`}
+      title={
+        unscored
+          ? 'Ainda não comparada com o seu perfil'
+          : `Aderência ao seu perfil: ${value}/100`
+      }
       className={cn(
         'tabular inline-flex select-none items-center justify-center rounded-xl border font-semibold',
         SIZE[size],

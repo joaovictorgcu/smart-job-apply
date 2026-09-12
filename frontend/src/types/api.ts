@@ -867,6 +867,16 @@ export interface OutcomeCount {
 export interface PortalSearchResult {
   portal: string;
   jobs_found: number;
+  /**
+   * Denormalised from the job so a list can name its postings.
+   *
+   * Null only when the row arrived without its job loaded; every list endpoint
+   * loads it. Before these existed, rendering "Backend Developer — Acme" meant
+   * fetching a page of jobs and joining on the client.
+   */
+  job_title: string | null;
+  job_company: string | null;
+  job_score: number | null;
   jobs_new: number;
 }
 

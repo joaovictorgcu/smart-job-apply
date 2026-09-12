@@ -24,7 +24,7 @@ const CONFIDENCE_LABEL: Record<AnswerConfidence, string> = {
 const SOURCE_LABEL: Record<NonNullable<ScreeningAnswer['source']>, string> = {
   answer_bank: 'Do seu banco de respostas',
   user: 'Sua resposta',
-  ai: 'Gerada pela IA',
+  ai: 'Rascunho — confira',
 };
 
 export interface ScreeningAnswerEditorProps {
