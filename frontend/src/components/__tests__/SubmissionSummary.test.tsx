@@ -12,7 +12,11 @@ import { screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SubmissionSummary } from "@/components/SubmissionSummary";
-import { buildApplicationDetail, buildApplicationResume } from "@/test/factories";
+import {
+  buildApplicationDetail,
+  buildApplicationResume,
+  buildScreeningAnswer,
+} from "@/test/factories";
 import { renderWithProviders } from "@/test/utils";
 import type { ApplicationDetail, ResumeComparison } from "@/types/api";
 
@@ -86,24 +90,15 @@ describe("SubmissionSummary", () => {
   it("surfaces an answer still waiting for confirmation", () => {
     const { container } = render({
       screening_answers: [
-        {
-          question: "Anos de Python?",
-          answer: "6",
-          type: "number",
-          options: [],
-          confidence: "high",
-          needs_review: false,
-          field_id: "a",
-        },
-        {
+        buildScreeningAnswer({ question: "Anos de Python?", answer: "6" }),
+        buildScreeningAnswer({
           question: "Autorização de trabalho?",
           answer: "Sim",
-          type: "text",
-          options: [],
+          question_type: "text",
           confidence: "low",
           needs_review: true,
           field_id: "b",
-        },
+        }),
       ],
     });
 
