@@ -570,6 +570,40 @@ async def test_an_automation_that_never_completes_is_never_healthy(
     assert payload["automation"]["status"] == "problem"
 
 
+async def test_a_database_behind_its_migrations_is_not_reported_as_online(
+    client: AsyncClient,
+    admin_auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The row that would have named the outage instead of hiding it.
+
+    A schema one migration behind answers `SELECT 1` perfectly and 500s on every
+    request that touches the column the migration would have added. "Consultas
+    respondendo" was true and useless; the panel now says which migrations are
+    pending and what to run.
+    """
+    from app.database import schema_version
+    from app.services import admin_service as service
+
+    async def behind(_connection: Any) -> Any:
+        return schema_version.SchemaStatus(
+            state=schema_version.SchemaState.BEHIND,
+            current="0012",
+            head="0014",
+            pending=("0013", "0014"),
+        )
+
+    monkeypatch.setattr(service, "read_schema_status", behind)
+
+    payload = (await client.get("/api/admin/health", headers=admin_auth_headers)).json()
+    database = next(e for e in payload["services"] if e["service"] == "database")
+
+    assert database["status"] == "attention"
+    assert "0013" in database["detail"] and "0014" in database["detail"]
+    assert "alembic upgrade head" in database["detail"]
+    assert payload["status"] == "attention"
+
+
 async def test_health_lists_every_service(
     client: AsyncClient, admin_auth_headers: dict[str, str]
 ) -> None:

@@ -20,7 +20,8 @@ from app.api.deps import limiter
 from app.api.errors import register_exception_handlers
 from app.api.routes import api_router
 from app.config import PROJECT_ROOT, get_settings
-from app.database.session import dispose_engine, init_models
+from app.database.schema_version import log_schema_status
+from app.database.session import dispose_engine, get_engine, init_models
 from app.observability import bind_context, clear_context, configure_logging, get_logger
 from app.services import automation_service
 
@@ -81,12 +82,17 @@ class RequestContextMiddleware:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Create missing tables, close out interrupted work, then serve.
+    """Create missing tables, check the schema, close out interrupted work, serve.
 
     Reconciliation runs before the first request so nothing reads a run that a
-    dead process left looking alive. See `reconcile_interrupted_work`.
+    dead process left looking alive (`reconcile_interrupted_work`). The schema
+    check runs because `create_all` cannot add a column to an existing table:
+    a database one migration behind boots perfectly and then fails every request
+    that touches the new column. It reports; it never migrates.
     """
     await init_models()
+    async with get_engine().connect() as connection:
+        schema = await log_schema_status(connection)
     await automation_service.reconcile_interrupted_work()
     logger.info(
         "API started.",
@@ -96,6 +102,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             "version": __version__,
             "environment": settings.environment,
             "ai_configured": settings.ai_enabled,
+            "schema": str(schema.state),
         },
     )
     try:

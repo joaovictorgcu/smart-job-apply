@@ -35,6 +35,7 @@ from app import __version__
 from app.api.errors import ValidationError
 from app.config import PROJECT_ROOT, get_settings
 from app.database.base import utcnow
+from app.database.schema_version import SchemaState, read_schema_status
 from app.domain.technologies import job_technologies
 from app.models import (
     AIAnalysis,
@@ -890,9 +891,22 @@ async def build_system_health(
 
     try:
         await session.execute(text("SELECT 1"))
+        # Answering is not the same as being the right shape. A schema one
+        # migration behind answers `SELECT 1` all day and 500s on every request
+        # that touches the column the migration would have added — which is
+        # exactly the outage this row now names instead of hiding.
+        schema = await read_schema_status(await session.connection())
         services.append(
             ServiceStatus(
-                service="database", status=ServiceState.ONLINE, detail="Consultas respondendo."
+                service="database",
+                status=(
+                    ServiceState.ATTENTION if schema.needs_action else ServiceState.ONLINE
+                ),
+                detail=(
+                    "Consultas respondendo."
+                    if schema.state is SchemaState.CURRENT
+                    else f"Consultas respondendo. {schema.summary}"
+                ),
             )
         )
     except Exception as exc:  # noqa: BLE001 - the point is to report any failure
