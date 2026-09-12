@@ -34,9 +34,11 @@ import type {
   ScreeningAnswer,
 } from '@/types/api';
 
+import { KillSwitchButton } from './KillSwitchButton';
 import { Modal } from './Modal';
 import { Button, Card, CardHeader, Note, Textarea } from './primitives';
 import { ScreeningAnswerEditor } from './ScreeningAnswerEditor';
+import { SubmissionSummary } from './SubmissionSummary';
 import { useToast } from './ToastProvider';
 
 const SOFT_COVER_LETTER_LIMIT = 2000;
@@ -299,6 +301,11 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
   return (
     <div className={cn('space-y-4', className)}>
       <Card>
+      {/* First, and above every editor: approving is a decision about the whole
+          document, and scrolling through the parts is not the same as seeing
+          it. Hidden once the decision has been made. */}
+      {!isClosed ? <SubmissionSummary application={application} /> : null}
+
         <CardHeader
           title="Carta de apresentação"
           description="Edite à vontade — este texto exato é o que será colado no formulário."
@@ -520,8 +527,14 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
             )}
 
             <Button
+            {/* Reused rather than reimplemented: the same stop the shell and
+                the dashboard offer. It belongs here too — this is where an
+                operator is when they decide the automation should not carry on
+                without them. */}
+            <KillSwitchButton className="ml-auto" />
+
               variant="ghost"
-              className="ml-auto text-danger hover:bg-danger/10 hover:text-danger"
+              className="text-danger hover:bg-danger/10 hover:text-danger"
               disabled={isBusy || application.status === 'discarded'}
               onClick={() => setDiscardOpen(true)}
               icon={<Trash2 aria-hidden className="h-4 w-4" />}
