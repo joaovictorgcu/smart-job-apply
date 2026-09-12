@@ -45,6 +45,7 @@ from app.database.base import utcnow
 from app.database.session import session_scope
 from app.models import (
     Application,
+    ApplicationEventType,
     ApplicationStatus,
     AutomationRun,
     AutomationRunKind,
@@ -52,7 +53,7 @@ from app.models import (
     JobStatus,
     User,
 )
-from app.observability import EventName, get_logger, make_event
+from app.observability import EventName, get_logger, make_event, record_event
 from app.schemas.automation import (
     AutomationRunRead,
     PrepareRequest,
@@ -669,6 +670,114 @@ async def stop_all(session: AsyncSession, user: User) -> int:
         },
     )
     return len(active)
+
+
+# --------------------------------------------------------------------------- #
+# Startup reconciliation
+# --------------------------------------------------------------------------- #
+
+# What the user reads on the run and on the application trail afterwards. Two
+# different sentences on purpose: one says work stopped, the other says nobody
+# knows whether it stopped in time.
+RUN_INTERRUPTED = (
+    "The server restarted while this run was in flight, so it never finished. "
+    "Resume it to pick up where the checkpoint left off."
+)
+SUBMISSION_INTERRUPTED = (
+    "The server restarted while this application was being submitted. Whether "
+    "LinkedIn received it is unknown — check the posting before doing anything "
+    "else, then either record it as applied or discard it."
+)
+
+
+async def reconcile_interrupted_work() -> dict[str, int]:
+    """Close out work a previous process left in flight, at startup.
+
+    The invariant every in-flight state depends on is that a non-terminal row
+    has a live asyncio task behind it — `is_busy` asks the task, not the
+    database. A process that has just started owns no tasks, so a `RUNNING` run
+    or a `SUBMITTING` application found here belongs to a process that died.
+    Nothing will ever finish them, and they are not merely untidy: a stale
+    active run makes the session banner claim the automation is working, and
+    `_is_resumable` refuses `RUNNING`, so the user has no way to clear it. The
+    kill switch does not help either — it only turns `PENDING` into `STOPPED`.
+
+    The two application states are handled *differently*, and that asymmetry is
+    the whole point:
+
+    * `PREPARING` was interrupted before anything was sent, so it goes back to
+      `DRAFT` and can be prepared again.
+    * `SUBMITTING` is written before the browser opens (`engine/submit.py` sets
+      it, then clicks), so a death in between leaves a genuinely unknown
+      outcome. Returning it to `AWAITING_REVIEW` would put a one-click "submit"
+      in front of an application that may already have been sent — exactly the
+      unattended submission this product exists to prevent. It becomes `FAILED`
+      with an explanation instead, from where the user can record it as applied
+      or discard it, both of which are deliberate acts.
+
+    Assumes a single API process, which this deployment already assumes
+    everywhere else: the engine's task registry, the WebSocket manager and the
+    rate limiter are all per-process. Behind two workers the second to start
+    would close the first one's live work, and the fix then is a lease column,
+    not a longer comment here.
+    """
+    counts = {"runs": 0, "preparing": 0, "submitting": 0}
+
+    async with session_scope() as session:
+        runs = (
+            (
+                await session.execute(
+                    select(AutomationRun).where(AutomationRun.status.in_(ACTIVE_RUN_STATUSES))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for run in runs:
+            run.status = AutomationRunStatus.STOPPED
+            run.error_message = RUN_INTERRUPTED
+            run.finished_at = utcnow()
+            counts["runs"] += 1
+
+        stranded = (
+            (
+                await session.execute(
+                    select(Application).where(
+                        Application.status.in_(
+                            (ApplicationStatus.PREPARING, ApplicationStatus.SUBMITTING)
+                        )
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for application in stranded:
+            if application.status == ApplicationStatus.PREPARING:
+                application.status = ApplicationStatus.DRAFT
+                counts["preparing"] += 1
+                continue
+
+            application.status = ApplicationStatus.FAILED
+            application.error_message = SUBMISSION_INTERRUPTED
+            counts["submitting"] += 1
+            # On the trail too: this is the one event the user has to see, and
+            # the application detail screen reads events, not error columns.
+            await record_event(
+                session,
+                application_id=application.id,
+                event_type=ApplicationEventType.ERROR,
+                message=SUBMISSION_INTERRUPTED,
+                is_error=True,
+                user_id=application.user_id,
+            )
+
+    if any(counts.values()):
+        logger.warning(
+            "Closed out work interrupted by a previous run of this process.",
+            extra={"action": "startup.reconcile", "status": "ok", **counts},
+        )
+    return counts
 
 
 async def shutdown_engine() -> None:

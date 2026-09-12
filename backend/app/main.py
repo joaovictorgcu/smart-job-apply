@@ -81,8 +81,13 @@ class RequestContextMiddleware:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Create missing tables on startup; close browsers and the pool on shutdown."""
+    """Create missing tables, close out interrupted work, then serve.
+
+    Reconciliation runs before the first request so nothing reads a run that a
+    dead process left looking alive. See `reconcile_interrupted_work`.
+    """
     await init_models()
+    await automation_service.reconcile_interrupted_work()
     logger.info(
         "API started.",
         extra={
