@@ -67,6 +67,16 @@ jobs:
         continue-on-error: true
         run: mypy backend/app
 
+      - name: API types match the schema
+        # Not advisory. A field the frontend's hand-written mirrors forget is a
+        # value the UI is told does not exist — it fails no test and no type
+        # check, it just silently cannot be rendered.
+        env:
+          SECRET_KEY: "ci-secret-key-not-used-anywhere-else"
+          ENCRYPTION_KEY: "ci-encryption-key-not-used-anywhere-else"
+          DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+        run: python tools/check_api_types.py
+
       - name: Tests
         env:
           # Deterministic, throwaway values so Settings never falls back to a

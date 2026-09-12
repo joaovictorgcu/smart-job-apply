@@ -42,7 +42,8 @@ BACKEND_PORT ?= 8000
 
 .DEFAULT_GOAL := help
 .PHONY: help install dev dev-backend dev-frontend build demo seed seed-demo \
-        test e2e e2e-frontend test-all lint format typecheck migrate migration \
+        test e2e e2e-frontend test-all lint format typecheck check-api-types \
+        migrate migration \
         user admin docker-build docker-up docker-down docker-logs clean
 
 help: ## Show this help
@@ -108,6 +109,9 @@ format: ## Format the code and apply safe lint fixes
 
 typecheck: ## Run mypy over the backend package
 	$(PY) -m mypy $(BACKEND_DIR)/app
+
+check-api-types: ## Verify the hand-written TS types still mirror the API
+	$(PY) tools/check_api_types.py
 
 migrate: ## Apply all pending database migrations
 	cd $(BACKEND_DIR) && $(ALEMBIC) upgrade head
