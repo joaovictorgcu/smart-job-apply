@@ -455,6 +455,16 @@ export interface Job {
   skip_reason: string | null;
   detected_language: string | null;
   posted_at: string | null;
+  /** When applications close. The portal's when it publishes one, the user's otherwise. */
+  deadline: string | null;
+  /** When discovery last found the posting gone. Never cleared once set. */
+  expired_at: string | null;
+  /**
+   * Expired, or past its deadline. Derived on read, because it changes with
+   * the clock rather than with a write — and preparation refuses it, so a
+   * card that does not say so lets the user pick a job that cannot be sent.
+   */
+  is_stale: boolean;
   created_at: string | null;
   search_id: number | null;
   application_id: number | null;

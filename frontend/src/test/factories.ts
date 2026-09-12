@@ -44,6 +44,10 @@ export function buildJob(overrides: Partial<Job> = {}): Job {
     skip_reason: null,
     detected_language: "pt",
     posted_at: "2026-08-01T09:00:00Z",
+    // A live posting: no deadline recorded, never found gone, so not stale.
+    deadline: null,
+    expired_at: null,
+    is_stale: false,
     created_at: "2026-08-01T09:05:00Z",
     search_id: 1,
     application_id: 5,

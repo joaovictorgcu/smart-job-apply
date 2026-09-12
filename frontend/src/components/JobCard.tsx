@@ -109,6 +109,13 @@ export function JobCard({
           {job.workplace_type ? (
             <span className={badgeClass('neutral')}>{enumLabel(job.workplace_type)}</span>
           ) : null}
+          {/* Preparation refuses a stale posting, so saying nothing here lets the
+              user select one and only find out at the confirmation dialog. */}
+          {job.is_stale ? (
+            <span className={badgeClass('warning')}>
+              {job.expired_at ? 'anúncio saiu do ar' : 'prazo encerrado'}
+            </span>
+          ) : null}
         </div>
 
         {/* Before the model's prose on purpose: which requirements you meet is
