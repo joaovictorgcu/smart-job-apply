@@ -33,6 +33,11 @@ dependencies = [
     # without the user retyping it. Optional at runtime: a missing parser only means
     # the text field is left for the user to fill in.
     "pypdf>=5.1",
+    # Renders the per-application resume into the PDF the form actually attaches.
+    # Pure Python and no system libraries, which is why it is here and not
+    # WeasyPrint: that would add cairo and pango to the container for one page of
+    # text. Portuguese fits inside WinAnsiEncoding, so no font has to be embedded.
+    "reportlab>=4.2",
 ]
 
 [project.optional-dependencies]

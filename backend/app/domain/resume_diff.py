@@ -50,6 +50,11 @@ class SnapshotExperience:
     results: tuple[str, ...] = ()
     matched_terms: tuple[str, ...] = ()
     promoted: int = 0
+    # Only the rendered document needs these, and only to print them. The
+    # comparison ignores them: a period is a fact about the past that an
+    # adaptation may not touch, so it can never be something that changed.
+    period: str = ""
+    location: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
