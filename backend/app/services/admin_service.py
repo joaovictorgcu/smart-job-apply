@@ -764,7 +764,12 @@ def _automation_health(
         reasons.append(
             f"{backlog['blocked_runs']} execução(ões) bloqueada(s) por verificação de segurança."
         )
-    if failure_rate >= FAILURE_RATE_CRITICAL and finished >= MIN_ATTEMPTS_FOR_RATE:
+    if finished > 0 and counts["failed"] == finished:
+        # Same reasoning as the AI panel: a sample floor is for judging a rate,
+        # not for deciding whether "nothing finished successfully" is a problem.
+        status = HealthStatus.PROBLEM
+        reasons.append(f"Nenhuma das {finished} execução(ões) encerradas concluiu.")
+    elif failure_rate >= FAILURE_RATE_CRITICAL and finished >= MIN_ATTEMPTS_FOR_RATE:
         status = HealthStatus.PROBLEM
         reasons.append(f"{counts['failed']} de {finished} execuções falharam no período.")
     elif failure_rate >= FAILURE_RATE_WARNING and finished >= MIN_ATTEMPTS_FOR_RATE:
@@ -814,7 +819,19 @@ def _ai_health(counts: dict[str, Any]) -> AIHealth:
             f"Provider '{provider}' sem credencial ou endpoint configurado. "
             "Contas com chave própria não são afetadas."
         )
-    if calls >= MIN_AI_CALLS_FOR_RATE and error_rate >= AI_ERROR_RATE_CRITICAL:
+    if calls > 0 and failed == calls:
+        # No sample floor here on purpose. The floor exists so a single failure
+        # in a handful of calls does not cry wolf about a *rate* — but "every
+        # call we made failed" is not a rate question, and the commonest cause
+        # is a rejected credential, which two calls prove as well as fifty.
+        # Reading that as healthy is how a dead provider stays invisible.
+        status = HealthStatus.PROBLEM
+        reasons.append(
+            f"Todas as {calls} chamada(s) do período falharam."
+            if calls > 1
+            else "A única chamada do período falhou."
+        )
+    elif calls >= MIN_AI_CALLS_FOR_RATE and error_rate >= AI_ERROR_RATE_CRITICAL:
         status = HealthStatus.PROBLEM
         reasons.append(f"{failed} de {calls} chamadas falharam no período.")
     elif calls >= MIN_AI_CALLS_FOR_RATE and error_rate >= AI_ERROR_RATE_WARNING:

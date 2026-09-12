@@ -530,6 +530,46 @@ async def test_ai_health_aggregates_calls_without_exposing_a_key(
     assert "test-anthropic-key-never-sent-anywhere" not in body
 
 
+async def test_an_ai_that_fails_every_call_is_never_healthy(
+    client: AsyncClient,
+    session: AsyncSession,
+    admin_auth_headers: dict[str, str],
+    user: Any,
+) -> None:
+    """Two calls, two failures — below the rate floor, and still a problem.
+
+    The floor exists so one failure in a handful does not cry wolf about a
+    *rate*. "Every call failed" is not a rate question: the usual cause is a
+    rejected key, which two calls prove as well as fifty. Reading it as healthy
+    is exactly how a dead provider stays invisible on the panel.
+    """
+    job = await create_job(session, user)
+    for _ in range(2):
+        await create_analysis(session, user, job, error_message="API key is invalid.")
+
+    payload = (await client.get("/api/admin/overview", headers=admin_auth_headers)).json()
+
+    assert payload["ai"]["calls"] == 2
+    assert payload["ai"]["failed"] == 2
+    assert payload["ai"]["status"] == "problem"
+    assert "ai_failing" in {alert["key"] for alert in payload["alerts"]}
+    services = {entry["service"]: entry for entry in payload["health"]["services"]}
+    assert services["ai"]["status"] == "offline"
+
+
+async def test_an_automation_that_never_completes_is_never_healthy(
+    client: AsyncClient,
+    session: AsyncSession,
+    admin_auth_headers: dict[str, str],
+    user: Any,
+) -> None:
+    await create_run(session, user, status=AutomationRunStatus.FAILED)
+
+    payload = (await client.get("/api/admin/overview", headers=admin_auth_headers)).json()
+
+    assert payload["automation"]["status"] == "problem"
+
+
 async def test_health_lists_every_service(
     client: AsyncClient, admin_auth_headers: dict[str, str]
 ) -> None:
