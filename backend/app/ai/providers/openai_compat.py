@@ -225,6 +225,23 @@ class OpenAICompatProvider:
             raise ProviderTransientError(
                 f"{self.name} returned HTTP {response.status_code}: {_error_detail(response)}"
             )
+        if response.status_code in (401, 403):
+            # A key the provider refuses, which no retry fixes. Raised as a
+            # configuration error so it reaches the user as a 503 naming the
+            # problem; as a plain `ProviderError` it would be swallowed into "the
+            # model produced no score", and a wrong key would look like a working
+            # one with nothing to score. Same rule as the Anthropic provider.
+            # Which key it was depends on who configured it, and this layer does
+            # not know: an account may have stored its own under Settings, or it
+            # may be inheriting the deployment's `AI_API_KEY`. Naming only the
+            # environment variable would send someone who pasted a key on the
+            # settings screen to edit a file they may not even be able to reach.
+            raise ProviderNotConfiguredError(
+                f"{self.name} rejected this key (HTTP {response.status_code}): "
+                f"{_error_detail(response)}. Check the key for {self.name} — your "
+                "own under Settings, or AI_API_KEY for the deployment — or choose "
+                "another provider."
+            )
         if response.status_code >= 400:
             raise ProviderError(
                 f"{self.name} returned HTTP {response.status_code}: {_error_detail(response)}"

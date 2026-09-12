@@ -110,3 +110,60 @@ class TestAnthropicTranslation:
 
         error = ValueError("something else entirely")
         assert _as_configuration_error(error) is error
+
+
+class TestOpenAICompatTranslation:
+    """The same rule on the path the free tiers actually use.
+
+    Groq, Gemini, OpenRouter and Cerebras all answer through this provider, so a
+    mistyped key there has to fail as loudly as a bad Anthropic one — otherwise
+    the bug simply moves to whichever provider the deployment picked.
+    """
+
+    @pytest.mark.parametrize("status", [401, 403])
+    async def test_a_refused_key_is_a_configuration_error(self, status: int) -> None:
+        import httpx
+
+        from app.ai.providers.openai_compat import OpenAICompatProvider
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(status, json={"error": {"message": "Invalid API Key"}})
+
+        provider = OpenAICompatProvider(
+            name="groq",
+            base_url="https://api.groq.com/openai/v1",
+            api_key="wrong",
+            model="llama-3.3-70b-versatile",
+        )
+        provider._client = httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            base_url="https://api.groq.com/openai/v1",
+        )
+
+        with pytest.raises(ProviderNotConfiguredError) as raised:
+            await provider.send(system="s", user_prompt="u", max_tokens=8)
+
+        assert "AI_API_KEY" in str(raised.value)
+
+    async def test_a_rate_limit_stays_retryable(self) -> None:
+        """429 is an expected outcome on a free tier, not a broken key."""
+        import httpx
+
+        from app.ai.providers.openai_compat import OpenAICompatProvider
+
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(429, json={"error": {"message": "slow down"}})
+
+        provider = OpenAICompatProvider(
+            name="groq",
+            base_url="https://api.groq.com/openai/v1",
+            api_key="fine",
+            model="llama-3.3-70b-versatile",
+        )
+        provider._client = httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            base_url="https://api.groq.com/openai/v1",
+        )
+
+        with pytest.raises(ProviderTransientError):
+            await provider.send(system="s", user_prompt="u", max_tokens=8)
