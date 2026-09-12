@@ -528,13 +528,13 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
               </Button>
             )}
 
-            <Button
             {/* Reused rather than reimplemented: the same stop the shell and
                 the dashboard offer. It belongs here too — this is where an
                 operator is when they decide the automation should not carry on
                 without them. */}
             <KillSwitchButton className="ml-auto" />
 
+            <Button
               variant="ghost"
               className="text-danger hover:bg-danger/10 hover:text-danger"
               disabled={isBusy || application.status === 'discarded'}
