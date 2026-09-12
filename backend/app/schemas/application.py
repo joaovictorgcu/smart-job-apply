@@ -42,6 +42,14 @@ class ApplicationRead(ORMModel):
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
+    # Denormalised from the job so a list of applications can name its postings.
+    # Without these, a caller rendering "Backend Developer — Acme" has to fetch a
+    # page of jobs and join on the client, which is what the dashboard used to do
+    # — 200 job rows to label six applications.
+    job_title: str | None = None
+    job_company: str | None = None
+    job_score: int | None = None
+
 
 class ApplicationCard(BaseModel):
     """A submitted application as it appears on the pipeline board."""

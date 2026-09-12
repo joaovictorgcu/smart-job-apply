@@ -429,3 +429,41 @@ class TestEvents:
             ApplicationEventType.QUESTION_ANSWERED.value,
             ApplicationEventType.AWAITING_REVIEW.value,
         ]
+
+
+class TestTheListNamesItsPostings:
+    """A list of applications has to be renderable without a second fetch.
+
+    The dashboard used to pull 200 job rows to label six applications. These
+    three fields are what removed that, so they are asserted as part of the
+    list contract rather than left as an implementation detail.
+    """
+
+    async def test_each_row_carries_its_posting(
+        self, client: AsyncClient, session: AsyncSession, user: Any, auth_headers: dict[str, str]
+    ) -> None:
+        job = await create_job(session, user, title="Backend Developer", company="Acme", score=88)
+        await create_application(session, user, job)
+        await session.commit()
+
+        body = (await client.get("/api/applications", headers=auth_headers)).json()
+
+        row = body["items"][0]
+        assert row["job_title"] == "Backend Developer"
+        assert row["job_company"] == "Acme"
+        assert row["job_score"] == 88
+
+    async def test_the_fields_survive_a_status_filter(
+        self, client: AsyncClient, session: AsyncSession, user: Any, auth_headers: dict[str, str]
+    ) -> None:
+        job = await create_job(session, user, title="Backend Developer", company="Acme")
+        await create_application(session, user, job, status=ApplicationStatus.AWAITING_REVIEW)
+        await session.commit()
+
+        body = (
+            await client.get(
+                "/api/applications", headers=auth_headers, params={"status": "awaiting_review"}
+            )
+        ).json()
+
+        assert body["items"][0]["job_title"] == "Backend Developer"

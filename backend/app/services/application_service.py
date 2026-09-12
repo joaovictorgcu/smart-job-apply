@@ -7,9 +7,10 @@ import io
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, inspect, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.base import NO_VALUE
 
 from app.api.errors import NotFoundError, PreconditionFailedError
 from app.database.base import utcnow
@@ -123,6 +124,7 @@ async def list_applications(
     )
     result = await session.execute(
         select(Application)
+        .options(selectinload(Application.job))
         .where(*conditions)
         .order_by(Application.updated_at.desc(), Application.id.desc())
         .limit(limit)
@@ -626,7 +628,20 @@ async def submitted_last_days(session: AsyncSession, user: User, days: int = 7) 
 
 
 def to_application_read(application: Application) -> ApplicationRead:
-    return ApplicationRead.model_validate(application)
+    """The response model, with the posting's name filled in when it is loaded.
+
+    `application.job` is eagerly loaded by every list query here. Reading it
+    lazily would be an N+1, so a row that arrived without it reports `None`
+    rather than triggering one — the caller renders the id instead of the
+    title, which is the pre-existing behaviour.
+    """
+    read = ApplicationRead.model_validate(application)
+    job = inspect(application).attrs.job.loaded_value
+    if job is NO_VALUE or job is None:
+        return read
+    return read.model_copy(
+        update={"job_title": job.title, "job_company": job.company, "job_score": job.score}
+    )
 
 
 def to_application_card(application: Application) -> ApplicationCard:
