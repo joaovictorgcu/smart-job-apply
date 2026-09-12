@@ -9,7 +9,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import get_current_user, get_current_user_ws
+from app.auth.dependencies import get_current_admin, get_current_user, get_current_user_ws
 from app.config import get_settings
 from app.database import get_session
 from app.models import User
@@ -22,14 +22,19 @@ limiter = Limiter(key_func=get_remote_address, default_limits=[settings.rate_lim
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
+# Authenticated *and* holding the admin role. Used by the administrative router,
+# which applies it once at the router level so no endpoint can forget it.
+AdminUser = Annotated[User, Depends(get_current_admin)]
 LimitDep = Annotated[int, Query(ge=1, le=200, description="Page size.")]
 OffsetDep = Annotated[int, Query(ge=0, description="Number of items to skip.")]
 
 __all__ = [
+    "AdminUser",
     "CurrentUser",
     "LimitDep",
     "OffsetDep",
     "SessionDep",
+    "get_current_admin",
     "get_current_user",
     "get_current_user_ws",
     "get_session",

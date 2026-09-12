@@ -81,14 +81,39 @@ async def get_current_user_ws(websocket: WebSocket, token: str | None) -> User |
     return user
 
 
+async def get_current_admin(
+    user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """Resolve the authenticated user and require the administrator role.
+
+    Layered on `get_current_user` rather than re-reading the token, so the
+    account still has to be authenticated and active before the role is even
+    considered. This is the only gate the administrative API has, and it lives
+    on the server: the frontend hides the area, which is convenience, not
+    protection.
+    """
+    if not user.is_admin:
+        # WARNING, not INFO: a non-admin session reaching an /admin endpoint is
+        # either a bug in the frontend's routing or someone trying the URL.
+        logger.warning(
+            "Administrative endpoint refused for a non-admin account.",
+            extra={"action": "admin.authorize", "status": "denied", "user_id": user.id},
+        )
+        raise PermissionDeniedError("This area is restricted to administrators.")
+    return user
+
+
 CurrentUser = Annotated[User, Depends(get_current_user)]
+AdminUser = Annotated[User, Depends(get_current_admin)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 __all__ = [
     "WS_INVALID_TOKEN_CODE",
+    "AdminUser",
     "CurrentUser",
     "SessionDep",
     "bearer_scheme",
+    "get_current_admin",
     "get_current_user",
     "get_current_user_ws",
 ]

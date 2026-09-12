@@ -295,6 +295,39 @@
     @apply bg-accent-500/10 text-accent-400 hover:bg-accent-500/15 hover:text-accent-400;
   }
 
+  /* The administrative area, visually.
+     It re-points the accent ramp at the violet family and changes nothing else.
+     Every component class below and above — btn-primary, badge-accent,
+     nav-item-active, the focus ring, the chart series colour, shadow-glow —
+     resolves those same variables, so /admin reads as a different part of the
+     product while reusing the design system exactly as it is. One declaration
+     instead of a parallel set of admin components. */
+  .admin-scope {
+    --accent-50: 245 243 255;
+    --accent-100: 237 233 254;
+    --accent-200: 221 214 254;
+    --accent-300: 196 181 253;
+    --accent-400: 124 58 237;
+    --accent-500: 139 92 246;
+    --accent-600: 124 58 237;
+    --accent-700: 109 40 217;
+    --accent-800: 91 33 182;
+    --accent-900: 76 29 149;
+  }
+
+  .dark .admin-scope {
+    --accent-50: 76 29 149;
+    --accent-100: 91 33 182;
+    --accent-200: 109 40 217;
+    --accent-300: 124 58 237;
+    --accent-400: 183 160 253;
+    --accent-500: 154 111 250;
+    --accent-600: 139 92 246;
+    --accent-700: 167 139 250;
+    --accent-800: 196 181 253;
+    --accent-900: 221 214 254;
+  }
+
   .table-base {
     @apply w-full border-collapse text-left text-sm;
   }

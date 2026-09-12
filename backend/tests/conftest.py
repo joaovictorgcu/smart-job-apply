@@ -294,6 +294,18 @@ async def other_user(session: AsyncSession) -> Any:
 
 
 @pytest.fixture
+async def admin_user(session: AsyncSession) -> Any:
+    """An account holding the administrator role.
+
+    The role is a column, granted here the same way `scripts/create_admin.py`
+    grants it — there is no request that can set it, which is the point.
+    """
+    return await create_user(
+        session, email="admin@example.com", full_name="Admin User", is_admin=True
+    )
+
+
+@pytest.fixture
 def auth_headers(user: Any) -> dict[str, str]:
     return {"Authorization": f"Bearer {create_access_token(user.id)}"}
 
@@ -301,6 +313,11 @@ def auth_headers(user: Any) -> dict[str, str]:
 @pytest.fixture
 def other_auth_headers(other_user: Any) -> dict[str, str]:
     return {"Authorization": f"Bearer {create_access_token(other_user.id)}"}
+
+
+@pytest.fixture
+def admin_auth_headers(admin_user: Any) -> dict[str, str]:
+    return {"Authorization": f"Bearer {create_access_token(admin_user.id)}"}
 
 
 # --------------------------------------------------------------------------- #

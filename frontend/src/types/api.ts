@@ -1040,6 +1040,216 @@ export interface DashboardStats {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Admin panel (schemas/admin.py)                                             */
+/* -------------------------------------------------------------------------- */
+
+export const ADMIN_PERIODS = ["today", "7d", "30d", "90d", "custom"] as const;
+export type AdminPeriod = (typeof ADMIN_PERIODS)[number];
+
+export type MetricTrend = "up" | "down" | "flat" | "none";
+export type MetricUnit = "count" | "percent" | "seconds" | "milliseconds" | "usd";
+export type HealthStatus = "healthy" | "attention" | "problem";
+export type ServiceState = "online" | "attention" | "offline";
+export type AlertSeverity = "info" | "warning" | "critical";
+
+export interface AdminPeriodInfo {
+  period: AdminPeriod;
+  start: string;
+  end: string;
+  previous_start: string;
+  previous_end: string;
+  days: number;
+}
+
+/**
+ * One dashboard tile.
+ *
+ * `delta_pct` means different things per unit, and the backend decides which:
+ * a relative change for a count, a difference in percentage points for a rate.
+ * The renderer reads `unit` rather than guessing — see `MetricCard`.
+ */
+export interface Metric {
+  key: string;
+  value: number;
+  unit: MetricUnit;
+  previous: number | null;
+  delta_pct: number | null;
+  trend: MetricTrend;
+  has_data: boolean;
+}
+
+export interface FunnelStage {
+  key: string;
+  count: number;
+  conversion_from_previous: number | null;
+  conversion_from_start: number | null;
+}
+
+export interface GrowthPoint {
+  date: string;
+  users: number;
+  jobs: number;
+  applications: number;
+}
+
+export interface AutomationHealth {
+  status: HealthStatus;
+  active_runs: number;
+  runs_in_period: number;
+  runs_today: number;
+  completed: number;
+  failed: number;
+  blocked: number;
+  stopped: number;
+  last_run_at: string | null;
+  last_run_status: string | null;
+  /** Always null: nothing schedules runs, so no next run may be claimed. */
+  next_run_at: null;
+  scheduling: string;
+  avg_duration_seconds: number | null;
+  reasons: string[];
+}
+
+export interface AIHealth {
+  status: HealthStatus;
+  provider: string;
+  model: string;
+  configured: boolean;
+  calls: number;
+  succeeded: number;
+  failed: number;
+  refusals: number;
+  avg_latency_ms: number | null;
+  tokens_input: number;
+  tokens_output: number;
+  cost_usd: number | null;
+  reasons: string[];
+}
+
+export interface ServiceStatus {
+  service: string;
+  status: ServiceState;
+  detail: string;
+}
+
+export interface SystemHealth {
+  status: HealthStatus;
+  version: string;
+  environment: string;
+  services: ServiceStatus[];
+}
+
+export interface AdminAlert {
+  key: string;
+  severity: AlertSeverity;
+  title: string;
+  detail: string;
+  metric: string | null;
+}
+
+export interface AdminErrorEntry {
+  id: string;
+  occurred_at: string;
+  source: string;
+  kind: string;
+  summary: string;
+  detail: string | null;
+  count: number;
+}
+
+export interface AdminActivityEntry {
+  id: string;
+  occurred_at: string;
+  kind: string;
+  summary: string;
+  level: string;
+}
+
+export interface AdminUsageRow {
+  user_id: number;
+  email: string;
+  full_name: string | null;
+  jobs: number;
+  applications: number;
+  submitted: number;
+  last_activity_at: string | null;
+}
+
+export interface AdminUserRow {
+  id: number;
+  email: string;
+  full_name: string | null;
+  is_active: boolean;
+  is_admin: boolean;
+  created_at: string | null;
+  last_login_at: string | null;
+  jobs: number;
+  applications: number;
+  submitted: number;
+}
+
+export const ADMIN_USER_FILTERS = [
+  "all",
+  "active",
+  "inactive",
+  "new",
+  "with_applications",
+  "without_applications",
+] as const;
+export type AdminUserFilter = (typeof ADMIN_USER_FILTERS)[number];
+
+export interface AdminLabelCount {
+  label: string;
+  count: number;
+}
+
+export interface AdminJobInsights {
+  total: number;
+  recommended: number;
+  discarded: number;
+  applied: number;
+  expired: number;
+  average_score: number | null;
+  easy_apply_share: number | null;
+  top_titles: AdminLabelCount[];
+  top_companies: AdminLabelCount[];
+  top_locations: AdminLabelCount[];
+  top_sources: AdminLabelCount[];
+  top_technologies: AdminLabelCount[];
+  technologies_sampled: number;
+}
+
+export interface AdminOverview {
+  period: AdminPeriodInfo;
+  generated_at: string;
+  headline: Metric[];
+  operational: Metric[];
+  product: Metric[];
+  funnel: FunnelStage[];
+  growth: GrowthPoint[];
+  automation: AutomationHealth;
+  ai: AIHealth;
+  health: SystemHealth;
+  alerts: AdminAlert[];
+  usage: AdminUsageRow[];
+  errors: AdminErrorEntry[];
+  activity: AdminActivityEntry[];
+}
+
+/** Query shared by every admin endpoint that is period-scoped. */
+export interface AdminPeriodQuery {
+  period?: AdminPeriod;
+  /** Required when `period` is "custom" (ISO YYYY-MM-DD). */
+  start?: string;
+  end?: string;
+}
+
+export interface AdminUserQuery extends AdminPeriodQuery, Paginated {
+  search?: string;
+  filter?: AdminUserFilter;
+}
+
+/* -------------------------------------------------------------------------- */
 /* Misc                                                                      */
 /* -------------------------------------------------------------------------- */
 

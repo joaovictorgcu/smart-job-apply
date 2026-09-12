@@ -24,6 +24,7 @@
 #   make migration m=.. ->  cd backend; ..\.venv\Scripts\alembic revision
 #                             --autogenerate -m "..."
 #   make user           ->  .venv\Scripts\python scripts\create_user.py
+#   make admin          ->  .venv\Scripts\python scripts\create_admin.py
 #   make docker-*       ->  the same docker compose commands, unchanged
 #   make clean          ->  Remove-Item -Recurse -Force .venv, frontend\node_modules,
 #                             frontend\dist, .pytest_cache, .ruff_cache, .mypy_cache
@@ -42,7 +43,7 @@ BACKEND_PORT ?= 8000
 .DEFAULT_GOAL := help
 .PHONY: help install dev dev-backend dev-frontend build demo seed seed-demo \
         test e2e e2e-frontend test-all lint format typecheck migrate migration \
-        user docker-build docker-up docker-down docker-logs clean
+        user admin docker-build docker-up docker-down docker-logs clean
 
 help: ## Show this help
 	@printf 'smart-job-apply — available targets\n\n'
@@ -120,6 +121,9 @@ migration: ## Autogenerate a migration from the models (usage: make migration m=
 
 user: ## Create an application account (prompts for the password)
 	$(PY) scripts/create_user.py
+
+admin: ## Create or promote the /admin account (reads ADMIN_EMAIL, else prompts)
+	$(PY) scripts/create_admin.py
 
 docker-build: ## Build the Docker image
 	docker compose build

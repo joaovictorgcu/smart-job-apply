@@ -1,5 +1,6 @@
 """API request/response schemas."""
 
+from app.schemas.admin import AdminOverview
 from app.schemas.application import (
     ApplicationDetail,
     ApplicationEventOut,
@@ -27,6 +28,7 @@ from app.schemas.user import (
 )
 
 __all__ = [
+    "AdminOverview",
     "ApplicationDetail",
     "ApplicationEventOut",
     "ApplicationRead",

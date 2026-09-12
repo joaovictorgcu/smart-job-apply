@@ -15,6 +15,7 @@ import {
   type UseQueryResult,
 } from "@tanstack/react-query";
 
+import * as adminService from "@/services/admin";
 import * as applicationsService from "@/services/applications";
 import * as automationService from "@/services/automation";
 import * as jobsService from "@/services/jobs";
@@ -26,6 +27,13 @@ import * as statsService from "@/services/stats";
 import * as tailoringService from "@/services/tailoring";
 import type { ApiError } from "@/services/client";
 import type {
+  AdminActivityEntry,
+  AdminErrorEntry,
+  AdminJobInsights,
+  AdminOverview,
+  AdminPeriodQuery,
+  AdminUserQuery,
+  AdminUserRow,
   AIStatus,
   Application,
   ApplicationCard,
@@ -64,6 +72,7 @@ import type {
   SearchRunRequest,
   SearchUpdate,
   SessionStatus,
+  SystemHealth,
   TailoredResume,
   UserSettings,
   UserSettingsUpdate,
@@ -115,6 +124,19 @@ export const queryKeys = {
   run: (id: number) => ["automation", "run", id] as const,
 
   stats: () => ["stats"] as const,
+
+  // The admin panel's own subtree. `admin()` is the prefix of every key below,
+  // so the panel's refresh button invalidates all of them at once — and
+  // `queryClient.clear()` on logout drops platform-wide data with the rest.
+  admin: () => ["admin"] as const,
+  adminOverview: (query: AdminPeriodQuery = {}) => ["admin", "overview", query] as const,
+  adminUsers: (query: AdminUserQuery = {}) => ["admin", "users", query] as const,
+  adminJobs: (query: AdminPeriodQuery = {}) => ["admin", "jobs", query] as const,
+  adminErrors: (query: AdminPeriodQuery & { limit?: number } = {}) =>
+    ["admin", "errors", query] as const,
+  adminActivity: (query: AdminPeriodQuery & { limit?: number } = {}) =>
+    ["admin", "activity", query] as const,
+  adminHealth: () => ["admin", "health"] as const,
 } as const;
 
 type QueryOpts<T> = Omit<UseQueryOptions<T, ApiError>, "queryKey" | "queryFn">;
@@ -965,6 +987,112 @@ export function useStats(
   });
 }
 
+/* -------------------------------------------------------------------------- */
+/* Admin panel                                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The whole admin dashboard, from one request.
+ *
+ * A single query rather than one per panel: every section shares the period, and
+ * fanning out would let the tiles disagree about what "now" is. The backend
+ * caches it for ~30s, so `staleTime` matches — refetching sooner would only
+ * hand back the same snapshot.
+ */
+export function useAdminOverview(
+  query: AdminPeriodQuery = {},
+  options?: QueryOpts<AdminOverview>,
+): UseQueryResult<AdminOverview, ApiError> {
+  return useQuery<AdminOverview, ApiError>({
+    queryKey: queryKeys.adminOverview(query),
+    queryFn: ({ signal }) => adminService.fetchOverview(query, signal),
+    staleTime: 30_000,
+    ...options,
+  });
+}
+
+export function useAdminUsers(
+  query: AdminUserQuery = {},
+  options?: QueryOpts<Page<AdminUserRow>>,
+): UseQueryResult<Page<AdminUserRow>, ApiError> {
+  return useQuery<Page<AdminUserRow>, ApiError>({
+    queryKey: queryKeys.adminUsers(query),
+    queryFn: ({ signal }) => adminService.listUsers(query, signal),
+    ...options,
+  });
+}
+
+export function useAdminJobInsights(
+  query: AdminPeriodQuery = {},
+  options?: QueryOpts<AdminJobInsights>,
+): UseQueryResult<AdminJobInsights, ApiError> {
+  return useQuery<AdminJobInsights, ApiError>({
+    queryKey: queryKeys.adminJobs(query),
+    queryFn: ({ signal }) => adminService.fetchJobInsights(query, signal),
+    ...options,
+  });
+}
+
+export function useAdminErrors(
+  query: AdminPeriodQuery & { limit?: number } = {},
+  options?: QueryOpts<AdminErrorEntry[]>,
+): UseQueryResult<AdminErrorEntry[], ApiError> {
+  return useQuery<AdminErrorEntry[], ApiError>({
+    queryKey: queryKeys.adminErrors(query),
+    queryFn: ({ signal }) => adminService.listErrors(query, signal),
+    ...options,
+  });
+}
+
+export function useAdminActivity(
+  query: AdminPeriodQuery & { limit?: number } = {},
+  options?: QueryOpts<AdminActivityEntry[]>,
+): UseQueryResult<AdminActivityEntry[], ApiError> {
+  return useQuery<AdminActivityEntry[], ApiError>({
+    queryKey: queryKeys.adminActivity(query),
+    queryFn: ({ signal }) => adminService.listActivity(query, signal),
+    ...options,
+  });
+}
+
+export function useAdminHealth(
+  options?: QueryOpts<SystemHealth>,
+): UseQueryResult<SystemHealth, ApiError> {
+  return useQuery<SystemHealth, ApiError>({
+    queryKey: queryKeys.adminHealth(),
+    queryFn: ({ signal }) => adminService.fetchSystemHealth(signal),
+    ...options,
+  });
+}
+
+/**
+ * "Atualizar dados": recompute server-side, then replace the cached snapshot.
+ *
+ * A mutation rather than `refetch()` because it is an explicit action with a
+ * side effect on the server's cache, and it must show a pending state while the
+ * aggregates run.
+ */
+export function useRefreshAdminOverview(
+  query: AdminPeriodQuery = {},
+  options?: MutationOpts<AdminOverview, void>,
+): UseMutationResult<AdminOverview, ApiError, void> {
+  const client = useQueryClient();
+  return useMutation<AdminOverview, ApiError, void>({
+    mutationFn: () => adminService.fetchOverview({ ...query, refresh: true }),
+    ...options,
+    onSuccess: (data, vars, context) => {
+      client.setQueryData(queryKeys.adminOverview(query), data);
+      // The other admin screens read the same rows through their own endpoints.
+      void client.invalidateQueries({ queryKey: queryKeys.adminUsers() });
+      void client.invalidateQueries({ queryKey: queryKeys.adminJobs() });
+      void client.invalidateQueries({ queryKey: queryKeys.adminErrors() });
+      void client.invalidateQueries({ queryKey: queryKeys.adminActivity() });
+      void client.invalidateQueries({ queryKey: queryKeys.adminHealth() });
+      options?.onSuccess?.(data, vars, context);
+    },
+  });
+}
+
 /** Escape hatch for pages that need ad-hoc cache invalidation. */
 export function useInvalidate() {
   const client = useQueryClient();
@@ -975,5 +1103,6 @@ export function useInvalidate() {
     applications: () => client.invalidateQueries({ queryKey: queryKeys.applications() }),
     automation: () => client.invalidateQueries({ queryKey: queryKeys.automation() }),
     stats: () => client.invalidateQueries({ queryKey: queryKeys.stats() }),
+    admin: () => client.invalidateQueries({ queryKey: queryKeys.admin() }),
   };
 }

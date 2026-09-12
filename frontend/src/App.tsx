@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+import { AdminRoute } from "@/components/AdminRoute";
 import { AppShell } from "@/components/AppShell";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { FullPageSpinner } from "@/components/Spinner";
 import { AuthProvider } from "@/hooks/useAuth";
 import { EventsProvider } from "@/hooks/useEvents";
 import { ThemeProvider } from "@/lib/theme";
@@ -22,6 +24,14 @@ import { Profile } from "@/pages/Profile";
 import { Register } from "@/pages/Register";
 import { Searches } from "@/pages/Searches";
 import { Settings } from "@/pages/Settings";
+
+/**
+ * The administrative area, loaded on demand.
+ *
+ * A shell, four pages and a dozen panels that almost nobody who signs in will
+ * open — keeping them out of the main bundle costs one Suspense boundary.
+ */
+const AdminArea = lazy(() => import("@/pages/admin/AdminArea"));
 
 function createQueryClient(): QueryClient {
   return new QueryClient({
@@ -61,6 +71,24 @@ export function App() {
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
+
+                {/*
+                  The administrative area gets its own layout branch rather than
+                  a page inside AppShell: it has its own navigation and period
+                  filter, and none of the per-account controls (kill switch,
+                  dry-run) that shell carries. The guard is convenience — every
+                  /api/admin endpoint answers 403 on its own.
+                */}
+                <Route
+                  path="/admin/*"
+                  element={
+                    <AdminRoute>
+                      <Suspense fallback={<FullPageSpinner label="Carregando o painel" />}>
+                        <AdminArea />
+                      </Suspense>
+                    </AdminRoute>
+                  }
+                />
 
                 <Route
                   element={

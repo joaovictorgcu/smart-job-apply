@@ -42,6 +42,32 @@ Gere ambas as chaves com:
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
+### Administrador
+
+| Variável | Tipo | Padrão | O que faz |
+|---|---|---|---|
+| `ADMIN_EMAIL` | string | `""` | Conta do painel `/admin`. Lida **apenas** por `scripts/create_admin.py`; nenhuma outra parte da aplicação a consulta. |
+| `ADMIN_PASSWORD` | string | `""` | Senha dessa conta, usada uma única vez na criação. É gravada como hash bcrypt, como qualquer outra senha, e nenhum endpoint a devolve. |
+| `ADMIN_MIN_PASSWORD_LENGTH` | int | `10` | Mínimo exigido. Com `ENVIRONMENT=production` uma senha menor é **recusada**; fora de produção é aceita com um aviso, para um instalação local poder usar algo curto. |
+
+O papel de administrador é uma coluna (`users.is_admin`) e só este script a escreve —
+não existe requisição que promova uma conta. Rodar de novo é seguro: promove a conta
+existente e só troca a senha com `--reset-password`.
+
+```bash
+# valores vindos do .env
+python scripts/create_admin.py
+
+# ou perguntando a senha, sem deixá-la no histórico do shell
+python scripts/create_admin.py --email admin@exemplo.com
+
+# promover uma conta que já existe, sem tocar na senha
+python scripts/create_admin.py --email eu@exemplo.com --promote-only
+```
+
+Deixar as duas variáveis vazias é o hábito melhor: o script pergunta a senha, e ela não
+fica em disco. Quem tem esse acesso enxerga as métricas de todas as contas.
+
 ### IA
 
 | Variável | Tipo | Padrão | O que faz |

@@ -36,6 +36,19 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_ttl_minutes: int = 60 * 12
 
+    # --- Administration ---
+    # Credentials for the first administrator, read by `scripts/create_admin.py`.
+    # Empty here deliberately: a default admin password written in the source is
+    # a default admin password in production. Set both in `.env` (which is
+    # git-ignored) or in the environment, run the script once, and the values are
+    # never needed again — nothing else reads them, and no endpoint returns them.
+    admin_email: str = ""
+    admin_password: str = ""
+    # Below this a password is only accepted outside production, with a warning.
+    # The panel sees every account's metrics; the account that opens it is worth
+    # a real password once the deployment is real.
+    admin_min_password_length: int = 10
+
     # --- AI ---
     # Which provider answers. Empty means "decide from what is configured": the
     # paid Anthropic path when a key is present, otherwise the offline provider,

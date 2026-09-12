@@ -113,6 +113,11 @@ class AuditAction(StrEnum):
     SETTINGS_UPDATED = "settings_updated"
     PROFILE_UPDATED = "profile_updated"
     RESUME_UPLOADED = "resume_uploaded"
+    # An administrator read the platform-wide panel. Recorded once per admin per
+    # day rather than per page load: the answer worth keeping is "who has access
+    # and used it", and a row per refresh would bury every other entry in the
+    # trail. See `admin_service.record_panel_access`.
+    ADMIN_ACCESS = "admin_access"
 
 
 class AutomationRunStatus(StrEnum):

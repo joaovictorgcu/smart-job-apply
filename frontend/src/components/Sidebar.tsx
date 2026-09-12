@@ -7,11 +7,13 @@ import {
   Send,
   Settings,
   ShieldCheck,
+  SlidersHorizontal,
   User,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { NavLink } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 
+import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 
 interface NavEntry {
@@ -41,6 +43,7 @@ export interface SidebarProps {
 }
 
 export function Sidebar({ alwaysShowLabels = false, onNavigate, className }: SidebarProps) {
+  const { user } = useAuth();
   const labelClass = alwaysShowLabels ? 'inline' : 'hidden lg:inline';
 
   return (
@@ -90,6 +93,29 @@ export function Sidebar({ alwaysShowLabels = false, onNavigate, className }: Sid
             </li>
           ))}
         </ul>
+
+        {/* Only administrators see the way in. The link is a shortcut, not the
+            protection: /api/admin refuses a non-admin session on its own. */}
+        {user?.is_admin ? (
+          <div className="mt-2 border-t border-line pt-2">
+            <Link
+              to="/admin"
+              onClick={onNavigate}
+              title={alwaysShowLabels ? undefined : 'Área administrativa'}
+              className={cn(
+                'nav-item',
+                alwaysShowLabels ? '' : 'justify-center lg:justify-start',
+              )}
+            >
+              <SlidersHorizontal
+                aria-hidden
+                className="h-[18px] w-[18px] shrink-0"
+                strokeWidth={1.75}
+              />
+              <span className={cn('truncate', labelClass)}>Admin</span>
+            </Link>
+          </div>
+        ) : null}
       </nav>
 
       <div className={cn('px-3', alwaysShowLabels ? 'block' : 'hidden lg:block')}>
