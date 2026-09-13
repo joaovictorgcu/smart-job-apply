@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
-"""Does `frontend/src/types/api.ts` still describe the API it claims to mirror?
+"""Do the hand-written mirrors of this API still describe the API?
 
-That file opens with "Source of truth: backend/app/schemas/*.py ... Field names
-must match byte-for-byte." Nothing enforced it. A field added to a Pydantic
-model and forgotten here does not fail a build, does not fail a test, and does
-not fail a type check — it simply becomes a value the frontend is told does not
-exist. `JobRead.is_stale`, `deadline` and `expired_at` were exactly that: the
-backend refuses to prepare a stale posting, and the job card could not say so
-because its type denied the field.
+Two claims, neither of which anything enforced before this file existed:
+`frontend/src/types/api.ts` mirrors the Pydantic schemas, and `docs/api.md`
+documents routes that exist.
+
+The types file says so itself: "Source of truth: backend/app/schemas/*.py ...
+Field names must match byte-for-byte." A field added to a model and forgotten
+there fails no build, no test and no type check — it simply becomes a value the
+frontend is told does not exist. `JobRead.is_stale`, `deadline` and `expired_at`
+were exactly that: the backend refuses to prepare a stale posting, and the job
+card could not say so because its type denied the field.
+
+The docs go stale the same way and cost more: three sections described
+`/api/applications/{id}/resume` long after the real endpoints moved, so sixty-
+four lines told a reader to call something that answers 404.
 
 Why this is not in `tools/guards.py`: the guards are stdlib-only and must run
 before a single dependency is installed. Reading the schema means importing the
@@ -23,7 +30,7 @@ before deciding — one type had drifted, out of twenty-two.
 Usage:
     python tools/check_api_types.py [REPO_ROOT]
 Exit status:
-    0 when every mirrored type matches, 1 otherwise.
+    0 when every mirrored type matches and every documented route exists.
 """
 
 from __future__ import annotations
@@ -64,6 +71,11 @@ MIRRORS: dict[str, str] = {
 ALLOWED_MISSING: dict[str, set[str]] = {}
 
 TYPES_FILE = Path("frontend") / "src" / "types" / "api.ts"
+API_DOC = Path("docs") / "api.md"
+
+# Headings in `api.md` that name something other than a REST path. The WebSocket
+# is documented with the query string a client actually opens it with.
+DOC_EXEMPT: frozenset[str] = frozenset({"GET /api/ws"})
 
 # `export interface Name extends Parent {` ... `\n}` — anchored on the name so
 # `Job` does not match `JobPreferences`, and following `extends` so an inherited
@@ -102,12 +114,63 @@ def fields_of(
     return result
 
 
-def load_schemas(root: Path) -> dict[str, dict]:
-    """The live OpenAPI components, built from the real Pydantic models."""
+def load_openapi(root: Path) -> dict:
+    """The live OpenAPI document, built from the real routes and models."""
     sys.path.insert(0, str(root / "backend"))
     from app.main import create_app
 
-    return create_app().openapi()["components"]["schemas"]
+    return create_app().openapi()
+
+
+_DOC_HEADING = re.compile(r"^### `(GET|POST|PUT|PATCH|DELETE) (/api/[^`]+)`", re.M)
+_PATH_PARAM = re.compile(r"\{[^}]+\}")
+
+
+def _normalise(method: str, path: str) -> str:
+    """One spelling for a route, whichever side it came from.
+
+    The schema spells methods lowercase and names its own parameters
+    (`{job_id}`); the docs spell them uppercase and shorten to `{id}`. Both
+    differences have to collapse here or every route looks like a mismatch.
+    """
+    return f"{method.upper()} {_PATH_PARAM.sub('{}', path.split('?')[0].rstrip('/'))}"
+
+
+def check_documented_routes(root: Path, openapi: dict) -> int:
+    """Every route `api.md` documents must exist.
+
+    Three whole sections described `/api/applications/{id}/resume` — a GET, a
+    POST and a PATCH — after the real endpoints moved to `/api/resumes/...`.
+    Sixty-four lines telling a reader to call something that answers 404. Docs
+    do not fail a build on their own, which is the entire reason this is here.
+
+    Deliberately one-directional: an undocumented route is a gap someone can
+    close later, but a documented route that does not exist is a false
+    instruction, and those are worth failing over.
+    """
+    doc_path = root / API_DOC
+    if not doc_path.is_file():
+        print(f"MISSING  {API_DOC}")
+        return 1
+
+    live = {
+        _normalise(method, path)
+        for path, operations in openapi.get("paths", {}).items()
+        for method in operations
+        if method.upper() in {"GET", "POST", "PUT", "PATCH", "DELETE"}
+    }
+
+    problems = 0
+    for match in _DOC_HEADING.finditer(doc_path.read_text(encoding="utf-8")):
+        entry = _normalise(match.group(1), match.group(2))
+        if entry in DOC_EXEMPT or entry in live:
+            continue
+        print(
+            f"PHANTOM  {API_DOC} documents `{match.group(1)} {match.group(2)}`, "
+            "which the app does not serve — a reader following it gets a 404."
+        )
+        problems += 1
+    return problems
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -120,9 +183,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     own, parents = parse_interfaces(types_path.read_text(encoding="utf-8"))
-    schemas = load_schemas(root)
+    openapi = load_openapi(root)
+    schemas = openapi["components"]["schemas"]
 
-    problems = 0
+    problems = check_documented_routes(root, openapi)
     for ts_name, schema_name in sorted(MIRRORS.items()):
         if ts_name not in own:
             print(f"GONE     interface {ts_name} — it mirrored {schema_name}")
@@ -153,12 +217,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if problems:
         print(
-            f"\n{problems} mismatch(es). Fix {TYPES_FILE}, or add a documented entry to "
-            "ALLOWED_MISSING when the omission is deliberate."
+            f"\n{problems} mismatch(es). A PHANTOM line means {API_DOC} describes a route "
+            f"that does not exist; a DRIFT line means {TYPES_FILE} and the schema "
+            "disagree. A deliberate omission goes in ALLOWED_MISSING with its reason."
         )
         return 1
 
-    print(f"All {len(MIRRORS)} mirrored types match the API.")
+    print(f"All {len(MIRRORS)} mirrored types match the API, and every documented route exists.")
     return 0
 
 
