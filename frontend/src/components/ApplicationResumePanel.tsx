@@ -43,6 +43,7 @@ import {
   RESUME_CHANGE_ORDER,
   scoreTone,
 } from '@/lib/format';
+import { splitByTerms } from '@/lib/highlight';
 import { cn } from '@/lib/utils';
 import { errorMessage } from '@/services/client';
 import type {
@@ -110,6 +111,34 @@ function Term({ children, matched }: { children: string; matched?: boolean }) {
   );
 }
 
+/**
+ * A sentence with the posting's own asks marked inside it.
+ *
+ * The derivation decided which terms matched and put this bullet where it is;
+ * this shows the reader *which words* did that, in the words themselves. It
+ * cannot mark anything outside `terms`, so the highlight is always the server's
+ * answer rather than a second opinion about it.
+ */
+function Evidence({ text, terms }: { text: string; terms: string[] }) {
+  const segments = useMemo(() => splitByTerms(text, terms), [text, terms]);
+  return (
+    <>
+      {segments.map((segment, index) =>
+        segment.matched ? (
+          <mark
+            key={index}
+            className="rounded bg-accent-500/15 px-0.5 text-accent-400 decoration-clone"
+          >
+            {segment.text}
+          </mark>
+        ) : (
+          <span key={index}>{segment.text}</span>
+        ),
+      )}
+    </>
+  );
+}
+
 function ExperienceView({ experience }: { experience: AdaptedExperience }) {
   const matched = new Set(experience.matched_terms.map((term) => term.toLowerCase()));
 
@@ -139,7 +168,9 @@ function ExperienceView({ experience }: { experience: AdaptedExperience }) {
       ) : null}
 
       {experience.summary ? (
-        <p className="mt-2 text-xs leading-relaxed text-content-muted">{experience.summary}</p>
+        <p className="mt-2 text-xs leading-relaxed text-content-muted">
+          <Evidence text={experience.summary} terms={experience.matched_terms} />
+        </p>
       ) : null}
 
       {experience.responsibilities.length > 0 ? (
@@ -147,7 +178,9 @@ function ExperienceView({ experience }: { experience: AdaptedExperience }) {
           {experience.responsibilities.map((line) => (
             <li key={line} className="flex gap-2 text-xs leading-relaxed text-content-muted">
               <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-content-subtle" />
-              <span>{line}</span>
+              <span>
+                <Evidence text={line} terms={experience.matched_terms} />
+              </span>
             </li>
           ))}
         </ul>
@@ -158,7 +191,9 @@ function ExperienceView({ experience }: { experience: AdaptedExperience }) {
           {experience.results.map((line) => (
             <li key={line} className="flex gap-2 text-xs leading-relaxed text-content">
               <Star aria-hidden className="mt-0.5 h-3 w-3 shrink-0 text-accent-400" />
-              <span>{line}</span>
+              <span>
+                <Evidence text={line} terms={experience.matched_terms} />
+              </span>
             </li>
           ))}
         </ul>

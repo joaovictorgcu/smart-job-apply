@@ -402,3 +402,38 @@ describe("ApplicationResumePanel prose tab", () => {
     expect(screen.getByText(/rascunho em prosa para esta vaga/i)).toBeInTheDocument();
   });
 });
+
+describe("ApplicationResumePanel provenance", () => {
+  it("marks the posting's own asks inside the sentence that answers them", async () => {
+    // The claim a wrapper cannot make: not "it was tailored", but "these words
+    // are why this bullet is here".
+    await renderAdapted({
+      experiences: [
+        buildAdaptedExperience({
+          summary: "Construí APIs em .NET 8 sobre PostgreSQL.",
+          responsibilities: [],
+          results: [],
+          matched_terms: [".NET"],
+        }),
+      ],
+    });
+
+    const marks = document.querySelectorAll("mark");
+    expect(Array.from(marks).map((mark) => mark.textContent)).toEqual([".NET"]);
+  });
+
+  it("marks nothing this posting did not ask about", async () => {
+    await renderAdapted({
+      experiences: [
+        buildAdaptedExperience({
+          summary: "Orquestrei serviços com Kubernetes.",
+          responsibilities: [],
+          results: [],
+          matched_terms: [],
+        }),
+      ],
+    });
+
+    expect(document.querySelectorAll("mark")).toHaveLength(0);
+  });
+});
