@@ -58,6 +58,75 @@ A camada de IA segue o mesmo padrão. `JobScore`, `ScreeningAnswer`, `CoverLette
 `JobAnalysis` em [`ai/schemas.py`](../backend/app/ai/schemas.py) são o contrato; trocar o
 modelo, ou o provedor inteiro, não vaza para a camada da API.
 
+### Esta tabela é verificada, não combinada
+
+A tabela acima era só prosa, e prosa apodrece. Quando o guard **G9** foi escrito, ele achou na hora
+uma linha que já tinha se invertido: **todo service importava FastAPI**, porque a classe de exceção
+que ele levanta para dizer "não existe" morava no pacote HTTP. A regra estava escrita havia meses e
+nada a conferia.
+
+Hoje `tools/guards.py` falha o build em cada seta virada:
+
+| Guard | O que trava |
+|---|---|
+| G4 | Playwright fora de `automation/browser.py` e `automation/linkedin/` |
+| G5 | `app/domain/` importando ORM, SDK, framework ou qualquer camada acima — exceto `app.ai.schemas`, que é contrato puro |
+| G9 | cada linha da tabela de camadas do backend |
+| G10 | as mesmas setas em `frontend/src`, e o alias `@/` |
+
+As exceções são as duas de cima e nada mais. Se um guard novo precisar de uma lista de exceções para
+passar no próprio repositório, a lista é a resposta errada — ou a regra está errada, ou o código
+está, e nos dois casos a lista só ensina que dá para crescer a lista.
+
+### O frontend tem as mesmas setas
+
+`frontend/src` não tem pacote nem compilador que force nada, então a estrutura é a pasta em que o
+arquivo mora e o que aquela pasta pode alcançar. G10 verifica:
+
+| Pasta | Pode importar | Nunca |
+|---|---|---|
+| `pages/` | components, hooks, services, lib, types | — |
+| `components/` | components, hooks, services, lib, types | `@/pages` |
+| `hooks/` | services, lib, types | components, pages |
+| `services/` | lib, types | components, pages, hooks |
+| `lib/` | types | todo o resto |
+| `types/` | — | tudo |
+
+E uma regra que não é sobre camada: **todo import entre pastas usa `@/`**, nunca `../`. Os dois
+resolvem o mesmo módulo, mas `../../lib/format` codifica onde está *quem importa* — mover um arquivo
+passa a reescrever imports que não têm nada a ver com a mudança, e o diff de um refactor deixa de
+ser legível. `./Irmao` continua valendo: "do meu lado" continua verdade depois de mover a pasta.
+
+## Onde colocar um arquivo novo
+
+A pergunta que decide se o projeto vira bagunça não é "como isso funciona", é "onde isso vai". A
+resposta curta, por tipo de mudança:
+
+| Quero… | Vai em | Não vai em |
+|---|---|---|
+| uma regra de negócio testável sem banco | `app/domain/` | um service |
+| ler/escrever no banco, orquestrar uma operação | `app/services/` | uma rota |
+| expor isso por HTTP | `app/api/routes/` | um service |
+| o formato do que entra e sai da API | `app/schemas/` | `app/models/` |
+| uma tabela | `app/models/` + uma migration em `backend/migrations/versions/` | `create_all` |
+| falar com o LinkedIn | `app/automation/linkedin/` | o engine |
+| um seletor CSS do LinkedIn | `app/automation/selectors.py` | qualquer outro lugar |
+| um prompt | `app/ai/prompts/` | o service que o usa |
+| uma exceção que um service levanta | `app/errors.py` | `app/api/errors.py` |
+| uma tela | `frontend/src/pages/` | — |
+| um pedaço reutilizável de tela | `frontend/src/components/` | uma page |
+| uma chamada de API | `frontend/src/services/` | um componente |
+| formatação, texto, cálculo puro | `frontend/src/lib/` | um componente |
+
+Duas regras que valem mais que a tabela:
+
+**Se precisa de um mock para testar, provavelmente está na camada errada.** `app/domain/` e
+`frontend/src/lib/` rodam com valores simples e nada mais. Uma regra que só dá para testar subindo
+a coisa sobre a qual ela é uma regra é uma regra que ninguém vai testar.
+
+**A rota não decide nada.** Ela valida o corpo, chama um service e devolve um schema. Toda vez que
+lógica foi parar numa rota, ela acabou copiada na segunda rota que precisava dela.
+
 ## Modelo de dados
 
 Dezessete tabelas. Cada uma existe por um motivo, e algumas delas existem especificamente para tornar as

@@ -97,6 +97,11 @@ The full version is in [docs/development.md](docs/development.md#code-style). Th
 - Keep Playwright inside `app/automation/browser.py` and `app/automation/linkedin/`, and every selector
   inside `app/automation/selectors.py`. If a change makes the engine or a service import Playwright, the
   layering is wrong.
+- **Before adding a file, check where it goes:**
+  [docs/architecture.md#onde-colocar-um-arquivo-novo](docs/architecture.md#onde-colocar-um-arquivo-novo).
+  The layering is not a convention you have to remember — `python tools/guards.py` fails the build on a
+  service that imports FastAPI, a `lib/` module that imports a component, or an import written as `../`
+  instead of `@/`. Run it before you push; it needs nothing installed.
 - Keep `app/observability/events.py` and `frontend/src/types/events.ts` in step. A mismatch breaks the
   activity feed silently.
 
