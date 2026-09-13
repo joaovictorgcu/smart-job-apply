@@ -17,6 +17,7 @@ import { ApplicationResumePanel } from "@/components/ApplicationResumePanel";
 import {
   buildAdaptedExperience,
   buildApplicationResume,
+  buildResumeComparison,
   buildResumeVersion,
 } from "@/test/factories";
 import { renderWithProviders } from "@/test/utils";
@@ -172,18 +173,58 @@ describe("ApplicationResumePanel document", () => {
 });
 
 describe("ApplicationResumePanel change report", () => {
-  it("groups what was adapted for this vacancy", async () => {
+  it("reports each change once, and not once per surface that could show it", async () => {
     const user = userEvent.setup();
-    await renderAdapted();
+    await renderAdapted({ comparison: buildResumeComparison() });
+
+    await user.click(screen.getByRole("tab", { name: /o que foi adaptado/i }));
+
+    // The comparison panel above already lists the experiences that moved and
+    // the technologies that gained emphasis. These headings repeated it, twice
+    // over: "Competências destacadas" and "Tecnologias enfatizadas" were two
+    // columns of nearly the same bare words under the panel's own chips.
+    expect(screen.queryByText("Experiências priorizadas")).not.toBeInTheDocument();
+    expect(screen.queryByText("Descrições reordenadas")).not.toBeInTheDocument();
+    expect(screen.queryByText("Competências destacadas")).not.toBeInTheDocument();
+    expect(screen.queryByText("Tecnologias enfatizadas")).not.toBeInTheDocument();
+
+    // What the panel does not say: which projects this vacancy pulled forward.
+    expect(screen.getByText("Projetos relevantes")).toBeInTheDocument();
+  });
+
+  it("keeps the sections when there is no comparison to stand in for them", async () => {
+    // The API returns no comparison for a copy derived before it existed, and
+    // the panel draws nothing then. Dropping the sections as well would leave
+    // the tab silent about what actually changed.
+    const user = userEvent.setup();
+    await renderAdapted({ comparison: null });
 
     await user.click(screen.getByRole("tab", { name: /o que foi adaptado/i }));
 
     expect(screen.getByText("Experiências priorizadas")).toBeInTheDocument();
-    expect(screen.getByText("Descrições reordenadas")).toBeInTheDocument();
-    expect(screen.getByText("Competências destacadas")).toBeInTheDocument();
     expect(screen.getByText("Tecnologias enfatizadas")).toBeInTheDocument();
-    expect(screen.getByText("Projetos relevantes")).toBeInTheDocument();
-    expect(screen.getByText(/2 de 3 itens subiram na descrição/i)).toBeInTheDocument();
+  });
+
+  it("keeps them when the master moved on and the comparison is not meaningful", async () => {
+    const user = userEvent.setup();
+    await renderAdapted({ comparison: buildResumeComparison({ is_comparable: false }) });
+
+    await user.click(screen.getByRole("tab", { name: /o que foi adaptado/i }));
+
+    expect(screen.getByText("Experiências priorizadas")).toBeInTheDocument();
+  });
+
+  it("still reports a change kind the comparison panel knows nothing about", async () => {
+    const user = userEvent.setup();
+    await renderAdapted({
+      comparison: buildResumeComparison(),
+      changes: [{ kind: "language_added", target: "Inglês", terms: [], matched: 0, total: 0 }],
+    });
+
+    await user.click(screen.getByRole("tab", { name: /o que foi adaptado/i }));
+
+    // Unknown kinds fall back to a humanised heading rather than vanishing.
+    expect(screen.getByText("Inglês")).toBeInTheDocument();
   });
 
   it("breaks the adherence figure down into arguable factors", async () => {

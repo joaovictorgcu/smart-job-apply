@@ -292,10 +292,37 @@ function ExperienceEditor({
   );
 }
 
+/**
+ * The change kinds `ResumeComparisonPanel` already reports, right above this.
+ *
+ * It leads with the counters, then lists every experience that moved with how
+ * many of its bullets came up, then the technologies that gained emphasis as
+ * chips. Repeating those as three more headed lists said the same thing a
+ * second and a third time — "Competências destacadas" and "Tecnologias
+ * enfatizadas" were near-identical columns of bare words, under a panel whose
+ * chips were the same words again.
+ *
+ * Anything not in this set is still rendered below, so a kind the backend adds
+ * later shows up instead of disappearing into a gap nobody notices.
+ */
+const REPORTED_BY_COMPARISON: ReadonlySet<string> = new Set([
+  'experience_prioritized',
+  'experience_refocused',
+  'skill_highlighted',
+  'technology_emphasized',
+]);
+
 function ChangeReport({ resume }: { resume: ApplicationResume }) {
+  // Only a comparison that renders can stand in for these sections. With no
+  // comparison, or one the backend marked incomparable because the master moved
+  // on, the panel above draws nothing or draws a note — and dropping the
+  // sections then would leave the tab silent about what actually changed.
+  const comparisonReports = Boolean(resume.comparison?.is_comparable);
+
   const grouped = useMemo(() => {
     const buckets = new Map<string, ResumeChange[]>();
     for (const change of resume.changes) {
+      if (comparisonReports && REPORTED_BY_COMPARISON.has(change.kind)) continue;
       const bucket = buckets.get(change.kind) ?? [];
       bucket.push(change);
       buckets.set(change.kind, bucket);
@@ -303,7 +330,7 @@ function ChangeReport({ resume }: { resume: ApplicationResume }) {
     const known = RESUME_CHANGE_ORDER.filter((kind) => buckets.has(kind));
     const extra = [...buckets.keys()].filter((kind) => !RESUME_CHANGE_ORDER.includes(kind));
     return [...known, ...extra].map((kind) => [kind, buckets.get(kind) ?? []] as const);
-  }, [resume.changes]);
+  }, [resume.changes, comparisonReports]);
 
   if (resume.changes.length === 0) {
     return (

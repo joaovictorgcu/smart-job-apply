@@ -13,6 +13,7 @@ import type {
   Experience,
   Job,
   PreviewResponse,
+  ResumeComparison,
   ResumeVersionSummary,
   ScreeningAnswer,
   UserSettings,
@@ -204,6 +205,41 @@ export function buildAdaptedExperience(
     relevance: 100,
     matched_terms: ["C#", ".NET", "PostgreSQL"],
     promoted: 2,
+    ...overrides,
+  };
+}
+
+/**
+ * A comparison the panel can actually draw.
+ *
+ * Separate from `buildApplicationResume` on purpose: the API returns `null`
+ * here for a copy derived before the comparison existed, and the panel has to
+ * stay correct in that state, so the default resume leaves it out and the tests
+ * that need the panel rendered ask for it.
+ */
+export function buildResumeComparison(
+  overrides: Partial<ResumeComparison> = {},
+): ResumeComparison {
+  return {
+    moves: [
+      {
+        experience_id: 1,
+        company: "Globalthings",
+        role: "Engenheiro de Software Sênior",
+        from_position: 1,
+        to_position: 0,
+        promoted_bullets: 2,
+        matched_terms: ["C#", ".NET"],
+      },
+    ],
+    highlighted_technologies: ["C#", ".NET"],
+    promoted_bullets: 2,
+    invented: [],
+    experiences_reordered: 1,
+    sections_adjusted: 1,
+    changes_total: 5,
+    is_clean: true,
+    is_comparable: true,
     ...overrides,
   };
 }
