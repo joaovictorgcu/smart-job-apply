@@ -29,15 +29,21 @@ export function KillSwitchButton({ className, iconOnly = false }: KillSwitchButt
 
   const isActive = Boolean(session?.active_run_id);
 
+  // Nothing running, nothing to stop. It used to render disabled, which put a
+  // dead control in the chrome of every screen — and a disabled button is not
+  // reachable in an emergency anyway, so it bought no safety for the noise it
+  // cost. Appearing the moment a run starts is both quieter and a clearer
+  // signal than a button that is always there and almost always grey.
+  if (!isActive && !stop.isPending) return null;
+
   return (
     <Button
-      variant={isActive ? 'danger' : 'default'}
+      variant="danger"
       onClick={() => stop.mutate()}
-      disabled={!isActive}
       loading={stop.isPending}
       aria-label="Parar a automação agora"
-      title={isActive ? 'Parar a automação em execução agora' : 'Nenhuma execução de automação está ativa'}
-      className={cn(isActive && 'animate-fade-in', className)}
+      title="Parar a automação em execução agora"
+      className={cn('animate-fade-in', className)}
       icon={<OctagonX aria-hidden className="h-4 w-4" />}
     >
       <span className={cn(iconOnly && 'sr-only')}>Parar</span>

@@ -1,4 +1,4 @@
-import { Activity, Bot, CheckCircle2, Circle, Info, Linkedin, MonitorPlay, Power } from 'lucide-react';
+import { Activity, Bot, CheckCircle2, Info, Linkedin, MonitorPlay, Power } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -9,32 +9,61 @@ import { errorMessage } from '@/services/client';
 import { Button, Card, CardHeader, Note, Skeleton } from './primitives';
 import { useToast } from './ToastProvider';
 
+/**
+ * Where a step sits in the sequence, which is what decides its weight.
+ *
+ * `next` is the only one the user can act on: the browser has to be open before
+ * anyone can log in. Giving all three the same weight asked the reader to work
+ * out the order for themselves every time they looked.
+ */
+type StepState = 'done' | 'next' | 'later';
+
 interface CheckRowProps {
   icon: LucideIcon;
   label: string;
-  ok: boolean;
+  state: StepState;
   okText: string;
   pendingText: string;
 }
 
-function CheckRow({ icon: Icon, label, ok, okText, pendingText }: CheckRowProps) {
+function CheckRow({ icon: Icon, label, state, okText, pendingText }: CheckRowProps) {
+  const done = state === 'done';
   return (
-    <li className="flex items-start gap-3 py-2.5">
-      <Icon
-        aria-hidden
-        className={cn('mt-0.5 h-4 w-4 shrink-0', ok ? 'text-success' : 'text-content-subtle')}
-        strokeWidth={1.75}
-      />
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-content">{label}</p>
-        <p className="text-xs leading-relaxed text-content-subtle">{ok ? okText : pendingText}</p>
-      </div>
-      {ok ? (
+    <li
+      className={cn(
+        'flex items-start gap-3 py-2.5',
+        // A step that cannot be reached yet steps back rather than disappearing:
+        // seeing what comes after is the point of showing the sequence at all.
+        state === 'later' && 'opacity-55',
+      )}
+    >
+      {/* One status mark, not two. The row used to colour this icon *and* trail
+          a filled-or-empty circle saying the same thing — and an empty circle at
+          the end of a row reads as a radio button nobody can click. */}
+      {done ? (
         <CheckCircle2 aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-success" />
       ) : (
-        <Circle aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-content-subtle/60" />
+        <Icon
+          aria-hidden
+          className={cn(
+            'mt-0.5 h-4 w-4 shrink-0',
+            state === 'next' ? 'text-accent-400' : 'text-content-subtle',
+          )}
+          strokeWidth={1.75}
+        />
       )}
-      <span className="sr-only">{ok ? 'pronto' : 'não pronto'}</span>
+      <div className="min-w-0 flex-1">
+        <p
+          className={cn(
+            'text-sm',
+            state === 'next' ? 'font-semibold text-content' : 'font-medium text-content-muted',
+          )}
+        >
+          {label}
+        </p>
+        <p className="text-xs leading-relaxed text-content-subtle">{done ? okText : pendingText}</p>
+      </div>
+      <span className="sr-only">{done ? 'pronto' : 'não pronto'}</span>
     </li>
   );
 }
@@ -75,6 +104,17 @@ export function SessionStatusCard({ className }: { className?: string }) {
 
   const ready = session.browser_open && session.logged_in;
 
+  // The steps run in order — a browser window has to exist before anyone can
+  // log into it — so only the first unsatisfied one is actionable. The AI key
+  // is deliberately last and independent: it blocks scoring, never the session.
+  const stepStates: StepState[] = (() => {
+    const done = [session.browser_open, session.logged_in, session.ai_configured];
+    const firstPending = done.indexOf(false);
+    return done.map((ok, index) =>
+      ok ? 'done' : index === firstPending ? 'next' : 'later',
+    );
+  })();
+
   return (
     <Card className={className}>
       <CardHeader
@@ -95,21 +135,21 @@ export function SessionStatusCard({ className }: { className?: string }) {
           <CheckRow
             icon={MonitorPlay}
             label="Janela do navegador"
-            ok={session.browser_open}
+            state={stepStates[0]}
             okText="Uma janela controlada do Chrome está aberta."
             pendingText="Fechada — inicie uma sessão para abrir uma."
           />
           <CheckRow
             icon={Linkedin}
             label="Login no LinkedIn"
-            ok={session.logged_in}
+            state={stepStates[1]}
             okText="Autenticado; apenas os cookies da sessão são armazenados, criptografados."
             pendingText="Faça login você mesmo na janela do navegador. A sua senha nunca é armazenada."
           />
           <CheckRow
             icon={Bot}
             label="Análise por IA"
-            ok={session.ai_configured}
+            state={stepStates[2]}
             okText="Uma chave de API está configurada; as vagas podem ser pontuadas automaticamente."
             pendingText="Nenhuma chave de API configurada — pontuação e cartas de apresentação ficam indisponíveis."
           />

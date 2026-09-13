@@ -75,10 +75,17 @@ export function DryRunToggle({ className, compact = false }: DryRunToggleProps) 
         >
           {enabled ? 'Modo de teste' : 'Modo real'}
         </span>
+        {/*
+         * Not green. The switch is on in the *safe* state, so a success tone
+         * spent the brightest colour in the app on the normal case and left the
+         * risky one — real applications can now leave your account — as the
+         * quiet grey half of a toggle. The container carries the warning when it
+         * is off; the switch itself just reports a setting.
+         */}
         <Toggle
           label={enabled ? 'Modo de teste ativado — desligue para permitir envios reais' : 'Modo de teste desativado — ligue para bloquear envios'}
           checked={enabled}
-          tone="success"
+          tone="accent"
           disabled={updateSettings.isPending}
           onChange={handleChange}
         />
