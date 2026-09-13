@@ -156,51 +156,31 @@ fracas e cartas de apresentação vagas.
 
 ```json
 {
-  "headline": "Backend Engineer",
-  "location": "Fortaleza, Brazil",
-  "phone": "+55 85 ...",
-  "years_of_experience": 6,
+  "headline": "Desenvolvedor Full Stack",
+  "location": "Recife, PE",
+  "phone": "+55 81 ...",
+  "years_of_experience": 4,
   "summary": "...",
   "resume_text": "...",
-  "resume_filename": "cv.pdf",
-  "skills": ["Arquitetura de software", "Liderança técnica"],
-  "technologies": [".NET 8", "React", "Python", "APIs REST"],
-  "experiences": [
-    {
-      "key": "globalthings-tech-lead",
-      "company": "Globalthings",
-      "role": "Tech Lead",
-      "start": "2023-02",
-      "end": null,
-      "location": "Recife, PE",
-      "summary": "Lidera a plataforma de gestão de acessos.",
-      "technologies": [".NET 8", "SQL Server"],
-      "highlights": [
-        { "text": "Reescreveu o serviço de autorização em .NET 8.",
-          "technologies": [".NET 8", "APIs REST"],
-          "impact": "p95 de 420 ms para 120 ms" }
-      ],
-      "projects": [],
-      "focus": []
-    }
-  ],
-  "projects": [],
-  "education": [],
-  "certifications": ["AZ-204 — Azure Developer Associate"],
+  "resume_filename": "user_1_resume.pdf",
+  "skills": ["C#", ".NET", "React", "PostgreSQL"],
   "preferred_languages": ["pt-BR", "en"],
   "answer_bank": { "salary_expectation": "R$ 15.000", "notice_period": "30 days" },
   "updated_at": "2026-08-11T12:00:00+00:00"
 }
 ```
 
-Este é o **currículo principal**. `skills` são competências e `technologies` são ferramentas — uma vaga pede as duas
-em frases diferentes e as pesa de forma diferente. Cada `highlights[]` carrega as tecnologias que aquela realização
-envolveu de verdade: é isso que permite a uma candidatura de .NET abrir a mesma experiência com uma frase e a uma de
-React abrir com outra, sem inventar nenhuma das duas. `key` é a identidade da experiência entre versões e é atribuída
-pelo servidor — não a invente no cliente.
+Esta é **metade** do currículo principal: o texto livre, as competências e o banco de respostas. A outra
+metade são as experiências estruturadas, que ficam em `GET /api/profile/experiences` porque a derivação
+por vaga precisa raciocinar sobre cargo, empresa, período e realizações separadamente — veja
+[Currículo por candidatura](#currículo-por-candidatura) para o documento inteiro, já montado.
+
+`resume_filename` é o PDF enviado. Ele deixou de ser o que vai anexado às candidaturas — cada uma anexa a
+sua própria versão, desenhada em PDF — e continua sendo o texto que alimenta a pontuação, e o anexo de
+reserva quando não há versão própria a desenhar.
 
 Editar o principal muda o que as **próximas** candidaturas vão derivar. Candidaturas que já têm a sua versão
-continuam intocadas: veja `GET /api/applications/{id}/resume`.
+continuam intocadas: veja `GET /api/resumes/applications/{id}`.
 
 ### `PUT /api/profile`
 
@@ -240,14 +220,15 @@ curl -X POST http://localhost:8000/api/profile/resume \
 ```
 
 O arquivo é armazenado em `DATA_DIR/resumes/`, o texto dele é extraído para `resume_text`, e ambos são
-retornados no `ProfileRead` atualizado. O mesmo arquivo é anexado aos formulários de Candidatura Simplificada.
+retornados no `ProfileRead` atualizado. É o anexo de reserva: uma candidatura anexa a **sua** versão do
+currículo, e recorre a este arquivo quando não há versão própria a desenhar.
 
 ### `POST /api/profile/intake`
 
 `multipart/form-data` com um campo `file` opcional. **Nada do perfil é escrito aqui.**
 
-Com um arquivo, ele é armazenado (é esse PDF que vai anexado às candidaturas) e lido. Sem arquivo, o
-`resume_text` que já está no perfil é lido no lugar.
+Com um arquivo, ele é armazenado e lido. Sem arquivo, o `resume_text` que já está no perfil é lido no
+lugar.
 
 → `ResumeIntakeRead` — uma **proposta**:
 
@@ -755,70 +736,6 @@ Com `dry_run: true` o fluxo completa sem um envio real e a candidatura é marcad
 
 Abandona o rascunho e fecha o modal do LinkedIn. → `ApplicationDetail` com `status: "discarded"`. Registra
 um evento `DISCARDED`.
-
-### `GET /api/applications/{id}/resume`
-
-O currículo que **esta candidatura** apresenta, junto com o principal de onde ele saiu.
-
-→ `ApplicationResumeRead`:
-
-```json
-{
-  "application_id": 12,
-  "job_id": 34,
-  "job_title": "Desenvolvedor Backend .NET Sênior",
-  "job_company": "Contoso",
-  "document":      { "...": "o currículo desta candidatura" },
-  "base_document": { "...": "o principal como estava quando esta versão foi gerada" },
-  "focus": [".NET 8", "APIs REST", "SQL Server"],
-  "changes": [
-    { "section": "Experiência — Globalthings", "action": "rephrased",
-      "detail": "Descrição reescrita para destacar .NET 8 e APIs REST." }
-  ],
-  "invention_flags": [],
-  "source": "rules",
-  "is_stale": false,
-  "markdown": "# Tech Lead\n\n…",
-  "created_at": "2026-09-07T10:00:00+00:00",
-  "updated_at": "2026-09-07T10:05:00+00:00"
-}
-```
-
-`404` quando a candidatura ainda não tem versão própria — conta nova com currículo principal vazio, ou candidatura
-preparada antes desta funcionalidade existir. Nos dois casos, um `POST` resolve.
-
-`focus` são os **seus próprios** termos que esta vaga pediu, do mais forte para o mais fraco. A interseção é sempre
-com o seu vocabulário: uma vaga que exige Rust de quem nunca escreveu Rust não produz Rust em lugar nenhum.
-
-`base_document` é o instantâneo do principal no momento da geração. Ele viaja junto para a interface conseguir
-mostrar a diferença sem uma segunda chamada — e é o que prova que editar o principal depois não alcança esta
-candidatura. `is_stale` fica `true` quando o principal mudou desde então; a versão em si não muda.
-
-### `POST /api/applications/{id}/resume`
-
-Gera (ou regera) a versão desta candidatura a partir do currículo principal como ele está agora. Determinístico,
-sem chamada de modelo: só reordena, recolhe e reescreve o que já está no principal.
-
-Regerar é também o caminho de volta ao principal — descarta as edições **desta** versão e recomeça. Não toca em
-nenhuma outra candidatura e nunca toca no principal.
-
-`412` quando o currículo principal não tem experiências, competências nem tecnologias: não há o que priorizar.
-
-### `PATCH /api/applications/{id}/resume`
-
-`ApplicationResumeUpdate` — o documento inteiro:
-
-```json
-{ "document": { "...": "o currículo desta candidatura, editado" } }
-```
-
-Salva as suas edições nesta candidatura. O principal fica intocado, e nenhuma outra candidatura muda.
-
-`422` quando a edição muda a identidade de uma experiência (empresa, cargo ou período) ou introduz uma que o
-principal não tem: uma versão reenfatiza o passado, não o reescreve. Corrija o fato no principal e regere.
-
-Toda edição salva passa pelo guarda de invenção: tecnologia presente na versão e ausente do principal volta em
-`invention_flags` — sinalizada, nunca removida. Registra um evento `resume_tailored`.
 
 ### `GET /api/applications/{id}/events`
 
