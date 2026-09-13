@@ -36,7 +36,7 @@ from app.config import PROJECT_ROOT, get_settings
 from app.database.base import utcnow
 from app.database.schema_version import SchemaState, read_schema_status
 from app.domain.technologies import job_technologies
-from app.errors import ValidationError
+from app.errors import NotFoundError, ValidationError
 from app.models import (
     AIAnalysis,
     Application,
@@ -206,9 +206,7 @@ def resolve_period(
             raise ValidationError("'end' cannot be earlier than 'start'.")
         span_days = (end - start).days + 1
         if span_days > MAX_CUSTOM_DAYS:
-            raise ValidationError(
-                f"A custom period cannot be longer than {MAX_CUSTOM_DAYS} days."
-            )
+            raise ValidationError(f"A custom period cannot be longer than {MAX_CUSTOM_DAYS} days.")
         window_start = datetime.combine(start, datetime.min.time(), tzinfo=UTC)
         # Inclusive of the end date, and never in the future: a range ending
         # tomorrow would report a partial day as if it were complete.
@@ -419,9 +417,7 @@ async def _backlog_counts(session: AsyncSession) -> dict[str, int]:
     """
 
     async def count_where(model: Any, *conditions: Any) -> int:
-        result = await session.execute(
-            select(func.count()).select_from(model).where(*conditions)
-        )
+        result = await session.execute(select(func.count()).select_from(model).where(*conditions))
         return _int(result.scalar_one())
 
     return {
@@ -448,9 +444,7 @@ async def _interview_counts(session: AsyncSession, window: Window) -> dict[str, 
         select(
             _count_if(_within(Application.outcome_updated_at, window.start, window.end)),
             _count_if(
-                _within(
-                    Application.outcome_updated_at, window.previous_start, window.previous_end
-                )
+                _within(Application.outcome_updated_at, window.previous_start, window.previous_end)
             ),
         )
         .select_from(Application)
@@ -471,9 +465,7 @@ async def _automation_counts(session: AsyncSession, window: Window) -> dict[str,
             _count_if(and_(current, AutomationRun.status == AutomationRunStatus.FAILED)),
             _count_if(and_(current, AutomationRun.status == AutomationRunStatus.BLOCKED)),
             _count_if(and_(current, AutomationRun.status == AutomationRunStatus.STOPPED)),
-            _count_if(
-                and_(current, AutomationRun.created_at >= _start_of_day(window.end))
-            ),
+            _count_if(and_(current, AutomationRun.created_at >= _start_of_day(window.end))),
         )
         .select_from(AutomationRun)
         .where(
@@ -515,9 +507,7 @@ async def _run_durations(session: AsyncSession, window: Window) -> float | None:
         )
     ).all()
     spans = [
-        (finished - started).total_seconds()
-        for started, finished in rows
-        if finished >= started
+        (finished - started).total_seconds() for started, finished in rows if finished >= started
     ]
     if not spans:
         return None
@@ -734,9 +724,7 @@ def _funnel(
             FunnelStage(
                 key=key,
                 count=count,
-                conversion_from_previous=(
-                    _rate(count, previous) if previous is not None else None
-                ),
+                conversion_from_previous=(_rate(count, previous) if previous is not None else None),
                 conversion_from_start=_rate(count, first) if index else None,
             )
         )
@@ -899,9 +887,7 @@ async def build_system_health(
         services.append(
             ServiceStatus(
                 service="database",
-                status=(
-                    ServiceState.ATTENTION if schema.needs_action else ServiceState.ONLINE
-                ),
+                status=(ServiceState.ATTENTION if schema.needs_action else ServiceState.ONLINE),
                 detail=(
                     "Consultas respondendo."
                     if schema.state is SchemaState.CURRENT
@@ -1160,7 +1146,7 @@ def _summarise(message: str | None, fallback: str) -> str:
     first = text_value[0].strip() if text_value else ""
     if not first:
         return fallback
-    return first if len(first) <= SUMMARY_CHARS else f"{first[:SUMMARY_CHARS - 1]}…"
+    return first if len(first) <= SUMMARY_CHARS else f"{first[: SUMMARY_CHARS - 1]}…"
 
 
 async def count_errors(session: AsyncSession, start: datetime, end: datetime) -> int:
@@ -1170,9 +1156,7 @@ async def count_errors(session: AsyncSession, start: datetime, end: datetime) ->
         select(func.count())
         .select_from(AutomationRun)
         .where(
-            AutomationRun.status.in_(
-                (AutomationRunStatus.FAILED, AutomationRunStatus.BLOCKED)
-            ),
+            AutomationRun.status.in_((AutomationRunStatus.FAILED, AutomationRunStatus.BLOCKED)),
             _within(AutomationRun.created_at, start, end),
         ),
     )
@@ -1212,9 +1196,7 @@ async def list_errors(
         await session.execute(
             select(AutomationRun)
             .where(
-                AutomationRun.status.in_(
-                    (AutomationRunStatus.FAILED, AutomationRunStatus.BLOCKED)
-                ),
+                AutomationRun.status.in_((AutomationRunStatus.FAILED, AutomationRunStatus.BLOCKED)),
                 _within(AutomationRun.created_at, window.start, window.end),
             )
             .order_by(AutomationRun.created_at.desc(), AutomationRun.id.desc())
@@ -1241,9 +1223,7 @@ async def list_errors(
         await session.execute(
             select(AIAnalysis)
             .where(
-                or_(
-                    AIAnalysis.error_message.is_not(None), AIAnalysis.was_refusal.is_(True)
-                ),
+                or_(AIAnalysis.error_message.is_not(None), AIAnalysis.was_refusal.is_(True)),
                 _within(AIAnalysis.created_at, window.start, window.end),
             )
             .order_by(AIAnalysis.created_at.desc(), AIAnalysis.id.desc())
@@ -1291,7 +1271,34 @@ async def list_errors(
         )
 
     entries.sort(key=lambda entry: entry.occurred_at, reverse=True)
-    return entries[:limit]
+    return _collapse_repeats(entries)[:limit]
+
+
+def _collapse_repeats(entries: list[ErrorEntry]) -> list[ErrorEntry]:
+    """One row per distinct failure, carrying how many times it happened.
+
+    A rejected API key fails every call that touches it, so "erros recentes"
+    filled up with the same sentence over and over and pushed the other failures
+    off the list — the screen reported volume where the operator needed variety.
+    `ErrorEntry.count` existed for this from the start and nothing was setting
+    it.
+
+    Keyed on what the reader sees rather than on the row id: two different runs
+    refused by the same credential are one problem, and the newest occurrence is
+    the one worth timestamping.
+    """
+    seen: dict[tuple[str, str, str], ErrorEntry] = {}
+    for entry in entries:
+        key = (entry.source, entry.kind, entry.summary)
+        existing = seen.get(key)
+        if existing is None:
+            seen[key] = entry
+            continue
+        existing.count += 1
+        # The list is already newest-first, so the kept row is the most recent.
+        if entry.occurred_at > existing.occurred_at:
+            existing.occurred_at = entry.occurred_at
+    return sorted(seen.values(), key=lambda entry: entry.occurred_at, reverse=True)
 
 
 def _mask_email(email: str) -> str:
@@ -1306,6 +1313,21 @@ def _mask_email(email: str) -> str:
     head = local[:1] or "?"
     return f"{head}***@{domain}"
 
+
+# The run vocabulary in the language the panel is written in. These sentences
+# are composed here rather than in the client because the timeline merges three
+# sources and only the server knows which produced each row.
+_RUN_KIND_PT: dict[str, str] = {
+    "search": "Busca",
+    "prepare": "Preenchimento",
+    "submit": "Envio",
+}
+_RUN_STATUS_PT: dict[str, str] = {
+    "completed": "concluída",
+    "stopped": "interrompida",
+    "failed": "falhou",
+    "blocked": "bloqueada por verificação",
+}
 
 _ACTIVITY_EVENTS: dict[str, tuple[str, str]] = {
     "submitted": ("Candidatura enviada", "success"),
@@ -1394,9 +1416,13 @@ async def list_activity(
                 id=f"run:{run.id}",
                 occurred_at=run.finished_at or run.created_at,
                 kind=f"run_{run.status}",
+                # The enum values are English identifiers; interpolating them
+                # produced "Execução de search #1 · failed" in the middle of a
+                # Portuguese timeline.
                 summary=(
-                    f"Execução de {run.kind} #{run.id} · {run.status} "
-                    f"({run.jobs_found} vagas, {run.applications_prepared} preparos)"
+                    f"{_RUN_KIND_PT.get(run.kind, str(run.kind))} #{run.id} "
+                    f"{_RUN_STATUS_PT.get(run.status, str(run.status))} — "
+                    f"{run.jobs_found} vaga(s), {run.applications_prepared} preparo(s)"
                 ),
                 level=_RUN_LEVEL.get(run.status, "info"),
             )
@@ -1465,9 +1491,7 @@ async def list_usage(session: AsyncSession, *, limit: int = USAGE_LIMIT) -> list
             )
         ).all()
     }
-    users = (
-        await session.execute(select(User).where(User.id.in_(user_ids)))
-    ).scalars()
+    users = (await session.execute(select(User).where(User.id.in_(user_ids)))).scalars()
     by_id = {user.id: user for user in users}
 
     rows: list[UsageRow] = []
@@ -1506,9 +1530,7 @@ def _escape_like(term: str) -> str:
 
 
 def _user_filter(statement: Select[Any], choice: AdminUserFilter, window: Window) -> Select[Any]:
-    has_application = (
-        select(Application.id).where(Application.user_id == User.id).exists()
-    )
+    has_application = select(Application.id).where(Application.user_id == User.id).exists()
     if choice is AdminUserFilter.ACTIVE:
         return statement.where(User.is_active.is_(True))
     if choice is AdminUserFilter.INACTIVE:
@@ -1550,11 +1572,7 @@ async def list_users(
     statement = _user_filter(statement, user_filter, window)
 
     total = _int(
-        (
-            await session.execute(
-                select(func.count()).select_from(statement.subquery())
-            )
-        ).scalar_one()
+        (await session.execute(select(func.count()).select_from(statement.subquery()))).scalar_one()
     )
     users = list(
         (
@@ -1610,6 +1628,114 @@ async def list_users(
         for user in users
     ]
     return Page[AdminUserRow](items=items, total=total, limit=limit, offset=offset)
+
+
+async def set_account_active(
+    session: AsyncSession, admin: User, user_id: int, *, active: bool
+) -> AdminUserRow:
+    """Take away, or give back, one account's ability to sign in.
+
+    The only write the administrative API has, and deliberately the only one.
+    It is reversible, it is recorded, and `get_current_user` already refuses a
+    disabled account on the next request, so it takes effect everywhere at once
+    without a second mechanism.
+
+    What it is *not* is a way to grant the admin role. `users.is_admin` is still
+    written by `scripts/create_admin.py` and nothing else: an endpoint that
+    hands out platform-wide visibility is a much larger promise than an endpoint
+    that suspends one login, and the convenience does not pay for it.
+
+    Two refusals, both about locking the platform out of itself: an
+    administrator cannot disable their own account, and the last administrator
+    who can still sign in cannot be disabled at all.
+    """
+    user = await session.get(User, user_id)
+    if user is None:
+        raise NotFoundError("Account not found.")
+
+    if user.is_active == active:
+        return await _row_for(session, user)
+
+    if not active:
+        if user.id == admin.id:
+            raise ValidationError("You cannot disable your own account. Ask another administrator.")
+        if user.is_admin:
+            remaining = _int(
+                (
+                    await session.execute(
+                        select(func.count())
+                        .select_from(User)
+                        .where(
+                            User.is_admin.is_(True),
+                            User.is_active.is_(True),
+                            User.id != user.id,
+                        )
+                    )
+                ).scalar_one()
+            )
+            if remaining == 0:
+                raise ValidationError(
+                    "This is the last administrator who can sign in. Promote another "
+                    "account first with scripts/create_admin.py."
+                )
+
+    user.is_active = active
+    await session.flush()
+    await record_audit_event(
+        session,
+        user_id=admin.id,
+        action=(
+            AuditAction.ADMIN_ACCOUNT_ENABLED if active else AuditAction.ADMIN_ACCOUNT_DISABLED
+        ),
+        subject_type="user",
+        subject_id=user.id,
+        before={"is_active": not active},
+        after={"is_active": active, "email": user.email},
+    )
+    logger.warning(
+        "An administrator changed an account's access.",
+        extra={
+            "action": "admin.account_access",
+            "status": "ok",
+            "user_id": admin.id,
+            "target_user_id": user.id,
+            "is_active": active,
+        },
+    )
+    clear_cache()  # the user counters on the panel just moved
+    return await _row_for(session, user)
+
+
+async def _row_for(session: AsyncSession, user: User) -> AdminUserRow:
+    """One account with its counters, in the shape the list already returns."""
+    jobs = _int(
+        (
+            await session.execute(
+                select(func.count()).select_from(Job).where(Job.user_id == user.id)
+            )
+        ).scalar_one()
+    )
+    row = await _row(
+        session,
+        select(
+            func.count(Application.id),
+            _count_if(Application.status == ApplicationStatus.SUBMITTED),
+        )
+        .select_from(Application)
+        .where(Application.user_id == user.id),
+    )
+    return AdminUserRow(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        is_active=user.is_active,
+        is_admin=user.is_admin,
+        created_at=user.created_at,
+        last_login_at=user.last_login_at,
+        jobs=jobs,
+        applications=_int(row[0]),
+        submitted=_int(row[1]),
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -1756,9 +1882,7 @@ async def build_overview(
         await _run_durations(session, window),
     )
     ai = _ai_health(ai_counts)
-    health = await build_system_health(
-        session, automation=automation, ai=ai, backlog=backlog
-    )
+    health = await build_system_health(session, automation=automation, ai=ai, backlog=backlog)
 
     attempts = applications["submitted"] + applications["failed"]
     attempts_previous = applications["submitted_previous"] + applications["failed_previous"]
@@ -1865,9 +1989,7 @@ async def record_panel_access(session: AsyncSession, admin: User) -> None:
     )
 
 
-async def list_admin_audit(
-    session: AsyncSession, *, limit: int = 50
-) -> list[AuditEvent]:
+async def list_admin_audit(session: AsyncSession, *, limit: int = 50) -> list[AuditEvent]:
     """Administrative actions recorded so far, newest first."""
     result = await session.execute(
         select(AuditEvent)

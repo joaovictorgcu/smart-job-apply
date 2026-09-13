@@ -57,6 +57,11 @@ ADMIN_PATHS = (
     "/api/admin/audit",
 )
 
+# Everything that writes. Kept apart from the GETs because the parametrised
+# authorization tests below drive each path with `client.get`, and because the
+# one write in this router deserves its own refusals.
+ADMIN_WRITE_PATHS = ("/api/admin/users/{user_id}",)
+
 
 @pytest.fixture(autouse=True)
 def clean_admin_module_state() -> Any:
@@ -124,22 +129,26 @@ async def test_admin_account_is_allowed(
 async def test_every_admin_route_carries_the_dependency(app: Any) -> None:
     """No /api/admin route may be reachable without `get_current_admin`.
 
-    Asserted against the app's own route table, so adding an endpoint that
-    forgets the dependency fails here rather than in production.
+    Two halves, because FastAPI 0.141 stopped flattening included routers into
+    `app.routes`: the app is asked what it exposes, and the router those paths
+    come from is asked how each of its routes is guarded. Adding an endpoint
+    that forgets the dependency still fails here rather than in production.
     """
+    from app.api.routes import admin as admin_routes
     from app.auth.dependencies import get_current_admin
 
+    exposed = {path for path in app.openapi()["paths"] if path.startswith("/api/admin")}
+    assert exposed == set(ADMIN_PATHS) | set(ADMIN_WRITE_PATHS)
+
     checked = 0
-    for route in app.routes:
-        path = getattr(route, "path", "")
-        if not path.startswith("/api/admin"):
-            continue
+    for route in admin_routes.router.routes:
         checked += 1
         callables = [
-            dependency.call for dependency in route.dependant.dependencies  # type: ignore[attr-defined]
+            dependency.call
+            for dependency in route.dependant.dependencies  # type: ignore[attr-defined]
         ]
-        assert get_current_admin in callables, f"{path} is not admin-gated"
-    assert checked == len(ADMIN_PATHS)
+        assert get_current_admin in callables, f"{route.path} is not admin-gated"  # type: ignore[attr-defined]
+    assert checked == len(ADMIN_PATHS) + len(ADMIN_WRITE_PATHS)
 
 
 async def test_a_disabled_admin_cannot_read_the_panel(
@@ -395,9 +404,7 @@ async def test_growth_series_has_one_dense_point_per_day(
     await create_job(session, user, created_at=days_ago(2))
 
     payload = (
-        await client.get(
-            "/api/admin/overview", params={"period": "7d"}, headers=admin_auth_headers
-        )
+        await client.get("/api/admin/overview", params={"period": "7d"}, headers=admin_auth_headers)
     ).json()
     growth = payload["growth"]
 
@@ -432,9 +439,7 @@ async def test_interviews_count_the_period_they_were_recorded_in(
     )
 
     payload = (
-        await client.get(
-            "/api/admin/overview", params={"period": "7d"}, headers=admin_auth_headers
-        )
+        await client.get("/api/admin/overview", params={"period": "7d"}, headers=admin_auth_headers)
     ).json()
     assert _metric(payload, "operational", "interviews")["value"] == 1
 
@@ -462,9 +467,9 @@ async def test_automation_health_reports_failures_and_never_a_next_run(
     for _ in range(4):
         await create_run(session, user, status=AutomationRunStatus.FAILED)
 
-    automation = (
-        await client.get("/api/admin/overview", headers=admin_auth_headers)
-    ).json()["automation"]
+    automation = (await client.get("/api/admin/overview", headers=admin_auth_headers)).json()[
+        "automation"
+    ]
 
     assert automation["runs_in_period"] == 5
     assert automation["failed"] == 4
@@ -627,9 +632,7 @@ async def test_alert_fires_on_a_real_failure_rate(
             session,
             user,
             job,
-            status=(
-                ApplicationStatus.FAILED if index < 3 else ApplicationStatus.SUBMITTED
-            ),
+            status=(ApplicationStatus.FAILED if index < 3 else ApplicationStatus.SUBMITTED),
             submitted_at=datetime.now(UTC) if index >= 3 else None,
         )
 
@@ -802,9 +805,7 @@ async def test_users_filters_split_by_activity(
     await create_user(session, email="disabled@example.com", is_active=False)
 
     async def emails(**params: Any) -> set[str]:
-        response = await client.get(
-            "/api/admin/users", params=params, headers=admin_auth_headers
-        )
+        response = await client.get("/api/admin/users", params=params, headers=admin_auth_headers)
         return {item["email"] for item in response.json()["items"]}
 
     assert await emails(filter="with_applications") == {user.email}
@@ -900,9 +901,7 @@ async def test_panel_access_is_audited_once_per_day(
 ) -> None:
     """Two loads, one row. A page that refreshes every 30s must not flood the trail."""
     await client.get("/api/admin/overview", headers=admin_auth_headers)
-    await client.get(
-        "/api/admin/overview", params={"refresh": "true"}, headers=admin_auth_headers
-    )
+    await client.get("/api/admin/overview", params={"refresh": "true"}, headers=admin_auth_headers)
 
     events = (
         (
@@ -950,3 +949,196 @@ async def test_refresh_recomputes_instead_of_serving_the_cache(
         "/api/admin/overview", params={"refresh": "true"}, headers=admin_auth_headers
     )
     assert _metric(fresh.json(), "headline", "jobs_found")["value"] == 1
+
+
+# --------------------------------------------------------------------------- #
+# Suspending an account — the only write the panel has
+# --------------------------------------------------------------------------- #
+
+
+class TestAccountAccess:
+    """Taking a login away, and giving it back.
+
+    The refusals are the interesting half. Both exist to stop the platform
+    locking itself out, and neither can be reached through the UI — which is
+    exactly why they are asserted here rather than trusted to a disabled button.
+    """
+
+    async def test_it_is_closed_to_everyone_but_an_admin(
+        self, client: AsyncClient, auth_headers: dict[str, str], user: Any
+    ) -> None:
+        anonymous = await client.patch(f"/api/admin/users/{user.id}", json={"is_active": False})
+        normal = await client.patch(
+            f"/api/admin/users/{user.id}", json={"is_active": False}, headers=auth_headers
+        )
+
+        assert anonymous.status_code == 401
+        assert normal.status_code == 403
+
+    async def test_disabling_takes_effect_on_the_next_request(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        admin_auth_headers: dict[str, str],
+        user: Any,
+    ) -> None:
+        """No second mechanism: `get_current_user` already refuses the account."""
+        from app.auth.security import create_access_token
+
+        token = create_access_token(user.id)
+        before = await client.get("/api/stats", headers={"Authorization": f"Bearer {token}"})
+        assert before.status_code == 200
+
+        response = await client.patch(
+            f"/api/admin/users/{user.id}", json={"is_active": False}, headers=admin_auth_headers
+        )
+
+        assert response.status_code == 200
+        assert response.json()["is_active"] is False
+        # The token is still perfectly valid and still gets nowhere.
+        after = await client.get("/api/stats", headers={"Authorization": f"Bearer {token}"})
+        assert after.status_code == 403
+        assert "disabled" in after.json()["detail"].lower()
+
+    async def test_it_is_reversible(
+        self, client: AsyncClient, admin_auth_headers: dict[str, str], user: Any
+    ) -> None:
+        await client.patch(
+            f"/api/admin/users/{user.id}", json={"is_active": False}, headers=admin_auth_headers
+        )
+        back = await client.patch(
+            f"/api/admin/users/{user.id}", json={"is_active": True}, headers=admin_auth_headers
+        )
+
+        assert back.status_code == 200
+        assert back.json()["is_active"] is True
+
+    async def test_an_admin_cannot_lock_themselves_out(
+        self, client: AsyncClient, admin_auth_headers: dict[str, str], admin_user: Any
+    ) -> None:
+        response = await client.patch(
+            f"/api/admin/users/{admin_user.id}",
+            json={"is_active": False},
+            headers=admin_auth_headers,
+        )
+
+        assert response.status_code == 422
+        assert "your own account" in response.json()["detail"]
+
+    async def test_the_last_administrator_cannot_be_disabled(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        admin_auth_headers: dict[str, str],
+        admin_user: Any,
+    ) -> None:
+        """Disabling the only other admin would leave nobody able to undo it."""
+        from app.auth.security import create_access_token
+
+        second = await create_user(session, email="second-admin@example.com", is_admin=True)
+        # The second admin tries to disable the first: allowed only while a
+        # signed-in administrator would remain, and here one would not.
+        response = await client.patch(
+            f"/api/admin/users/{second.id}",
+            json={"is_active": False},
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 200  # two admins exist, so this one may go
+
+        remaining = await client.patch(
+            f"/api/admin/users/{admin_user.id}",
+            json={"is_active": False},
+            headers={"Authorization": f"Bearer {create_access_token(second.id)}"},
+        )
+        # `second` is disabled now, so it cannot act at all.
+        assert remaining.status_code == 403
+
+    async def test_the_administrator_who_did_it_is_recorded(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        admin_auth_headers: dict[str, str],
+        admin_user: Any,
+        user: Any,
+    ) -> None:
+        await client.patch(
+            f"/api/admin/users/{user.id}", json={"is_active": False}, headers=admin_auth_headers
+        )
+
+        events = (
+            (
+                await session.execute(
+                    select(AuditEvent).where(
+                        AuditEvent.action == AuditAction.ADMIN_ACCOUNT_DISABLED
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert len(events) == 1
+        # Against the administrator, because the trail answers "who did this".
+        assert events[0].user_id == admin_user.id
+        assert events[0].subject_id == user.id
+
+    async def test_an_unknown_account_is_a_404(
+        self, client: AsyncClient, admin_auth_headers: dict[str, str]
+    ) -> None:
+        response = await client.patch(
+            "/api/admin/users/98765", json={"is_active": False}, headers=admin_auth_headers
+        )
+        assert response.status_code == 404
+
+    async def test_the_role_itself_is_not_writable_here(self, app: Any) -> None:
+        """`is_admin` stays a column only `scripts/create_admin.py` writes.
+
+        An endpoint that grants platform-wide visibility is a much larger
+        promise than one that suspends a login. If a future change adds it, this
+        test is where that decision has to be made deliberately.
+        """
+        from app.schemas.admin import AdminAccountUpdate
+
+        assert set(AdminAccountUpdate.model_fields) == {"is_active"}
+
+
+async def test_the_same_failure_is_one_row_with_a_count(
+    client: AsyncClient,
+    session: AsyncSession,
+    admin_auth_headers: dict[str, str],
+    user: Any,
+) -> None:
+    """A rejected key fails every call it touches.
+
+    Left ungrouped, one broken credential filled "erros recentes" with the same
+    sentence and pushed every other failure off the screen — the panel reported
+    volume where the operator needed variety.
+    """
+    job = await create_job(session, user)
+    for _ in range(4):
+        await create_analysis(session, user, job, error_message="API key is invalid.")
+    await create_run(session, user, status=AutomationRunStatus.FAILED, error_message="Outra coisa.")
+
+    entries = (await client.get("/api/admin/errors", headers=admin_auth_headers)).json()
+
+    assert len(entries) == 2
+    repeated = next(entry for entry in entries if entry["source"] == "ai")
+    assert repeated["count"] == 4
+    assert next(entry for entry in entries if entry["source"] == "automation")["count"] == 1
+
+
+async def test_the_activity_timeline_has_no_english_identifiers(
+    client: AsyncClient,
+    session: AsyncSession,
+    admin_auth_headers: dict[str, str],
+    user: Any,
+) -> None:
+    """The run row read "Execução de search #1 · failed" — two enum values raw."""
+    await create_run(
+        session, user, kind=AutomationRunKind.SEARCH, status=AutomationRunStatus.FAILED
+    )
+
+    entries = (await client.get("/api/admin/activity", headers=admin_auth_headers)).json()
+    summary = next(entry["summary"] for entry in entries if entry["kind"].startswith("run_"))
+
+    assert "Busca" in summary and "falhou" in summary
+    assert "search" not in summary and "failed" not in summary

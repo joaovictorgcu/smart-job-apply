@@ -279,6 +279,18 @@ class AdminUserRow(BaseModel):
     submitted: int = 0
 
 
+class AdminAccountUpdate(BaseModel):
+    """The one thing an administrator may change about an account.
+
+    Deliberately not `is_admin`. Granting platform-wide visibility stays with
+    `scripts/create_admin.py`, where it takes a shell on the host — an endpoint
+    that hands out the role is a far larger promise than one that suspends a
+    login, and no screen needs it badly enough to pay for that.
+    """
+
+    is_active: bool
+
+
 class AdminUserFilter(StrEnum):
     ALL = "all"
     ACTIVE = "active"

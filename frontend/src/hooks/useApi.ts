@@ -1120,6 +1120,27 @@ export function useRefreshAdminOverview(
   });
 }
 
+/**
+ * Suspend an account's login, or give it back.
+ *
+ * Invalidates the whole admin subtree rather than patching the row: the user
+ * counters on the dashboard and the "usuários ativos" metric both move, and
+ * they are computed server-side.
+ */
+export function useSetAccountActive(
+  options?: MutationOpts<AdminUserRow, { userId: number; isActive: boolean }>,
+): UseMutationResult<AdminUserRow, ApiError, { userId: number; isActive: boolean }> {
+  const client = useQueryClient();
+  return useMutation<AdminUserRow, ApiError, { userId: number; isActive: boolean }>({
+    mutationFn: ({ userId, isActive }) => adminService.setAccountActive(userId, isActive),
+    ...options,
+    onSuccess: (data, vars, context) => {
+      void client.invalidateQueries({ queryKey: queryKeys.admin() });
+      options?.onSuccess?.(data, vars, context);
+    },
+  });
+}
+
 /** Escape hatch for pages that need ad-hoc cache invalidation. */
 export function useInvalidate() {
   const client = useQueryClient();

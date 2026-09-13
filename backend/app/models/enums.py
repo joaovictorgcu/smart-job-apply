@@ -118,6 +118,11 @@ class AuditAction(StrEnum):
     # and used it", and a row per refresh would bury every other entry in the
     # trail. See `admin_service.record_panel_access`.
     ADMIN_ACCESS = "admin_access"
+    # An administrator took away or gave back an account's ability to sign in.
+    # Recorded against the *administrator*, not the account: the trail answers
+    # "who did this", and the affected id travels in `after`.
+    ADMIN_ACCOUNT_DISABLED = "admin_account_disabled"
+    ADMIN_ACCOUNT_ENABLED = "admin_account_enabled"
 
 
 class AutomationRunStatus(StrEnum):

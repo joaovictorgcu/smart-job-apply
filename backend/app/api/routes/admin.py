@@ -22,6 +22,7 @@ from app.api.deps import AdminUser, SessionDep
 from app.auth.dependencies import get_current_admin
 from app.schemas.admin import (
     ActivityEntry,
+    AdminAccountUpdate,
     AdminOverview,
     AdminPeriod,
     AdminUserFilter,
@@ -45,9 +46,7 @@ router = APIRouter(
 PeriodDep = Annotated[AdminPeriod, Query(description="Window the metrics cover.")]
 StartDep = Annotated[date | None, Query(description="First day, for period=custom.")]
 EndDep = Annotated[date | None, Query(description="Last day (inclusive), for period=custom.")]
-RefreshDep = Annotated[
-    bool, Query(description="Skip the short-lived cache and recompute now.")
-]
+RefreshDep = Annotated[bool, Query(description="Skip the short-lived cache and recompute now.")]
 
 
 def _window(period: AdminPeriod, start: date | None, end: date | None) -> Window:
@@ -104,6 +103,26 @@ async def read_users(
         limit=limit,
         offset=offset,
     )
+
+
+@router.patch("/users/{user_id}", response_model=AdminUserRow)
+async def update_account_access(
+    user_id: int,
+    payload: AdminAccountUpdate,
+    admin: AdminUser,
+    session: SessionDep,
+) -> AdminUserRow:
+    """Suspend an account's ability to sign in, or give it back.
+
+    The only write in this router. It is reversible, it is recorded in the audit
+    trail against the administrator who did it, and `get_current_user` refuses a
+    disabled account on its very next request — so there is no second mechanism
+    to keep in step.
+
+    Refused when it would lock the platform out of itself: an administrator
+    disabling themselves, or the last administrator who can still sign in.
+    """
+    return await admin_service.set_account_active(session, admin, user_id, active=payload.is_active)
 
 
 @router.get("/jobs", response_model=JobInsights)

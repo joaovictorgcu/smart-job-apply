@@ -87,3 +87,13 @@ export function listActivity(
 export function fetchSystemHealth(signal?: AbortSignal): Promise<SystemHealth> {
   return api.get<SystemHealth>("/admin/health", { signal });
 }
+
+/**
+ * PATCH /api/admin/users/{id} — suspend an account's login, or give it back.
+ *
+ * The only write in the administrative API. `is_admin` is not settable here:
+ * the role stays something `scripts/create_admin.py` grants on the host.
+ */
+export function setAccountActive(userId: number, isActive: boolean): Promise<AdminUserRow> {
+  return api.patch<AdminUserRow>(`/admin/users/${userId}`, { is_active: isActive });
+}
