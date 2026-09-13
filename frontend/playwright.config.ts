@@ -25,6 +25,9 @@ const FRONTEND_PORT = 5173;
 
 export default defineConfig({
   testDir: "./e2e",
+  // `screenshots.spec.ts` lives here but is not a test: it writes PNGs into
+  // docs/images. It has its own config — see playwright.screenshots.config.ts.
+  testIgnore: /screenshots\.spec\.ts/,
   // The flow under test drives a real Chromium inside the backend as well as
   // the one Playwright drives, so steps are slower than a typical web test.
   timeout: 120_000,

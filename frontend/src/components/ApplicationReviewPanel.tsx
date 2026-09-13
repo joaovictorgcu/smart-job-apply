@@ -301,7 +301,9 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
   const jobUrl = safeExternalUrl(application.job?.url);
 
   return (
-    <div className={cn('space-y-4', className)}>
+    // See the testid on ApplicationResumePanel: both panels share one page and
+    // `e2e/screenshots.spec.ts` shoots them as separate pictures.
+    <div className={cn('space-y-4', className)} data-testid="application-review-panel">
       {/* First, and above every editor: approving is a decision about the whole
           document, and scrolling through the parts is not the same as seeing
           it. Hidden once the decision has been made. */}

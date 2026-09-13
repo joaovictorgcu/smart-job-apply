@@ -654,7 +654,9 @@ export function ApplicationResumePanel({
   }
 
   return (
-    <Card className={className}>
+    // The testid is for `e2e/screenshots.spec.ts`, which shoots this panel and
+    // the review panel separately although they share one page.
+    <Card className={className} data-testid="application-resume-panel">
       {header}
 
       <div className="card-body space-y-4">

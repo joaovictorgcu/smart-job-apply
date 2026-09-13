@@ -3,7 +3,11 @@ import { fileURLToPath, URL } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
-const BACKEND_ORIGIN = "http://127.0.0.1:8000";
+// Overridable so a second dev server can run beside a first one without the two
+// proxying to the same API. `npm run shots` uses this: it boots its own seeded
+// backend and must not talk to whatever is already on 8000.
+const BACKEND_ORIGIN = process.env.BACKEND_ORIGIN ?? "http://127.0.0.1:8000";
+const FRONTEND_PORT = Number(process.env.FRONTEND_PORT ?? 5173);
 
 export default defineConfig({
   plugins: [react()],
@@ -13,7 +17,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: FRONTEND_PORT,
     strictPort: true,
     proxy: {
       // `ws: true` keeps /api/ws working through the dev proxy; without it the

@@ -254,7 +254,7 @@ currículo para um anúncio — nunca adiciona experiência que você não tem �
 tecnologia que apareça no texto adaptado mas não no seu perfil, para que uma invenção não passe
 despercebida.
 
-![Painel de adaptação de currículo — a lista de mudanças, requisitos que o currículo não cobre e um alerta sinalizando "Kubernetes" como presente no CV adaptado mas não no perfil](docs/images/cv-tailoring.png)
+![Aba "O que foi adaptado" — sete alterações no total, seis tecnologias destacadas, um trecho reordenado e zero informações inventadas, seguidas das tecnologias que ganharam destaque e das descrições reordenadas](docs/images/cv-tailoring.png)
 
 **Funil — uma nota maior leva mesmo a uma entrevista?** A segunda forma de ler a mesma lista de
 candidaturas, num alternador dentro de **Candidaturas**: as que você enviou se movem por colunas de
@@ -262,22 +262,28 @@ desfecho (Enviada → Entrevista → Proposta → Rejeitada → Sem resposta), e
 entrevista para cada faixa de nota de aderência, para que a nota da IA seja confrontada com resultados
 reais em vez de aceita por fé.
 
-![Funil — colunas Kanban de candidaturas enviadas por desfecho e um gráfico da taxa de entrevista por faixa de nota de aderência, mostrando que faixas mais altas entrevistam com mais frequência](docs/images/pipeline.png)
+![Funil — seis enviadas, três entrevistas, uma proposta, taxa de entrevista por faixa de nota (100% em 90-100, 25% em 80-89), taxa por empresa, localização e modelo de trabalho, e as colunas de desfecho abaixo](docs/images/pipeline.png)
 
 | | |
 |---|---|
-| ![Painel — a fila de trabalho: as candidaturas que esperam revisão listadas com o botão que as abre, as vagas prontas para preparar, e os números do funil numa linha embaixo](docs/images/dashboard.png) | ![Lista de vagas — o que a vaga pede e você tem, o que ela pede e você não tem](docs/images/jobs.png) |
-| **Painel** — o que precisa de você agora, e a ação ao lado de cada coisa | **Vagas** — as duas listas que dá para conferir, não só a nota |
-| ![Revisão de candidatura — o portão de aprovação: carta editável, respostas de triagem com uma de baixa confiança sinalizada e a linha do tempo de eventos completa](docs/images/review.png) | ![Configurações — salvaguardas e preferências de IA](docs/images/settings.png) |
+| ![Painel — "Olá, Alex. O que você quer fazer hoje?", quatro candidaturas esperando revisão com um botão Abrir em cada, as vagas encontradas até agora e os números do funil numa linha](docs/images/dashboard.png) | ![Lista de vagas — cada cartão traz a nota, a cobertura "8 de 8 requisitos citados" e a linha do que você já tem](docs/images/jobs.png) |
+| **Painel** — o que precisa de você agora, e a ação ao lado de cada coisa | **Vagas** — o que dá para conferir, não só a nota |
+| ![Revisão — "O que será enviado": a vaga, o PDF que vai anexado com a contagem de alterações e zero informações inventadas, a carta e as respostas de triagem, com a carta editável logo abaixo](docs/images/review.png) | ![Configurações — limite diário, nota mínima, faixas de atraso e horário de funcionamento, cada campo com o texto que explica o que afrouxá-lo custa](docs/images/settings.png) |
 | **Revisão** — o que será enviado primeiro, depois o portão de aprovação e a linha do tempo | **Configurações** — salvaguardas, chave do modo de teste |
 
-> As capturas acima são anteriores à reformulação do painel e da tela de revisão; as legendas descrevem o
-> que as telas mostram hoje. Refazê-las está na lista.
+As capturas são geradas, não tiradas à mão:
 
-Para capturar as suas próprias: rode o app, popule-o com uma busca em modo de teste para que as telas tenham conteúdo real, então
-tire uma captura da viewport em 1440×900 (`Ctrl/Cmd+Shift+P` → "Capture screenshot" no Chrome DevTools) e
-salve em `docs/images/` com o nome de arquivo acima. **Borre ou recorte qualquer coisa identificável** antes de commitar —
-o seu e-mail, o seu telefone e o conteúdo do seu currículo aparecem nessas telas.
+```bash
+cd frontend && npm run shots
+```
+
+Isso semeia um banco próprio (`backend/data/screenshots`), sobe uma API só para a captura em
+`8010`, um dev server em `5174`, e reescreve os seis arquivos em `docs/images/` em 1440×900 —
+sem tocar em nenhum servidor que você já tenha aberto. Os dados são os de
+[`scripts/seed_mock.py`](scripts/seed_mock.py): determinísticos e inventados, então nenhum nome,
+e-mail ou currículo real aparece nas imagens. A tela de Configurações é reposta para os padrões que
+o produto traz de fábrica antes da foto, porque o modo de demo zera os atrasos para rodar rápido e
+isso na tela parece uma salvaguarda desligada.
 
 ---
 
