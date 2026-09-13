@@ -15,7 +15,7 @@ from app.schemas.user import (
     LinkedInAccountRead,
     UserRead,
 )
-from app.services import automation_service, user_service
+from app.services import automation_service, export_service, user_service
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/users", tags=["users"])
@@ -53,6 +53,32 @@ async def read_linkedin_account(user: CurrentUser, session: SessionDep) -> Linke
     if account is None:
         return LinkedInAccountRead()
     return LinkedInAccountRead.model_validate(account)
+
+
+@router.get("/me/export")
+async def export_account(user: CurrentUser, session: SessionDep) -> Response:
+    """Download everything this account holds, as one JSON file.
+
+    The other half of being able to delete the account: leaving should not mean
+    losing a year of applications. Profile, experiences, preferences, searches,
+    scored jobs, applications with their letters and answers, every event, the
+    AI analyses and the audit trail — all of it, column for column.
+
+    Three things are deliberately absent and the file says so itself: the
+    password hash, the LinkedIn session cookies and the AI key are credentials
+    rather than content, and the uploaded and rendered PDFs are files a JSON
+    document cannot carry, so it names where to fetch them instead.
+    """
+    export = await export_service.build_export(session, user)
+    return Response(
+        content=export_service.to_json(export),
+        media_type="application/json; charset=utf-8",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{export_service.filename_for(user)}"'
+            )
+        },
+    )
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
