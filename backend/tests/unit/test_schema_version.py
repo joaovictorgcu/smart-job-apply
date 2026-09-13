@@ -63,7 +63,9 @@ async def test_a_database_at_head_is_current(connection: AsyncConnection) -> Non
 async def test_a_database_behind_head_names_what_is_missing(
     connection: AsyncConnection,
 ) -> None:
-    """The exact situation that broke the app: stamped 0012, code at 0014."""
+    """The exact situation that broke the app: stamped 0012, code ahead of it."""
+    from app.database.schema_version import _head_revision
+
     await _stamp(connection, "0012")
 
     status = await read_schema_status(connection)
@@ -74,7 +76,12 @@ async def test_a_database_behind_head_names_what_is_missing(
     # Naming them is the point — "some migrations are pending" sends the reader
     # looking for which. In the order they will be applied, which is the order
     # the operator is about to watch scroll past.
-    assert status.pending == ("0013", "0014")
+    # Derived rather than pinned: a migration added tomorrow must not fail this
+    # test, but the order, and that the list runs all the way to head, are the
+    # claim being made.
+    assert status.pending[:2] == ("0013", "0014")
+    assert status.pending[-1] == _head_revision()
+    assert len(set(status.pending)) == len(status.pending)
     assert "alembic upgrade head" in status.summary
 
 
