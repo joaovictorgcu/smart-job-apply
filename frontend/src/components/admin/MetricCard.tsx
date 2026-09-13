@@ -44,6 +44,14 @@ export function MetricCard({ metric, className, dense = false }: MetricCardProps
   const delta = formatDelta(metric);
   const Icon = copy.icon;
 
+  // Nothing happened, and nothing happened before either. On a young install
+  // that is eight of the ten tiles, and giving them the same weight as the two
+  // carrying a number buries the answer the panel exists to give. A zero still
+  // has to be *there* — "no errors" is worth seeing — it just stops shouting,
+  // and it drops the "Período anterior: 0" line, which was a fact about
+  // nothing dressed as a comparison.
+  const quiet = metric.has_data && metric.value === 0 && !metric.previous;
+
   const body = (
     <>
       <div className="flex items-start justify-between gap-2">
@@ -55,7 +63,8 @@ export function MetricCard({ metric, className, dense = false }: MetricCardProps
         {metric.has_data ? (
           <span
             className={cn(
-              'tabular font-semibold leading-none text-content',
+              'tabular font-semibold leading-none',
+              quiet ? 'text-content-subtle' : 'text-content',
               dense ? 'text-2xl' : 'text-3xl',
             )}
           >
@@ -77,21 +86,19 @@ export function MetricCard({ metric, className, dense = false }: MetricCardProps
         )}
       </p>
 
-      {metric.has_data && delta ? (
+      {quiet ? null : metric.has_data && delta ? (
         <p className={cn('mt-1.5 flex items-center gap-1 text-xs font-medium', trendClass(decorated))}>
           <TrendIcon aria-hidden className="h-3.5 w-3.5 shrink-0" />
           <span className="tabular">{delta}</span>
           <span className="font-normal text-content-subtle">vs. período anterior</span>
         </p>
-      ) : metric.has_data && metric.previous !== null ? (
+      ) : metric.has_data && metric.previous ? (
         <p className="mt-1.5 text-xs text-content-subtle">
           Período anterior:{' '}
           <span className="tabular">{formatMetricValue(metric.previous, metric.unit)}</span>
         </p>
-      ) : (
-        <p className="mt-1.5 text-xs text-content-subtle">
-          {metric.has_data ? 'Sem base de comparação.' : 'Nada registrado neste período.'}
-        </p>
+      ) : metric.has_data ? null : (
+        <p className="mt-1.5 text-xs text-content-subtle">Nada registrado neste período.</p>
       )}
 
       {copy.hint ? (

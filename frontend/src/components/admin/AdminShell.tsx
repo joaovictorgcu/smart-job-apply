@@ -95,9 +95,10 @@ function AdminTopbar({ onOpenNav }: { onOpenNav: () => void }) {
  * Deliberately not `AppShell`: this area has its own navigation, its own period
  * filter, and no kill switch or dry-run toggle — those act on *one* account, and
  * an administrator looking at platform metrics is not operating their own
- * automation. `admin-scope` re-points the accent ramp at violet, which is what
- * makes the area recognisable without a second set of components (see
- * index.css).
+ * automation. The area announces itself with its own rail, its own navigation
+ * and a badge — not with a second brand colour, which would contradict the one
+ * rule the palette follows: accent marks what needs a person, not which section
+ * you are in.
  */
 export function AdminShell() {
   const [navOpen, setNavOpen] = useState(false);
@@ -110,7 +111,7 @@ export function AdminShell() {
   return (
     <AdminPeriodProvider>
       <ToastProvider>
-        <div className="admin-scope flex h-screen overflow-hidden bg-surface">
+        <div className="flex h-screen overflow-hidden bg-surface">
           <aside className="hidden shrink-0 border-r border-line bg-surface-sunken md:flex md:w-[4.5rem] lg:w-60">
             <AdminSidebar className="w-full" />
           </aside>
@@ -134,7 +135,6 @@ export function AdminShell() {
           side="left"
           width="max-w-[17rem]"
           title="Navegação administrativa"
-          className="admin-scope"
         >
           <AdminSidebar alwaysShowLabels onNavigate={() => setNavOpen(false)} className="py-0" />
         </Drawer>

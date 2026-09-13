@@ -207,7 +207,7 @@ describe("AdminDashboard", () => {
     await waitFor(() => expect(screen.getAllByText("sem dados").length).toBeGreaterThan(0));
   });
 
-  it("shows the comparison when there is one, and says so when there is not", async () => {
+  it("shows the comparison when there is one, and stays silent when there is not", async () => {
     adminMock.fetchOverview.mockResolvedValue(
       buildOverview({
         headline: [
@@ -222,9 +222,30 @@ describe("AdminDashboard", () => {
     const row = () => within(headline());
     await waitFor(() => expect(row().getByText("+100,0%")).toBeInTheDocument());
     expect(row().getByText("vs. período anterior")).toBeInTheDocument();
-    // The users tile has no previous value, so it says so instead of showing a
-    // comparison it cannot make.
-    expect(row().getByText("Sem base de comparação.")).toBeInTheDocument();
+    // The users tile has no previous value. It used to print "Sem base de
+    // comparação." — a sentence about the absence of a number, on every tile
+    // that had none. The missing arrow already says it.
+    expect(row().queryByText(/base de comparação/)).not.toBeInTheDocument();
+    expect(row().getByText("Usuários")).toBeInTheDocument();
+  });
+
+  it("lets a zero with no history recede instead of competing", async () => {
+    // Eight of the ten tiles read 0 on a young install. Giving them the weight
+    // of the two carrying a number buries the answer the panel exists to give.
+    adminMock.fetchOverview.mockResolvedValue(
+      buildOverview({
+        headline: [metric({ key: "jobs_found", value: 0 }), metric({ key: "users", value: 3 })],
+      }),
+    );
+
+    renderDashboard();
+
+    await waitFor(() => expect(within(headline()).getByText("Vagas encontradas")).toBeInTheDocument());
+    // The zero is still shown — "no errors" is worth seeing — just not shouted.
+    const zero = within(headline()).getByText("0");
+    expect(zero).toBeInTheDocument();
+    expect(zero.className).toMatch(/text-content-subtle/);
+    expect(within(headline()).queryByText(/Período anterior/)).not.toBeInTheDocument();
   });
 
   it("reports a healthy platform as having no alerts rather than hiding the card", async () => {

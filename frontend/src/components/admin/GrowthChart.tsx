@@ -18,8 +18,7 @@ import type { GrowthPoint } from '@/types/api';
 import { GROWTH_SERIES } from './labels';
 
 /* Same convention as ScoreChart: colours are CSS variables, so one declaration
-   serves both themes — and inside `.admin-scope` the accent ramp is violet, which
-   is why this chart matches the panel without naming a colour. */
+   serves both themes and the chart follows the palette without naming a hue. */
 const SERIES = 'rgb(var(--accent-500))';
 const GRID = 'rgb(var(--line))';
 const AXIS_TICK = { fill: 'rgb(var(--text-subtle))', fontSize: 11 } as const;
