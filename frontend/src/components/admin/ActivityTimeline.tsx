@@ -1,11 +1,12 @@
 import { Radio } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-import { EmptyState } from '@/components/EmptyState';
 import { Card, CardHeader, Skeleton } from '@/components/primitives';
 import { formatRelativeTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { AdminActivityEntry } from '@/types/api';
+
+import { PeriodEmptyState } from './period';
 
 const LEVEL_DOT: Record<string, string> = {
   success: 'bg-success',
@@ -56,10 +57,10 @@ export function ActivityTimeline({
       />
 
       {activity.length === 0 ? (
-        <EmptyState
+        <PeriodEmptyState
           compact
           icon={Radio}
-          title="Nenhuma atividade neste período"
+          what="Nenhuma atividade"
           description="Cadastros e execuções aparecem aqui assim que acontecerem."
         />
       ) : (

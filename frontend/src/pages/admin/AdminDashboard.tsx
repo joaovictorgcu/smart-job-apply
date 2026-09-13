@@ -1,5 +1,6 @@
 import { AlertOctagon } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 
 import { ActivityTimeline } from '@/components/admin/ActivityTimeline';
 import { AIPanel } from '@/components/admin/AIPanel';
@@ -39,6 +40,17 @@ function PeriodCaption({
 
 export function AdminDashboard() {
   const { query, period } = useAdminPeriod();
+  const { hash } = useLocation();
+
+  // The sidebar's last four entries are anchors into this page. React Router
+  // changes the URL without scrolling, so without this they would look like
+  // links that do nothing — which is what they replaced.
+  useEffect(() => {
+    if (!hash) return;
+    const target = document.getElementById(hash.slice(1));
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [hash]);
   const { data, isLoading, isError, error, refetch } = useAdminOverview(query);
 
   if (isError) {
@@ -102,15 +114,23 @@ export function AdminDashboard() {
 
       <div className="grid gap-4 xl:grid-cols-3">
         <GrowthChart growth={data?.growth} isLoading={isLoading} className="xl:col-span-2" />
-        <FunnelPanel funnel={data?.funnel} isLoading={isLoading} />
+        <div id="funil" className="scroll-mt-24">
+          <FunnelPanel funnel={data?.funnel} isLoading={isLoading} />
+        </div>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <AutomationPanel automation={data?.automation} isLoading={isLoading} />
-        <AIPanel ai={data?.ai} isLoading={isLoading} />
+        <div id="automacao" className="scroll-mt-24">
+          <AutomationPanel automation={data?.automation} isLoading={isLoading} />
+        </div>
+        <div id="ia" className="scroll-mt-24">
+          <AIPanel ai={data?.ai} isLoading={isLoading} />
+        </div>
       </div>
 
-      <HealthStrip health={data?.health} isLoading={isLoading} />
+      <div id="sistema" className="scroll-mt-24">
+        <HealthStrip health={data?.health} isLoading={isLoading} />
+      </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <ErrorsPanel

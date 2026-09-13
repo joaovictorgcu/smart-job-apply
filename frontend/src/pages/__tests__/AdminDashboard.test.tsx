@@ -162,7 +162,7 @@ describe("AdminDashboard", () => {
 
     expect(screen.getByRole("heading", { name: "Admin Dashboard" })).toBeInTheDocument();
     expect(screen.getByText("Visão geral da plataforma")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText(/7 dias/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/^7 dias ·/)).toBeInTheDocument());
   });
 
   it("marks the page busy while the metrics are in flight", async () => {
@@ -285,20 +285,86 @@ describe("AdminDashboard", () => {
     renderDashboard();
 
     await waitFor(() =>
-      expect(screen.getByText(/Nenhum registro de candidaturas neste período/)).toBeInTheDocument(),
+      expect(
+        screen.getByText(/Nenhum registro de candidaturas nos últimos 7 dias/),
+      ).toBeInTheDocument(),
     );
   });
 
-  it("explains an empty funnel and an empty error list", async () => {
+  it("points each alert at the screen where it is fixed", async () => {
+    adminMock.fetchOverview.mockResolvedValue(
+      buildOverview({
+        alerts: [
+          {
+            key: "ai_failing",
+            severity: "critical",
+            title: "Provider de IA com falhas",
+            detail: "2 de 2 chamadas falharam.",
+            metric: "ai_failed",
+          },
+        ],
+      }),
+    );
+
+    renderDashboard();
+
+    // An alert that only states a fact leaves the reader hunting for the screen
+    // that answers it.
+    const link = await screen.findByRole("link", { name: "Ver a saúde da IA" });
+    expect(link).toHaveAttribute("href", "/admin#ia");
+    expect(document.getElementById("ia")).not.toBeNull();
+  });
+
+  it("says how many times a repeated failure happened", async () => {
+    adminMock.fetchOverview.mockResolvedValue(
+      buildOverview({
+        errors: [
+          {
+            id: "run-1",
+            occurred_at: "2026-03-15T13:00:00Z",
+            source: "automation",
+            kind: "run_failed",
+            summary: "Sessão do LinkedIn expirou",
+            detail: null,
+            count: 4,
+          },
+        ],
+      }),
+    );
+
+    renderDashboard();
+
+    // The service collapses identical failures into one row; without the count
+    // four incidents read as one.
+    await waitFor(() => expect(screen.getByText("Sessão do LinkedIn expirou")).toBeInTheDocument());
+    expect(screen.getByText("4×")).toBeInTheDocument();
+  });
+
+  it("names the window every empty state is talking about", async () => {
     adminMock.fetchOverview.mockResolvedValue(buildOverview());
 
     renderDashboard();
 
+    // "neste período" is true of every window and useful in none: the panel
+    // defaults to seven days, so an older database reads as an empty one.
     await waitFor(() =>
-      expect(screen.getByText("Nenhuma vaga encontrada neste período")).toBeInTheDocument(),
+      expect(screen.getByText("Nenhuma vaga encontrada nos últimos 7 dias")).toBeInTheDocument(),
     );
-    expect(screen.getByText("Nenhum erro neste período")).toBeInTheDocument();
-    expect(screen.getByText("Nenhuma atividade neste período")).toBeInTheDocument();
+    expect(screen.getByText("Nenhum erro nos últimos 7 dias")).toBeInTheDocument();
+    expect(screen.getByText("Nenhuma atividade nos últimos 7 dias")).toBeInTheDocument();
+    expect(screen.queryByText(/neste período/)).not.toBeInTheDocument();
+  });
+
+  it("offers the next wider window where empty may just mean too narrow", async () => {
+    adminMock.fetchOverview.mockResolvedValue(buildOverview());
+
+    renderDashboard();
+
+    // The funnel and the timeline offer a way out; the error list does not,
+    // because an empty error list is the good outcome, not a failed search.
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: "Ver 30 dias" }).length).toBeGreaterThan(0),
+    );
   });
 
   it("never claims a next automation run, because nothing schedules one", async () => {

@@ -1,13 +1,13 @@
 import { CircleCheck } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-import { EmptyState } from '@/components/EmptyState';
 import { Card, CardHeader, Skeleton } from '@/components/primitives';
 import { badgeClass, formatTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { AdminErrorEntry } from '@/types/api';
 
 import { ERROR_SOURCE_LABELS } from './labels';
+import { PeriodEmptyState } from './period';
 
 const SOURCE_TONE: Record<string, 'danger' | 'warning' | 'info'> = {
   automation: 'warning',
@@ -59,10 +59,11 @@ export function ErrorsPanel({
       />
 
       {errors.length === 0 ? (
-        <EmptyState
+        <PeriodEmptyState
           compact
+          widen={false}
           icon={CircleCheck}
-          title="Nenhum erro neste período"
+          what="Nenhum erro"
           description="Execuções, chamadas de IA e candidaturas terminaram sem falhas registradas."
         />
       ) : (
@@ -78,6 +79,17 @@ export function ErrorsPanel({
                     {ERROR_SOURCE_LABELS[entry.source] ?? entry.source}
                   </span>
                   <span className="truncate text-sm text-content">{entry.summary}</span>
+                  {/* The service collapses identical failures into one row. Without
+                      this the list reads as a single incident, and the horizon it
+                      covers silently shrinks. */}
+                  {entry.count > 1 ? (
+                    <span
+                      className="tabular shrink-0 rounded border border-line px-1 text-2xs text-content-muted"
+                      title={`A mesma falha ocorreu ${entry.count} vezes; a hora é da mais recente.`}
+                    >
+                      {entry.count}×
+                    </span>
+                  ) : null}
                 </p>
                 {entry.detail ? (
                   <p className="mt-0.5 truncate text-2xs text-content-subtle">{entry.detail}</p>

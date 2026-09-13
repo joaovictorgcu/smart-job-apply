@@ -156,6 +156,30 @@ export const PERIOD_LABELS: Record<AdminPeriod, string> = {
   custom: 'Personalizado',
 };
 
+/**
+ * The same periods, written to sit inside a sentence.
+ *
+ * "Nenhuma vaga encontrada neste período" is true and useless: the reader has no
+ * idea which period, and the panel defaults to seven days, so a month-old
+ * database reads as an empty one. Every empty state names the window instead.
+ */
+export const PERIOD_PHRASES: Record<AdminPeriod, string> = {
+  today: 'hoje',
+  '7d': 'nos últimos 7 dias',
+  '30d': 'nos últimos 30 dias',
+  '90d': 'nos últimos 90 dias',
+  custom: 'no período escolhido',
+};
+
+/** The next window to offer when nothing was found — `null` at the widest. */
+export const WIDER_PERIOD: Record<AdminPeriod, AdminPeriod | null> = {
+  today: '7d',
+  '7d': '30d',
+  '30d': '90d',
+  '90d': null,
+  custom: null,
+};
+
 export const USER_FILTER_LABELS: Record<AdminUserFilter, string> = {
   all: 'Todos',
   active: 'Ativos',
@@ -232,6 +256,25 @@ export const SEVERITY_ICON: Record<AlertSeverity, LucideIcon> = {
   info: AlertTriangle,
   warning: TriangleAlert,
   critical: TriangleAlert,
+};
+
+/**
+ * Where each alert is actually fixed.
+ *
+ * An alert that only states a fact makes the reader hunt for the screen that
+ * answers it. Every key the service can emit is listed here; a key without an
+ * entry simply renders without a link instead of guessing a destination.
+ */
+export const ALERT_ACTIONS: Record<string, { to: string; label: string }> = {
+  application_failures: { to: '/admin/logs', label: 'Ver os erros' },
+  error_spike: { to: '/admin/logs', label: 'Ver os erros' },
+  ai_failing: { to: '/admin#ia', label: 'Ver a saúde da IA' },
+  ai_not_configured: { to: '/settings', label: 'Configurar a IA' },
+  ai_slow: { to: '/admin#ia', label: 'Ver a saúde da IA' },
+  review_backlog: { to: '/admin#funil', label: 'Ver o funil' },
+  automation_blocked: { to: '/admin#automacao', label: 'Ver a automação' },
+  automation_idle: { to: '/admin#automacao', label: 'Ver a automação' },
+  database_down: { to: '/admin#sistema', label: 'Ver o sistema' },
 };
 
 export const ERROR_SOURCE_LABELS: Record<string, string> = {

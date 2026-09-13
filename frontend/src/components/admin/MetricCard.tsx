@@ -6,8 +6,9 @@ import { Card, SectionLabel, Skeleton } from '@/components/primitives';
 import { cn } from '@/lib/utils';
 import type { Metric } from '@/types/api';
 
-import { metricCopy } from './labels';
+import { metricCopy, PERIOD_PHRASES } from './labels';
 import { formatDelta, formatMetricValue } from './metricFormat';
+import { useAdminPeriod } from './period';
 
 const TREND_ICON = {
   up: ArrowUpRight,
@@ -43,6 +44,8 @@ export function MetricCard({ metric, className, dense = false }: MetricCardProps
   const TrendIcon = TREND_ICON[metric.trend];
   const delta = formatDelta(metric);
   const Icon = copy.icon;
+  // "sem dados" is only half the sentence without the window it refers to.
+  const when = PERIOD_PHRASES[useAdminPeriod().period];
 
   // Nothing happened, and nothing happened before either. On a young install
   // that is eight of the ten tiles, and giving them the same weight as the two
@@ -98,7 +101,7 @@ export function MetricCard({ metric, className, dense = false }: MetricCardProps
           <span className="tabular">{formatMetricValue(metric.previous, metric.unit)}</span>
         </p>
       ) : metric.has_data ? null : (
-        <p className="mt-1.5 text-xs text-content-subtle">Nada registrado neste período.</p>
+        <p className="mt-1.5 text-xs text-content-subtle">Nada registrado {when}.</p>
       )}
 
       {copy.hint ? (

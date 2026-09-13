@@ -18,46 +18,31 @@ import { cn } from '@/lib/utils';
 interface AdminNavEntry {
   label: string;
   icon: LucideIcon;
-  to?: string;
+  to: string;
   end?: boolean;
-  /** Why this destination is not a page yet. Rendered as the item's tooltip. */
-  pending?: string;
 }
 
 /**
- * The panel's navigation, including the destinations that do not exist yet.
+ * The panel's navigation.
  *
- * The four without a `to` are shown as disabled with a reason, rather than
- * linking to a page built only to have something behind the link: every number
- * they would carry is already on the dashboard, in the section named in the
- * tooltip. When one of them earns a screen of its own, it gains a `to` here and
- * nothing else changes.
+ * Four of these used to render disabled, with a tooltip explaining that their
+ * numbers live on the dashboard. That was half the menu leading nowhere — the
+ * same dead-control problem as a permanently greyed "Parar" button, and a
+ * tooltip is not a fix for a destination that does not exist.
+ *
+ * They are links now, to the dashboard section that actually answers them. The
+ * menu is complete, every item goes somewhere, and no page was invented to sit
+ * behind a label.
  */
 const NAV: AdminNavEntry[] = [
   { to: '/admin', label: 'Painel', icon: LayoutDashboard, end: true },
   { to: '/admin/users', label: 'Usuários', icon: Users },
   { to: '/admin/jobs', label: 'Vagas', icon: Briefcase },
   { to: '/admin/logs', label: 'Logs', icon: ScrollText },
-  {
-    label: 'Candidaturas',
-    icon: Send,
-    pending: 'Sem página própria: os números estão no funil e nos indicadores do painel.',
-  },
-  {
-    label: 'Automação',
-    icon: Bot,
-    pending: 'Sem página própria: o estado está em "Saúde da automação", no painel.',
-  },
-  {
-    label: 'IA',
-    icon: Brain,
-    pending: 'Sem página própria: o estado está em "Saúde da IA", no painel.',
-  },
-  {
-    label: 'Configurações',
-    icon: Settings,
-    pending: 'A área administrativa é somente leitura por enquanto.',
-  },
+  { to: '/admin#funil', label: 'Candidaturas', icon: Send },
+  { to: '/admin#automacao', label: 'Automação', icon: Bot },
+  { to: '/admin#ia', label: 'IA', icon: Brain },
+  { to: '/admin#sistema', label: 'Sistema', icon: Settings },
 ];
 
 export interface AdminSidebarProps {
@@ -99,39 +84,24 @@ export function AdminSidebar({
 
       <nav aria-label="Navegação administrativa" className="scroll-area min-h-0 flex-1 px-2">
         <ul className="space-y-0.5">
-          {NAV.map(({ to, label, icon: Icon, end, pending }) => (
+          {NAV.map(({ to, label, icon: Icon, end }) => (
             <li key={label}>
-              {to ? (
-                <NavLink
-                  to={to}
-                  end={end}
-                  onClick={onNavigate}
-                  title={alwaysShowLabels ? undefined : label}
-                  className={({ isActive }) =>
-                    cn(
-                      'nav-item',
-                      alwaysShowLabels ? '' : 'justify-center lg:justify-start',
-                      isActive && 'nav-item-active',
-                    )
-                  }
-                >
-                  <Icon aria-hidden className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
-                  <span className={cn('truncate', labelClass)}>{label}</span>
-                </NavLink>
-              ) : (
-                <span
-                  aria-disabled="true"
-                  title={pending}
-                  className={cn(
-                    'nav-item cursor-not-allowed text-content-subtle opacity-60 hover:bg-transparent hover:text-content-subtle',
+              <NavLink
+                to={to}
+                end={end}
+                onClick={onNavigate}
+                title={alwaysShowLabels ? undefined : label}
+                className={({ isActive }) =>
+                  cn(
+                    'nav-item',
                     alwaysShowLabels ? '' : 'justify-center lg:justify-start',
-                  )}
-                >
-                  <Icon aria-hidden className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
-                  <span className={cn('truncate', labelClass)}>{label}</span>
-                  <span className={cn('ml-auto text-2xs', labelClass)}>no painel</span>
-                </span>
-              )}
+                    isActive && 'nav-item-active',
+                  )
+                }
+              >
+                <Icon aria-hidden className="h-[18px] w-[18px] shrink-0" strokeWidth={1.75} />
+                <span className={cn('truncate', labelClass)}>{label}</span>
+              </NavLink>
             </li>
           ))}
         </ul>

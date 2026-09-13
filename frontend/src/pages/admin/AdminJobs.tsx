@@ -1,6 +1,7 @@
 import { AlertOctagon, Briefcase } from 'lucide-react';
 
-import { useAdminPeriod } from '@/components/admin/period';
+import { PERIOD_PHRASES } from '@/components/admin/labels';
+import { PeriodEmptyState, useAdminPeriod } from '@/components/admin/period';
 import { EmptyState } from '@/components/EmptyState';
 import { Card, CardHeader, PageHeader, SectionLabel, Skeleton } from '@/components/primitives';
 import { useAdminJobInsights } from '@/hooks/useApi';
@@ -90,7 +91,8 @@ function Tile({
  * because that number is a sample, not a census.
  */
 export function AdminJobs() {
-  const { query } = useAdminPeriod();
+  const { query, period } = useAdminPeriod();
+  const when = PERIOD_PHRASES[period];
   const { data, isLoading, isError, error } = useAdminJobInsights(query);
 
   if (isError) {
@@ -113,10 +115,10 @@ export function AdminJobs() {
       <div className="space-y-5">
         <PageHeader title="Vagas" description="O que a plataforma encontrou no período." />
         <Card>
-          <EmptyState
+          <PeriodEmptyState
             icon={Briefcase}
-            title="Nenhuma vaga encontrada neste período"
-            description="Escolha um período maior, ou aguarde a próxima busca de algum usuário."
+            what="Nenhuma vaga encontrada"
+            description="As vagas ficam guardadas indefinidamente — se existem mais antigas, um período maior as mostra."
           />
         </Card>
       </div>
@@ -175,7 +177,7 @@ export function AdminJobs() {
           title="Principais cargos"
           rows={data?.top_titles ?? []}
           isLoading={isLoading}
-          emptyLabel="Nenhum cargo registrado neste período."
+          emptyLabel={`Nenhum cargo registrado ${when}.`}
         />
         <TopList
           title="Principais tecnologias"
@@ -186,19 +188,19 @@ export function AdminJobs() {
           }
           rows={data?.top_technologies ?? []}
           isLoading={isLoading}
-          emptyLabel="Nenhuma tecnologia reconhecida no texto das vagas."
+          emptyLabel={`Nenhuma tecnologia reconhecida no texto das vagas ${when}.`}
         />
         <TopList
           title="Principais localidades"
           rows={data?.top_locations ?? []}
           isLoading={isLoading}
-          emptyLabel="Nenhuma localidade informada neste período."
+          emptyLabel={`Nenhuma localidade informada ${when}.`}
         />
         <TopList
           title="Principais empresas"
           rows={data?.top_companies ?? []}
           isLoading={isLoading}
-          emptyLabel="Nenhuma empresa registrada neste período."
+          emptyLabel={`Nenhuma empresa registrada ${when}.`}
         />
       </div>
 
@@ -207,7 +209,7 @@ export function AdminJobs() {
         description="Qual portal descobriu cada vaga."
         rows={data?.top_sources ?? []}
         isLoading={isLoading}
-        emptyLabel="Nenhuma origem registrada neste período."
+        emptyLabel={`Nenhuma origem registrada ${when}.`}
       />
     </div>
   );

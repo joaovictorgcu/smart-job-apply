@@ -1,12 +1,12 @@
 import { Filter } from 'lucide-react';
 
-import { EmptyState } from '@/components/EmptyState';
 import { Card, CardHeader, Skeleton } from '@/components/primitives';
 import { formatNumber, formatPercent } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { FunnelStage } from '@/types/api';
 
 import { FUNNEL_LABELS } from './labels';
+import { PeriodEmptyState } from './period';
 
 export interface FunnelPanelProps {
   funnel?: FunnelStage[];
@@ -46,10 +46,10 @@ export function FunnelPanel({ funnel, isLoading = false, className }: FunnelPane
       />
 
       {first === 0 ? (
-        <EmptyState
+        <PeriodEmptyState
           compact
           icon={Filter}
-          title="Nenhuma vaga encontrada neste período"
+          what="Nenhuma vaga encontrada"
           description="O funil se preenche a partir da primeira busca com resultado."
         />
       ) : (

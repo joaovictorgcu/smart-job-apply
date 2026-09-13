@@ -9,14 +9,15 @@
  * in, and says so through `customIncomplete`.
  */
 
-import { CalendarRange } from 'lucide-react';
+import { CalendarRange, type LucideIcon } from 'lucide-react';
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 
+import { EmptyState } from '@/components/EmptyState';
 import { Input } from '@/components/primitives';
 import { cn } from '@/lib/utils';
 import { ADMIN_PERIODS, type AdminPeriod, type AdminPeriodQuery } from '@/types/api';
 
-import { PERIOD_LABELS } from './labels';
+import { PERIOD_LABELS, PERIOD_PHRASES, WIDER_PERIOD } from './labels';
 
 const DEFAULT_PERIOD: AdminPeriod = '7d';
 
@@ -71,6 +72,48 @@ export function useAdminPeriod(): AdminPeriodValue {
     throw new Error('useAdminPeriod must be used inside an AdminPeriodProvider.');
   }
   return context;
+}
+
+/**
+ * "Nothing here", with the window named and a way out of it.
+ *
+ * `what` is the noun phrase — "Nenhuma vaga encontrada" — and the period is
+ * appended, so the title reads "Nenhuma vaga encontrada nos últimos 7 dias".
+ * When a wider preset exists, the button switches to it: the commonest reason a
+ * panel is empty is that the default window is narrower than the data.
+ */
+export function PeriodEmptyState({
+  icon,
+  what,
+  description,
+  compact = false,
+  widen = true,
+}: {
+  icon?: LucideIcon;
+  what: string;
+  description?: string;
+  compact?: boolean;
+  /** False where emptiness is the good outcome, as in the error list. */
+  widen?: boolean;
+}) {
+  const { period, setPeriod } = useAdminPeriod();
+  const wider = WIDER_PERIOD[period];
+
+  return (
+    <EmptyState
+      compact={compact}
+      icon={icon}
+      title={`${what} ${PERIOD_PHRASES[period]}`}
+      description={description}
+      action={
+        widen && wider ? (
+          <button type="button" className="btn btn-sm" onClick={() => setPeriod(wider)}>
+            Ver {PERIOD_LABELS[wider].toLowerCase()}
+          </button>
+        ) : null
+      }
+    />
+  );
 }
 
 /** Today, as YYYY-MM-DD in the browser's own timezone. */

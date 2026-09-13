@@ -1034,6 +1034,12 @@ export function useAdminOverview(
     queryKey: queryKeys.adminOverview(query),
     queryFn: ({ signal }) => adminService.fetchOverview(query, signal),
     staleTime: 30_000,
+    // A screen whose job is to watch should not need to be asked. It polls at
+    // the cache's own TTL — a shorter interval would only re-serve the same
+    // snapshot — and only while the tab is in front of someone, so a panel left
+    // open overnight is not a request every half minute until morning.
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
     ...options,
   });
 }

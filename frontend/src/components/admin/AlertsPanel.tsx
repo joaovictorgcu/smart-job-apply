@@ -1,4 +1,5 @@
 import { ShieldCheck } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 import { EmptyState } from '@/components/EmptyState';
 import { Card, CardHeader, Skeleton } from '@/components/primitives';
@@ -6,7 +7,7 @@ import { badgeClass } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { AdminAlert } from '@/types/api';
 
-import { SEVERITY_ICON, SEVERITY_LABELS, SEVERITY_TONE } from './labels';
+import { ALERT_ACTIONS, SEVERITY_ICON, SEVERITY_LABELS, SEVERITY_TONE } from './labels';
 
 export interface AlertsPanelProps {
   alerts?: AdminAlert[];
@@ -58,6 +59,7 @@ export function AlertsPanel({ alerts, isLoading = false, className }: AlertsPane
           {alerts.map((alert) => {
             const Icon = SEVERITY_ICON[alert.severity];
             const tone = SEVERITY_TONE[alert.severity];
+            const action = ALERT_ACTIONS[alert.key];
             return (
               <li key={alert.key} className="flex gap-3 px-4 py-3">
                 <Icon
@@ -80,6 +82,11 @@ export function AlertsPanel({ alerts, isLoading = false, className }: AlertsPane
                     {alert.detail}
                   </p>
                 </div>
+                {action ? (
+                  <Link to={action.to} className="btn btn-sm shrink-0 self-start">
+                    {action.label}
+                  </Link>
+                ) : null}
               </li>
             );
           })}

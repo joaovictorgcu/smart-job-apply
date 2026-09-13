@@ -10,12 +10,12 @@ import {
   YAxis,
 } from 'recharts';
 
-import { EmptyState } from '@/components/EmptyState';
 import { Card, CardHeader, Skeleton } from '@/components/primitives';
 import { cn } from '@/lib/utils';
 import type { GrowthPoint } from '@/types/api';
 
 import { GROWTH_SERIES } from './labels';
+import { PeriodEmptyState } from './period';
 
 /* Same convention as ScoreChart: colours are CSS variables, so one declaration
    serves both themes and the chart follows the palette without naming a hue. */
@@ -172,11 +172,11 @@ export function GrowthChart({ growth, isLoading = false, className }: GrowthChar
             </table>
           </>
         ) : (
-          <EmptyState
+          <PeriodEmptyState
             compact
             icon={LineChartIcon}
-            title={`Nenhum registro de ${active.label.toLowerCase()} neste período`}
-            description="Escolha um período maior ou outra série para ver a evolução."
+            what={`Nenhum registro de ${active.label.toLowerCase()}`}
+            description="Outra série pode ter dados nesta mesma janela."
           />
         )}
       </div>
