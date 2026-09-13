@@ -117,6 +117,43 @@ que se moveram e quais deles foram afrouxados. `limit` ≤ 200.
 → `LinkedInAccountRead` — só metadados. Os cookies criptografados nunca saem do servidor, e senha nenhuma é
 armazenada.
 
+### `GET /api/users/me/export`
+
+Baixa tudo que a conta guarda, num único JSON. A outra metade de poder apagar a conta: sair não deveria
+significar perder um ano de candidaturas.
+
+→ `200`, `application/json`, com `Content-Disposition: attachment; filename="smart-job-apply-<id>-<data>.json"`.
+
+```json
+{
+  "format_version": 1,
+  "exported_at": "2026-09-13T12:00:00+00:00",
+  "account": { "id": 1, "email": "you@example.com", "...": "..." },
+  "counts": { "jobs": 128, "applications": 31, "...": "..." },
+  "not_included": ["The resume file you uploaded. ...", "..."],
+  "data": {
+    "profile": [], "experiences": [], "settings": [], "preferences": [],
+    "linkedin_account": [], "searches": [], "jobs": [], "job_scores": [],
+    "applications": [], "application_events": [], "application_resumes": [],
+    "tailored_resumes": [], "interview_stages": [], "ai_analyses": [],
+    "automation_runs": [], "audit_events": []
+  }
+}
+```
+
+As linhas saem coluna por coluna, lidas do mapper e não de uma lista escrita à mão — uma lista dessas apodrece,
+e uma coluna nova simplesmente sumiria do export sem nada falhar. **A retenção é que é manual**:
+`NEVER_EXPORT` em [`export_service.py`](../backend/app/services/export_service.py) nomeia as três colunas que
+nunca saem — o hash da senha, os cookies do LinkedIn e a chave de IA. São credenciais, não conteúdo: exportar
+qualquer uma transformaria portabilidade numa chave funcionando dentro de um arquivo, para você e para quem
+achasse o arquivo depois. Um teste reprova qualquer coluna nova com cara de credencial que ninguém classificou.
+
+O que um JSON não carrega — o PDF enviado e os PDFs gerados por candidatura — vem nomeado em `not_included`,
+com onde buscar cada um. Um export que omite sem avisar se lê como completo.
+
+Toda chave de `data` existe mesmo vazia: chave faltando se lê como "perdemos", lista vazia se lê como "você não
+tinha nenhum".
+
 ### `DELETE /api/users/me`
 
 Apaga a conta e tudo que pende dela. **Irreversível**, sem carência e sem cópia do lado do servidor.

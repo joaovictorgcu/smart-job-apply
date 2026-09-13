@@ -230,6 +230,11 @@ O modo de teste (dry run) está ligado por padrão: o fluxo inteiro roda, até o
   enviado, cada PDF gerado, as vagas, as candidaturas, a sessão do LinkedIn com o diretório de perfil do
   navegador, a chave de IA e a própria trilha de auditoria. Sem carência, sem cópia do nosso lado, e o
   e-mail volta a ficar livre. Os arquivos em disco são parte disso — nenhuma cascata de banco alcança eles
+- **E dá para sair levando tudo.** Um botão ao lado do de apagar baixa a conta inteira num JSON: perfil,
+  experiências, preferências, buscas, vagas pontuadas, candidaturas com cartas e respostas, cada evento e a
+  trilha de auditoria. Sai coluna por coluna, lido do próprio schema, então uma coluna nova entra no arquivo
+  no dia em que passa a existir. O que não sai são as três credenciais — hash da senha, cookies do LinkedIn,
+  chave de IA — e o arquivo diz isso de si mesmo, em vez de omitir calado
 - Log estruturado em JSON com contexto por execução, para que as linhas de log de uma execução sejam pesquisáveis com grep
 - Contabilidade de tokens e custo em cada chamada de IA
 - Um **modelo de dados multiusuário** — o isolamento que mantém os cookies e o feed de eventos de uma pessoa longe dos de
