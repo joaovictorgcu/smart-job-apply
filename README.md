@@ -64,7 +64,8 @@ O que está verificado — e o que isso quer dizer:
 | "Por que esta vaga" | Determinística e sem modelo; testes cobrem que grafia equivalente não vira lacuna falsa e que um sinônimo aproximado não esconde lacuna real |
 | Comparação com o currículo principal | O orçamento de mudanças é testado item a item, e a contagem de invenções é o guarda rodando sobre o documento inteiro — zero é medido, não assumido |
 | Currículo anexado ao formulário | Testes cobrem que o arquivo enviado é o da candidatura, que ele é um PDF de verdade, e que uma conta sem versão própria volta ao PDF do perfil em vez de falhar |
-| Suíte | 1.010 backend + 25 navegador + 142 frontend + 9 Playwright, ruff, eslint, tsc, build, 8 guards |
+| `demo_server.py --fresh` | O comando que esta página manda rodar primeiro sobe de verdade num teste: a API responde, a conta de demonstração entra, e um segundo `--fresh` logo depois de um navegador aberto também sobe |
+| Suíte | 1.049 backend + 27 navegador + 142 frontend + 9 Playwright, ruff, eslint, tsc, build, 10 guards |
 
 O que **não** está verificado, e você deve assumir como não funcionando até provar:
 
