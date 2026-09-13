@@ -62,10 +62,29 @@ def _as_configuration_error(error: Exception) -> Exception:
     rejected = (anthropic.AuthenticationError, anthropic.PermissionDeniedError)
     if isinstance(error, rejected):
         return ProviderNotConfiguredError(
-            f"The Anthropic API rejected this key: {error}. Check ANTHROPIC_API_KEY, "
-            "or point AI_PROVIDER at another provider."
+            f"The Anthropic API rejected this key: {_clean_detail(error)}. Check "
+            "ANTHROPIC_API_KEY, or point AI_PROVIDER at another provider."
         )
     return error
+
+
+def _clean_detail(error: Exception) -> str:
+    """The SDK's own sentence, not its `repr` of the response body.
+
+    `str(anthropic.APIStatusError)` is "Error code: 401 - {'type': 'error',
+    'error': {'type': 'authentication_error', 'message': 'API key is
+    invalid.'}, ...}". Stored on `ai_analyses.error_message` and rendered on the
+    admin panel, that is a Python dict leaking into an interface — and truncated
+    for width it becomes a dict that is not even parseable. `.message` is the
+    one sentence a human needs; `openai_compat` already digs the same field out
+    of the JSON body, so the two providers now read alike.
+    """
+    message = getattr(error, "message", None)
+    if isinstance(message, str) and message.strip():
+        return message.strip()
+    text = str(error)
+    # Last resort: keep what comes before the serialized body.
+    return text.split(" - {", 1)[0].strip() or "sem detalhe"
 
 
 def _note_shim_downgrade(error: Exception) -> None:
