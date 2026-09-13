@@ -10,13 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.ai.schemas import CoverLetter, ScoreDimension
-from app.api.errors import NotFoundError, PreconditionFailedError, UpstreamError
 from app.automation.contracts import JobPosting
 from app.database.base import utcnow
 from app.domain import recommendation
 from app.domain.language import detect_language
 from app.domain.preferences import PreferenceVerdict, screen
 from app.domain.scoring import verdict_for, weighted_score
+from app.errors import NotFoundError, PreconditionFailedError, UpstreamError
 from app.models import Job, JobScore, JobStatus, User
 from app.observability import EventName, get_logger, make_event
 from app.schemas.job import JobDetail, JobRead, JobScoreRead, JobUpdate, RecommendationRead

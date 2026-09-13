@@ -8,9 +8,9 @@ from fastapi import Depends, WebSocket
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.errors import AuthenticationError, PermissionDeniedError
 from app.auth.security import TokenError, decode_access_token
 from app.database import get_session, session_scope
+from app.errors import AuthenticationError, PermissionDeniedError
 from app.models import User
 from app.observability import bind_context, get_logger
 

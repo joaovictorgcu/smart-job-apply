@@ -11,7 +11,7 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.errors import ValidationError
+from app.errors import ValidationError
 from app.models import Job, JobStatus, User
 from app.observability import get_logger
 from app.portals import ADAPTERS, PortalAdapter

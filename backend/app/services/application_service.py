@@ -12,8 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.base import NO_VALUE
 
-from app.api.errors import NotFoundError, PreconditionFailedError
 from app.database.base import utcnow
+from app.errors import NotFoundError, PreconditionFailedError
 from app.models import (
     Application,
     ApplicationChannel,

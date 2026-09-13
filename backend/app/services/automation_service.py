@@ -24,25 +24,24 @@ import asyncio
 import inspect
 from collections.abc import Callable, Coroutine
 from dataclasses import asdict
-from typing import Any
+from typing import Any, Protocol
 
-from fastapi import BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.credentials import for_settings_row
-from app.api.errors import (
-    ConflictError,
-    NotFoundError,
-    PreconditionFailedError,
-    ValidationError,
-)
 from app.automation.contracts import SearchFilters, SessionState
 from app.automation.errors import AutomationError, ThrottleLimitError
 from app.automation.throttle import Throttle
 from app.config import get_settings
 from app.database.base import utcnow
 from app.database.session import session_scope
+from app.errors import (
+    ConflictError,
+    NotFoundError,
+    PreconditionFailedError,
+    ValidationError,
+)
 from app.models import (
     Application,
     ApplicationEventType,
@@ -189,8 +188,22 @@ async def _launch(
         )
 
 
+class TaskScheduler(Protocol):
+    """The one thing this module needs from FastAPI's background tasks.
+
+    Declared structurally rather than imported, because importing it made every
+    service that touches automation depend on the web framework in order to say
+    "run this after the response". FastAPI's own class satisfies this as it is —
+    the routes keep passing the real thing — and the service layer now states
+    what it requires instead of naming who provides it. `tools/guards.py` G9
+    fails the build if `fastapi` comes back into `app/services/`.
+    """
+
+    def add_task(self, func: Callable[..., Any], /, *args: Any, **kwargs: Any) -> None: ...
+
+
 def _schedule(
-    background: BackgroundTasks | None,
+    background: TaskScheduler | None,
     factory: Callable[[], Coroutine[Any, Any, Any]],
     *,
     label: str,
@@ -437,7 +450,7 @@ async def start_search_run(
     user: User,
     payload: SearchRunRequest,
     *,
-    background: BackgroundTasks | None = None,
+    background: TaskScheduler | None = None,
 ) -> AutomationRun:
     """Search (and optionally score) jobs. This path never submits anything."""
     filters: SearchFilters
@@ -498,7 +511,7 @@ async def start_prepare_run(
     user: User,
     payload: PrepareRequest,
     *,
-    background: BackgroundTasks | None = None,
+    background: TaskScheduler | None = None,
 ) -> AutomationRun:
     """Fill the Easy Apply forms and stop at review. Requires the preview confirmation."""
     if payload.confirmed is not True:
@@ -553,7 +566,7 @@ async def submit_application(
     application_id: int,
     payload: SubmitRequest,
     *,
-    background: BackgroundTasks | None = None,
+    background: TaskScheduler | None = None,
 ) -> Application:
     """Approve and submit one reviewed application — the only submitting path.
 
@@ -820,7 +833,7 @@ async def resume_run(
     user: User,
     run_id: int,
     *,
-    background: BackgroundTasks | None = None,
+    background: TaskScheduler | None = None,
 ) -> AutomationRun:
     """Pick an interrupted run up where it stopped.
 

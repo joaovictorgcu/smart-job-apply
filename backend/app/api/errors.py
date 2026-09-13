@@ -1,8 +1,13 @@
-"""Domain exceptions and the handlers that render them as clean JSON.
+"""The handlers that render an application failure as clean JSON.
 
-Services raise the exceptions defined here; the HTTP layer is the only place
-that knows about status codes. Every response body has the same shape,
-`{"detail": "..."}`, so the frontend never has to branch on the error source.
+The exceptions themselves live in [`app/errors.py`](../errors.py), framework-free,
+because services raise them and a service must not import the HTTP layer to do
+so. They are re-exported here so `from app.api.errors import NotFoundError`
+keeps working, and so this module still reads as one subject.
+
+This is the only place that turns one into a status code and a body. Every
+response has the same shape, `{"detail": "..."}`, so the frontend never has to
+branch on where the error came from.
 """
 
 from __future__ import annotations
@@ -22,73 +27,19 @@ from app.automation.errors import (
     ThrottleLimitError,
     UnexpectedPageError,
 )
+from app.errors import (
+    AppError,
+    AuthenticationError,
+    ConflictError,
+    NotFoundError,
+    PermissionDeniedError,
+    PreconditionFailedError,
+    UpstreamError,
+    ValidationError,
+)
 from app.observability import get_logger
 
 logger = get_logger(__name__)
-
-
-class AppError(Exception):
-    """Base of every application-level failure the API knows how to render."""
-
-    status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR
-    default_detail: str = "Unexpected error."
-
-    def __init__(self, detail: str | None = None) -> None:
-        self.detail = detail or self.default_detail
-        super().__init__(self.detail)
-
-
-class NotFoundError(AppError):
-    """The requested resource does not exist, or does not belong to the caller."""
-
-    status_code = status.HTTP_404_NOT_FOUND
-    default_detail = "Resource not found."
-
-
-class ConflictError(AppError):
-    """The request collides with existing data (duplicate email, duplicate job)."""
-
-    status_code = status.HTTP_409_CONFLICT
-    default_detail = "Resource already exists."
-
-
-class ValidationError(AppError):
-    """The payload is syntactically valid but semantically wrong."""
-
-    status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
-    default_detail = "Invalid request."
-
-
-class PermissionDeniedError(AppError):
-    """Authenticated, but not allowed to perform this action."""
-
-    status_code = status.HTTP_403_FORBIDDEN
-    default_detail = "Operation not allowed."
-
-
-class AuthenticationError(AppError):
-    """Missing, invalid or expired credentials."""
-
-    status_code = status.HTTP_401_UNAUTHORIZED
-    default_detail = "Invalid credentials."
-
-
-class UpstreamError(AppError):
-    """A dependency we do not control (the AI, LinkedIn's UI) failed."""
-
-    status_code = status.HTTP_502_BAD_GATEWAY
-    default_detail = "An upstream service failed."
-
-
-class PreconditionFailedError(AppError):
-    """The resource is not in a state that allows this action.
-
-    This is the error that guards assisted mode: submitting an application that
-    is not awaiting review, or submitting without explicit confirmation.
-    """
-
-    status_code = status.HTTP_412_PRECONDITION_FAILED
-    default_detail = "The resource is not in a state that allows this operation."
 
 
 # A checkpoint is never bypassed, so it is reported as "locked": the user has to
@@ -202,3 +153,21 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
     app.add_exception_handler(AINotConfiguredError, ai_not_configured_handler)
+
+
+# Re-exported so the HTTP layer stays one import for anyone reading it, and so
+# the spelling every call site already uses keeps resolving.
+__all__ = [
+    "AppError",
+    "AuthenticationError",
+    "ConflictError",
+    "NotFoundError",
+    "PermissionDeniedError",
+    "PreconditionFailedError",
+    "UpstreamError",
+    "ValidationError",
+    "app_error_handler",
+    "automation_error_handler",
+    "register_exception_handlers",
+    "unhandled_error_handler",
+]

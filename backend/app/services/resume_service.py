@@ -28,11 +28,11 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.errors import NotFoundError, PreconditionFailedError, ValidationError
 from app.config import get_settings
 from app.database.base import utcnow
 from app.domain import resume as domain
 from app.domain import resume_diff, resume_render
+from app.errors import NotFoundError, PreconditionFailedError, ValidationError
 from app.models import (
     Application,
     ApplicationEventType,

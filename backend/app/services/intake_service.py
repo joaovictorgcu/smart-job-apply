@@ -24,8 +24,8 @@ from pathlib import Path
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.errors import ValidationError
 from app.domain import resume_intake
+from app.errors import ValidationError
 from app.models import Experience, Profile, User
 from app.observability import get_logger
 from app.schemas.intake import (

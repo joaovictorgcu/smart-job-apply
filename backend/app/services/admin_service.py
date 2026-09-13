@@ -32,11 +32,11 @@ from sqlalchemy import Select, and_, case, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import __version__
-from app.api.errors import ValidationError
 from app.config import PROJECT_ROOT, get_settings
 from app.database.base import utcnow
 from app.database.schema_version import SchemaState, read_schema_status
 from app.domain.technologies import job_technologies
+from app.errors import ValidationError
 from app.models import (
     AIAnalysis,
     Application,

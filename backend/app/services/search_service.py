@@ -5,9 +5,9 @@ from __future__ import annotations
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.errors import NotFoundError
 from app.automation.contracts import SearchFilters
 from app.database.base import utcnow
+from app.errors import NotFoundError
 from app.models import Search, User
 from app.observability import get_logger
 from app.schemas.job import SearchCreate, SearchUpdate

@@ -12,8 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.client import flag_unsupported_skills
 from app.ai.scoring import profile_fingerprint, profile_source_text
-from app.api.errors import NotFoundError, PreconditionFailedError, UpstreamError
 from app.config import get_settings
+from app.errors import NotFoundError, PreconditionFailedError, UpstreamError
 from app.models import TailoredResume, User
 from app.observability import get_logger
 from app.schemas.tailoring import CVChangeOut, TailoredResumeRead

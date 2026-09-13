@@ -16,12 +16,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.credentials import USER_SELECTABLE_PROVIDERS, key_hint
-from app.api.errors import AuthenticationError, ConflictError, ValidationError
 from app.auth.crypto import encrypt_json, encrypt_text
 from app.auth.security import hash_password, verify_password
 from app.automation.contracts import ProfileContext
 from app.config import get_settings
 from app.database.base import utcnow
+from app.errors import AuthenticationError, ConflictError, ValidationError
 from app.models import AuditAction, AuditEvent, LinkedInAccount, Profile, User, UserSettings
 from app.observability import get_logger, record_audit_event
 from app.schemas.user import ProfileUpdate, UserSettingsUpdate
