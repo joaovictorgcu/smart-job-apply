@@ -572,7 +572,7 @@ export function Onboarding() {
   return (
     <div className="mx-auto w-full max-w-3xl space-y-5 pb-24">
       <div>
-        <ol className="flex items-center gap-2 text-2xs font-medium uppercase tracking-wider text-content-subtle">
+        <ol className="flex items-center gap-2 text-2xs font-medium text-content-subtle">
           {STEPS.map((label, index) => (
             <li key={label} className="flex items-center gap-2">
               <span className={cn(index <= step && 'text-accent-400')}>{label}</span>

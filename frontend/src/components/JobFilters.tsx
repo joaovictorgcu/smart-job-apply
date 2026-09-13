@@ -50,7 +50,7 @@ export function JobFilters({ value, onChange, className }: JobFiltersProps) {
   return (
     <Card className={cn('px-4 py-3.5 sm:px-5', className)}>
       <div className="flex items-center justify-between gap-3">
-        <p className="flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.1em] text-content-subtle">
+        <p className="flex items-center gap-2 text-2xs font-semibold text-content-subtle">
           <SlidersHorizontal aria-hidden className="h-3.5 w-3.5" />
           Filtros
         </p>

@@ -20,23 +20,56 @@ const TONE_TEXT: Record<string, string> = {
   neutral: 'text-content-subtle',
 };
 
-function Chip({ label, tone }: { label: string; tone: 'covered' | 'missing' }) {
+/**
+ * Coverage as a bar, because coverage is a proportion.
+ *
+ * "7 de 9" is the honest shape of this number and a bar is how a proportion is
+ * read at a glance. The filled part is the evidence; the rest is what the
+ * posting asked for and did not find. No colour: on a list where every card
+ * carries one of these, hue would rank the vacancies before the reader does.
+ */
+function Coverage({ covered, asked }: { covered: number; asked: number }) {
+  const ratio = asked > 0 ? Math.min(1, covered / asked) : 0;
   return (
-    <li
-      className={cn(
-        'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-2xs font-medium',
-        tone === 'covered'
-          ? 'border-success/35 bg-success/10 text-success'
-          : 'border-warning/35 bg-warning/10 text-warning',
-      )}
-    >
-      {tone === 'covered' ? (
-        <Check aria-hidden className="h-3 w-3" />
-      ) : (
-        <TriangleAlert aria-hidden className="h-3 w-3" />
-      )}
-      {label}
-    </li>
+    <p className="flex items-center gap-2 text-xs text-content-muted">
+      <span
+        aria-hidden
+        className="h-1 w-20 shrink-0 overflow-hidden rounded-full bg-line-strong/50"
+      >
+        <span
+          className="block h-full rounded-full bg-content-muted"
+          style={{ width: `${ratio * 100}%` }}
+        />
+      </span>
+      {covered} de {asked} {asked === 1 ? 'requisito citado' : 'requisitos citados'}
+    </p>
+  );
+}
+
+/**
+ * One line per list, terms separated by commas.
+ *
+ * They were pills — same radius, same weight and nearly the same green as the
+ * "Candidatada" status beside them, so status, channel, work model and evidence
+ * all read as one undifferentiated stripe. As running text they are faster to
+ * read, wrap properly, and stop competing with the state of the application.
+ */
+function TermLine({ lead, terms, tone }: { lead: string; terms: string[]; tone: 'has' | 'lacks' }) {
+  if (terms.length === 0) return null;
+  return (
+    <p className="text-xs leading-relaxed">
+      <span className="inline-flex items-center gap-1 font-medium text-content-muted">
+        {tone === 'has' ? (
+          <Check aria-hidden className="h-3 w-3 text-success" />
+        ) : (
+          <TriangleAlert aria-hidden className="h-3 w-3 text-warning" />
+        )}
+        {lead}
+      </span>{' '}
+      <span className={tone === 'has' ? 'text-content' : 'text-content-muted'}>
+        {terms.join(', ')}
+      </span>
+    </p>
   );
 }
 
@@ -76,14 +109,11 @@ export function MatchSummary({ recommendation, compact = false, className }: Mat
       ) : null}
 
       {covered.length > 0 || missing.length > 0 ? (
-        <ul className={cn('flex flex-wrap gap-1.5', compact ? '' : 'mt-2')}>
-          {covered.map((term) => (
-            <Chip key={`covered-${term}`} label={term} tone="covered" />
-          ))}
-          {missing.map((term) => (
-            <Chip key={`missing-${term}`} label={term} tone="missing" />
-          ))}
-        </ul>
+        <div className={cn('space-y-1', compact ? '' : 'mt-2')}>
+          {asked_total > 0 ? <Coverage covered={covered_total} asked={asked_total} /> : null}
+          <TermLine lead="tem" terms={covered} tone="has" />
+          <TermLine lead="falta" terms={missing} tone="lacks" />
+        </div>
       ) : null}
 
       {!compact ? (

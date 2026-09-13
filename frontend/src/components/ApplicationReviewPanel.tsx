@@ -400,7 +400,7 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
             ) : null}
 
             <div>
-              <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+              <p className="text-2xs font-semibold text-content-subtle">
                 Crítica
               </p>
               <ul className="mt-2 space-y-1.5">
@@ -417,7 +417,7 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
 
             {review.data.coverage.length > 0 ? (
               <div>
-                <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+                <p className="text-2xs font-semibold text-content-subtle">
                   Cobertura dos requisitos
                 </p>
                 <ul className="mt-2 space-y-1.5">
@@ -440,7 +440,7 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
 
             {review.data.edits.length > 0 ? (
               <div>
-                <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+                <p className="text-2xs font-semibold text-content-subtle">
                   Edições sugeridas na carta
                 </p>
                 <ul className="mt-2 space-y-2.5">
@@ -548,7 +548,7 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
           {showReadiness ? (
             <div className="space-y-2.5 rounded-lg border border-line bg-surface-sunken px-3.5 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+                <p className="text-2xs font-semibold text-content-subtle">
                   Prontidão da candidatura
                 </p>
                 <span className={badgeClass(!ready ? 'warning' : dryRun ? 'info' : 'success')}>
@@ -656,7 +656,7 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
       >
         <div className="space-y-3 text-sm leading-relaxed text-content-muted">
           <div className="rounded-lg border border-line bg-surface-sunken px-3.5 py-3">
-            <p className="text-2xs uppercase tracking-wider text-content-subtle">Candidatando-se a</p>
+            <p className="text-2xs text-content-subtle">Candidatando-se a</p>
             <p className="mt-1 font-semibold text-content">{jobTitle}</p>
             <p className="text-xs text-content-muted">{company}</p>
           </div>
@@ -694,7 +694,7 @@ export function ApplicationReviewPanel({ application, className }: ApplicationRe
       >
         <div className="space-y-3 text-sm leading-relaxed text-content-muted">
           <div className="rounded-lg border border-line bg-surface-sunken px-3.5 py-3">
-            <p className="text-2xs uppercase tracking-wider text-content-subtle">Candidatura a</p>
+            <p className="text-2xs text-content-subtle">Candidatura a</p>
             <p className="mt-1 font-semibold text-content">{jobTitle}</p>
             <p className="text-xs text-content-muted">{company}</p>
           </div>

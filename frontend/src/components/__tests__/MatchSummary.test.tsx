@@ -36,11 +36,21 @@ describe("MatchSummary", () => {
     expect(screen.getByText("Excelente compatibilidade")).toBeInTheDocument();
   });
 
-  it("lists what you have and what you do not, side by side", () => {
-    renderWithProviders(<MatchSummary recommendation={build()} />);
+  it("lists what you have and what you do not, on their own lines", () => {
+    // The terms used to be one chip each. As running text they are faster to
+    // read and stop competing with the application's status beside them, so the
+    // assertion moves to the flattened text — the two lists still have to be
+    // distinguishable, and a term must never migrate between them.
+    const { container } = renderWithProviders(<MatchSummary recommendation={build()} />);
 
-    expect(screen.getByText(".NET")).toBeInTheDocument();
-    expect(screen.getByText("Azure")).toBeInTheDocument();
+    expect(container.textContent).toMatch(/tem\s*\.NET, React, APIs REST/);
+    expect(container.textContent).toMatch(/falta\s*Azure/);
+  });
+
+  it("shows coverage as the proportion it is", () => {
+    const { container } = renderWithProviders(<MatchSummary recommendation={build()} compact />);
+
+    expect(container.textContent).toMatch(/3 de 4 requisitos citados/);
   });
 
   it("states the gap as a gap and promises not to paper over it", () => {

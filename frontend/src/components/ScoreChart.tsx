@@ -42,7 +42,7 @@ function ChartTooltip({ active, label, payload, unit, labelPrefix }: ChartToolti
 
   return (
     <div className="rounded-lg border border-line bg-surface-overlay px-2.5 py-1.5 shadow-lifted">
-      <p className="text-2xs uppercase tracking-wider text-content-subtle">
+      <p className="text-2xs text-content-subtle">
         {labelPrefix ? `${labelPrefix} ` : ''}
         {label}
       </p>

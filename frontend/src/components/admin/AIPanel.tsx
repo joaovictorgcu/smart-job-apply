@@ -79,7 +79,7 @@ export function AIPanel({ ai, isLoading = false, className }: AIPanelProps) {
               key={tile.label}
               className="rounded-lg border border-line bg-surface-sunken px-3 py-2"
             >
-              <p className="text-2xs uppercase tracking-wider text-content-subtle">{tile.label}</p>
+              <p className="text-2xs text-content-subtle">{tile.label}</p>
               <p className="tabular mt-0.5 text-lg font-semibold text-content">{tile.value}</p>
             </div>
           ))}

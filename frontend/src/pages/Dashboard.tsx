@@ -1,4 +1,4 @@
-import { ArrowRight, ClipboardCheck, FileUp, Search, Send } from 'lucide-react';
+import { ClipboardCheck, FileUp, Search, Send } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -50,7 +50,6 @@ function StartHere() {
         </p>
         <Link to="/onboarding" className="btn btn-primary mt-5">
           Enviar meu currículo
-          <ArrowRight aria-hidden className="h-4 w-4" />
         </Link>
       </div>
     </div>
@@ -82,15 +81,19 @@ function TaskCard({
   tone?: 'accent' | 'neutral';
   children?: React.ReactNode;
 }) {
+  // The card that is waiting on a person is the only one that leaves the paper
+  // ground. Nothing else on this screen needs emphasis once it does.
+  const waiting = tone === 'accent';
+
   return (
-    <Card className={cn('px-5 py-4', tone === 'accent' && 'border-accent-500/40')}>
+    <Card className={cn('px-5 py-4', waiting && 'card-decision shadow-lifted')}>
       <div className="flex flex-wrap items-start gap-3">
         <span
           aria-hidden
           className={cn(
             'grid h-10 w-10 shrink-0 place-items-center rounded-xl border',
-            tone === 'accent'
-              ? 'border-accent-500/40 bg-accent-500/10 text-accent-400'
+            waiting
+              ? 'border-white/25 bg-white/10 text-current'
               : 'border-line bg-surface-sunken text-content-subtle',
           )}
         >
@@ -98,18 +101,21 @@ function TaskCard({
         </span>
 
         <div className="min-w-0 flex-1">
-          <p className="text-md font-semibold leading-snug text-content">
+          <p
+            className={cn(
+              'text-md font-semibold leading-snug',
+              waiting ? 'text-current' : 'text-content',
+            )}
+          >
             <span className="tabular">{count}</span> {title}
           </p>
-          <p className="mt-0.5 text-sm text-content-muted">{description}</p>
+          <p className={cn('mt-0.5 text-sm', waiting ? 'opacity-80' : 'text-content-muted')}>
+            {description}
+          </p>
         </div>
 
-        <Link
-          to={to}
-          className={cn('btn shrink-0', tone === 'accent' && 'btn-primary')}
-        >
+        <Link to={to} className={cn('btn shrink-0', waiting && 'btn-on-ink')}>
           {action}
-          <ArrowRight aria-hidden className="h-4 w-4" />
         </Link>
       </div>
       {children}
@@ -210,19 +216,25 @@ export function Dashboard() {
           to="/applications?status=awaiting_review"
           action="Revisar"
         >
-          <ul className="mt-3 divide-y divide-line border-t border-line">
+          {/* On the ink ground the page's text tokens are near-black, so this
+              list inherits the card's colour instead of naming its own. */}
+          <ul className="mt-3 divide-y divide-white/15 border-t border-white/15">
             {queue.map((application) => {
               const flagged = application.screening_answers.filter(
                 (answer) => answer.needs_review,
               ).length;
               return (
                 <li key={application.id} className="flex items-center gap-3 py-2.5">
-                  <ScoreBadge score={application.job_score} size="sm" />
+                  <ScoreBadge
+                    score={application.job_score}
+                    size="sm"
+                    className="text-current"
+                  />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-content">
+                    <p className="truncate text-sm font-medium text-current">
                       {application.job_title ?? `Candidatura #${application.id}`}
                     </p>
-                    <p className="truncate text-xs text-content-subtle">
+                    <p className="truncate text-xs opacity-75">
                       {application.job_company ?? 'Empresa desconhecida'} ·{' '}
                       {formatRelativeTime(application.updated_at ?? application.created_at)}
                       {flagged > 0
@@ -232,7 +244,7 @@ export function Dashboard() {
                   </div>
                   <Link
                     to={`/applications/${application.id}`}
-                    className="btn btn-sm shrink-0"
+                    className="btn btn-sm btn-on-ink shrink-0"
                   >
                     Abrir
                   </Link>

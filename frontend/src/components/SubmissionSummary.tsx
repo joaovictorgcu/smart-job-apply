@@ -47,7 +47,7 @@ function Row({
         className={cn('mt-0.5 h-4 w-4 shrink-0', tone === 'neutral' ? 'text-content-subtle' : TONE_TEXT[tone])}
       />
       <div className="min-w-0 flex-1">
-        <p className="text-2xs uppercase tracking-wider text-content-subtle">{label}</p>
+        <p className="text-2xs text-content-subtle">{label}</p>
         <p className={cn('text-sm leading-snug', tone === 'neutral' ? 'text-content' : TONE_TEXT[tone])}>
           {value}
         </p>
@@ -107,7 +107,7 @@ export function SubmissionSummary({ application, className }: SubmissionSummaryP
           <li className="flex items-start gap-3">
             <ScoreBadge score={job?.score ?? null} size="md" className="mt-0.5 shrink-0" />
             <div className="min-w-0 flex-1">
-              <p className="text-2xs uppercase tracking-wider text-content-subtle">Vaga</p>
+              <p className="text-2xs text-content-subtle">Vaga</p>
               <p className="truncate text-sm font-medium text-content">
                 {job?.title ?? `Candidatura #${application.id}`}
               </p>

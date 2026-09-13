@@ -30,7 +30,7 @@ function Metric({
             : 'border-line bg-surface-sunken',
       )}
     >
-      <p className="text-2xs uppercase tracking-wider text-content-subtle">{label}</p>
+      <p className="text-2xs text-content-subtle">{label}</p>
       <p
         className={cn(
           'tabular mt-1 text-xl font-semibold leading-none',
@@ -203,7 +203,7 @@ export function ConfirmPreviewDialog({
           ) : (
             <>
               <div className="rounded-lg border border-line bg-surface-sunken px-3.5 py-3">
-                <p className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+                <p className="flex items-center gap-1.5 text-2xs font-semibold text-content-subtle">
                   <ShieldCheck aria-hidden className="h-3.5 w-3.5" />
                   O que acontece a seguir
                 </p>

@@ -126,7 +126,7 @@ export function Sidebar({ alwaysShowLabels = false, onNavigate, className }: Sid
 
       <div className={cn('px-3', alwaysShowLabels ? 'block' : 'hidden lg:block')}>
         <div className="rounded-lg border border-line bg-surface-sunken p-3">
-          <p className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+          <p className="flex items-center gap-1.5 text-2xs font-semibold text-content-subtle">
             <ShieldCheck aria-hidden className="h-3.5 w-3.5" />
             Modo assistido
           </p>

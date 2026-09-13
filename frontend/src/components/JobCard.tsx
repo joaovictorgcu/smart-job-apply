@@ -1,7 +1,7 @@
-import { Building2, ExternalLink, MapPin, Quote, Zap } from 'lucide-react';
+import { Building2, ExternalLink, MapPin, Quote } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-import { badgeClass, enumLabel, formatRelativeTime, truncate } from '@/lib/format';
+import { badgeClass, formatRelativeTime, truncate } from '@/lib/format';
 import { cn, safeExternalUrl } from '@/lib/utils';
 import type { Job } from '@/types/api';
 
@@ -28,11 +28,20 @@ export function JobCard({
   const checkboxId = `job-select-${job.id}`;
   // The posting's URL comes from the portal, not from us — see `safeExternalUrl`.
   const jobUrl = safeExternalUrl(job.url);
+  // Every job starts `discovered`, so that word on a card distinguishes it from
+  // nothing. The states worth a badge are the ones a run or the user produced.
+  const showsState = job.status !== 'discovered';
+  // A posting already dealt with is still worth finding, and no longer worth
+  // reading first. It recedes instead of leaving the list.
+  const settled = job.status === 'applied' || job.status === 'skipped';
 
   return (
     <article
       className={cn(
-        'card card-hover flex gap-3 px-4 py-3.5 transition-colors sm:gap-4 sm:px-5',
+        // No hover lift: only the title navigates, so raising the whole card
+        // promised a click target that is not there.
+        'card flex gap-3 px-4 py-3.5 transition-colors sm:gap-4 sm:px-5',
+        settled && 'bg-surface-sunken/40 shadow-none',
         selected && 'border-accent-500/50 bg-accent-500/[0.05]',
         className,
       )}
@@ -93,30 +102,38 @@ export function JobCard({
           ) : null}
         </p>
 
-        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-          <StatusBadge kind="job" status={job.status} />
-          {job.source !== 'linkedin' ? (
-            <span className={badgeClass('info')}>{job.source}</span>
-          ) : null}
-          {job.easy_apply ? (
-            <span className={badgeClass('accent')}>
-              <Zap aria-hidden className="h-3 w-3" />
-              Candidatura Simplificada
-            </span>
-          ) : (
-            <span className={badgeClass('neutral')}>Formulário externo</span>
-          )}
-          {job.workplace_type ? (
-            <span className={badgeClass('neutral')}>{enumLabel(job.workplace_type)}</span>
-          ) : null}
-          {/* Preparation refuses a stale posting, so saying nothing here lets the
-              user select one and only find out at the confirmation dialog. */}
-          {job.is_stale ? (
-            <span className={badgeClass('warning')}>
-              {job.expired_at ? 'anúncio saiu do ar' : 'prazo encerrado'}
-            </span>
-          ) : null}
-        </div>
+        {/*
+         * Only what distinguishes this posting from the one below it.
+         *
+         * There were five badges here, three of which said the same thing on
+         * every card in the list: "Candidatura Simplificada" is true of nearly
+         * all of them, the work model repeated the location line verbatim
+         * ("Remote" above, "Remoto" here), and "Descoberta" is the state every
+         * job starts in. A mark that never varies is not a signal, and a row of
+         * identical pills reads as one stripe of colour rather than as four
+         * separate facts.
+         *
+         * What is left either changes between rows or stops the user from
+         * wasting a click: a state that is past discovery, a posting that can no
+         * longer be applied to, a form that lives on the company's own site, and
+         * a portal that is not the usual one.
+         */}
+        {showsState || job.is_stale || !job.easy_apply || job.source !== 'linkedin' ? (
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+            {showsState ? <StatusBadge kind="job" status={job.status} /> : null}
+            {job.is_stale ? (
+              <span className={badgeClass('warning')}>
+                {job.expired_at ? 'anúncio saiu do ar' : 'prazo encerrado'}
+              </span>
+            ) : null}
+            {!job.easy_apply ? (
+              <span className={badgeClass('neutral')}>formulário no site da empresa</span>
+            ) : null}
+            {job.source !== 'linkedin' ? (
+              <span className={badgeClass('neutral')}>{job.source}</span>
+            ) : null}
+          </div>
+        ) : null}
 
         {/* Before the model's prose on purpose: which requirements you meet is
             checkable, and a sentence about the score is not. */}

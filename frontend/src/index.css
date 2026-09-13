@@ -19,16 +19,21 @@
     --text-subtle: 100 116 139;
     --text-inverted: 248 250 252;
 
-    --accent-50: 238 242 255;
-    --accent-100: 224 231 255;
-    --accent-200: 199 210 254;
-    --accent-300: 165 180 252;
-    --accent-400: 129 140 248;
-    --accent-500: 99 102 241;
-    --accent-600: 79 70 229;
-    --accent-700: 67 56 202;
-    --accent-800: 55 48 163;
-    --accent-900: 49 46 129;
+    /* Ink, not the SaaS violet. The accent is spent on one thing in this
+       product — the moment a person decides — so it has to read as a signature
+       rather than as brand decoration, and it must not compete with the
+       semantic green/amber/red below. Deep teal does both. `400` is the text
+       weight and is therefore dark in light mode, where it sits on white. */
+    --accent-50: 237 246 247;
+    --accent-100: 213 234 237;
+    --accent-200: 170 212 218;
+    --accent-300: 104 166 177;
+    --accent-400: 13 92 105;
+    --accent-500: 11 86 97;
+    --accent-600: 8 70 79;
+    --accent-700: 6 57 65;
+    --accent-800: 5 45 51;
+    --accent-900: 4 35 40;
 
     --violet-400: 167 139 250;
     --violet-500: 139 92 246;
@@ -69,16 +74,16 @@
     --text-subtle: 118 130 154;
     --text-inverted: 8 11 20;
 
-    --accent-50: 49 46 129;
-    --accent-100: 55 48 163;
-    --accent-200: 67 56 202;
-    --accent-300: 79 70 229;
-    --accent-400: 129 140 248;
-    --accent-500: 111 114 250;
-    --accent-600: 91 94 240;
-    --accent-700: 129 140 248;
-    --accent-800: 165 180 252;
-    --accent-900: 199 210 254;
+    --accent-50: 4 35 40;
+    --accent-100: 5 45 51;
+    --accent-200: 6 57 65;
+    --accent-300: 8 70 79;
+    --accent-400: 94 209 224;
+    --accent-500: 45 184 203;
+    --accent-600: 22 152 170;
+    --accent-700: 94 209 224;
+    --accent-800: 160 228 238;
+    --accent-900: 205 241 246;
 
     --violet-400: 183 160 253;
     --violet-500: 154 111 250;
@@ -177,6 +182,31 @@
       hover:-translate-y-0.5 hover:border-line-strong hover:shadow-lifted;
   }
 
+  /* The one surface in the product that is not paper.
+     Reserved for the thing that is waiting on a human decision — a filled
+     application, stopped at the review step. Everything else on a screen is
+     quiet, so this reads as the subject of the page without a single word of
+     emphasis. Written with literal ink values instead of the accent ramp
+     because that ramp inverts between themes, and a decision card that turns
+     pale in dark mode would put white type on a light ground. */
+  .card-decision {
+    background-color: rgb(11 86 97);
+    border-color: rgb(11 86 97);
+    color: rgb(237 246 247);
+  }
+
+  .dark .card-decision {
+    background-color: rgb(6 57 65);
+    border-color: rgb(45 184 203 / 0.35);
+    color: rgb(205 241 246);
+  }
+
+  /* A button that sits on the ink card: paper on ink, the inverse of the page. */
+  .btn-on-ink {
+    @apply border-transparent bg-white/95 font-semibold text-[rgb(8_70_79)]
+      hover:bg-white;
+  }
+
   .card-header {
     @apply flex items-center justify-between gap-3 border-b border-line px-5 py-4;
   }
@@ -199,6 +229,13 @@
       hover:from-accent-400 hover:to-accent-500 hover:shadow-glow
       active:scale-[0.98]
       focus-visible:ring-offset-1;
+  }
+
+  /* The accent ramp inverts between themes — deep ink on paper, bright teal on
+     near-black — but white type does not. On the light half of the ramp it
+     lands at about 2:1, so the label takes the ink instead. */
+  .dark .btn-primary {
+    color: rgb(4 30 35);
   }
 
   .btn-ghost {
@@ -240,8 +277,10 @@
     @apply cursor-pointer pr-8;
   }
 
+  /* Sentence case: a field label sitting directly above its input is already
+     unmistakable, and capitals only added a second voice to every form. */
   .label {
-    @apply mb-1.5 block text-xs font-medium uppercase tracking-wider text-content-subtle;
+    @apply mb-1.5 block text-xs font-medium text-content-muted;
   }
 
   .hint {
@@ -333,7 +372,7 @@
   }
 
   .table-base th {
-    @apply border-b border-line px-4 py-2.5 text-xs font-semibold uppercase
+    @apply border-b border-line px-4 py-2.5 text-xs font-semibold
       tracking-wider text-content-subtle;
   }
 

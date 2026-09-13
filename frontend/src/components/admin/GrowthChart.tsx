@@ -44,7 +44,7 @@ function ChartTooltip({ active, label, payload, unit }: TooltipProps) {
   if (!active || !payload?.length) return null;
   return (
     <div className="rounded-lg border border-line bg-surface-overlay px-2.5 py-1.5 shadow-lifted">
-      <p className="text-2xs uppercase tracking-wider text-content-subtle">{label}</p>
+      <p className="text-2xs text-content-subtle">{label}</p>
       <p className="tabular text-sm font-semibold text-content">
         {payload[0]?.value ?? 0} {unit}
       </p>

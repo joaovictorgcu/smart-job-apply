@@ -102,16 +102,16 @@ export function CardBody({ className, ...rest }: ComponentPropsWithoutRef<'div'>
   return <div className={cn('card-body', className)} {...rest} />;
 }
 
+/**
+ * A small heading over a block of content.
+ *
+ * Sentence case, not tracked-out capitals. The capitals were doing no work
+ * these words were not already doing — "Enviadas hoje" is a label because of
+ * where it sits and how small it is, and shouting it only added a second
+ * typographic voice to every screen. Weight and size carry the hierarchy.
+ */
 export function SectionLabel({ className, ...rest }: ComponentPropsWithoutRef<'h3'>) {
-  return (
-    <h3
-      className={cn(
-        'text-2xs font-semibold uppercase tracking-[0.1em] text-content-subtle',
-        className,
-      )}
-      {...rest}
-    />
-  );
+  return <h3 className={cn('text-xs font-medium text-content-subtle', className)} {...rest} />;
 }
 
 export interface PageHeaderProps {
@@ -322,7 +322,7 @@ export function ProgressRing({ value, max, size = 88, caption, className }: Prog
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="tabular text-xl font-semibold text-content">{value}</span>
-        <span className="text-2xs uppercase tracking-wider text-content-subtle">
+        <span className="text-2xs text-content-subtle">
           {caption ?? `de ${max}`}
         </span>
       </div>

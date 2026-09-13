@@ -102,7 +102,7 @@ export function DataList<T>({
                 .filter((column) => !column.hideOnMobile)
                 .map((column) => (
                   <div key={column.key} className="min-w-0">
-                    <dt className="text-2xs uppercase tracking-wider text-content-subtle">
+                    <dt className="text-2xs text-content-subtle">
                       {column.header}
                     </dt>
                     <dd className="tabular truncate text-xs text-content-muted">

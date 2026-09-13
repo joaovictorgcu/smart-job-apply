@@ -232,7 +232,7 @@ function SegmentList({ title, rows }: { title: string; rows: SegmentRate[] }) {
   if (rows.length === 0) {
     return (
       <div>
-        <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+        <p className="text-2xs font-semibold text-content-subtle">
           {title}
         </p>
         <p className="mt-2 text-xs text-content-subtle">Sem dados ainda.</p>
@@ -241,7 +241,7 @@ function SegmentList({ title, rows }: { title: string; rows: SegmentRate[] }) {
   }
   return (
     <div>
-      <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+      <p className="text-2xs font-semibold text-content-subtle">
         {title}
       </p>
       <ul className="mt-2 space-y-1.5">
@@ -289,7 +289,7 @@ function OutcomeAnalytics({ stats }: AnalyticsProps) {
         {tiles.map((tile) => (
           <Card key={tile.label} className="px-4 py-3">
             <div className="flex items-center justify-between">
-              <p className="text-2xs font-semibold uppercase tracking-wider text-content-subtle">
+              <p className="text-2xs font-semibold text-content-subtle">
                 {tile.label}
               </p>
               <tile.icon aria-hidden className="h-4 w-4 text-content-subtle" />

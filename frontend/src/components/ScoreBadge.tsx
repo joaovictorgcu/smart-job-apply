@@ -14,16 +14,24 @@ const SIZE: Record<NonNullable<ScoreBadgeProps['size']>, string> = {
 };
 
 /**
- * The AI verdict is deliberately the most saturated element on a page, so the
- * eye lands on it before anything else.
+ * The band, carried by a rule under the numeral rather than by a filled chip.
+ *
+ * This used to be the most saturated element on the page, on the reasoning that
+ * the eye should land on it first. That fought the card it sits in:
+ * `MatchSummary` exists because "86" is a number you take on faith, while the
+ * requirements you meet and the ones you do not are something you can check.
+ * Shouting the number put the least checkable thing first.
+ *
+ * So it stays legible and stays banded — a reader still sees at a glance which
+ * range a vacancy falls in — without outranking the evidence beside it.
  */
 const TONE: Record<ToneName, string> = {
-  success: 'border-success/40 bg-success/12 text-success',
-  accent: 'border-accent-500/40 bg-accent-500/12 text-accent-400',
-  warning: 'border-warning/40 bg-warning/12 text-warning',
-  danger: 'border-danger/40 bg-danger/12 text-danger',
-  info: 'border-info/40 bg-info/12 text-info',
-  neutral: 'border-line bg-surface-sunken text-content-subtle',
+  success: 'border-b-success',
+  accent: 'border-b-accent-500',
+  warning: 'border-b-warning',
+  danger: 'border-b-danger',
+  info: 'border-b-info',
+  neutral: 'border-b-line-strong',
 };
 
 export function ScoreBadge({ score, size = 'md', className }: ScoreBadgeProps) {
@@ -39,9 +47,9 @@ export function ScoreBadge({ score, size = 'md', className }: ScoreBadgeProps) {
           : `Aderência ao seu perfil: ${value}/100`
       }
       className={cn(
-        'tabular inline-flex select-none items-center justify-center rounded-xl border font-semibold',
+        'tabular inline-flex select-none items-center justify-center border-b-2 font-semibold text-content',
         SIZE[size],
-        unscored ? 'border-dashed border-line-strong bg-transparent text-content-subtle' : TONE[scoreTone(value)],
+        unscored ? 'border-b-dashed border-b-line-strong text-content-subtle' : TONE[scoreTone(value)],
         className,
       )}
     >

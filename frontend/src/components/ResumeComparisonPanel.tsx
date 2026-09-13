@@ -97,7 +97,7 @@ export function ResumeComparisonPanel({ comparison, className }: ResumeCompariso
 
       {relevantMoves.length > 0 ? (
         <div className="mt-3">
-          <p className="text-2xs font-medium uppercase tracking-wider text-content-subtle">
+          <p className="text-2xs font-medium text-content-subtle">
             O que mudou de lugar
           </p>
           <ul className="mt-1.5 space-y-1.5">
@@ -133,7 +133,7 @@ export function ResumeComparisonPanel({ comparison, className }: ResumeCompariso
 
       {highlighted.length > 0 ? (
         <div className="mt-3">
-          <p className="text-2xs font-medium uppercase tracking-wider text-content-subtle">
+          <p className="text-2xs font-medium text-content-subtle">
             Ganharam destaque
           </p>
           <ul className="mt-1.5 flex flex-wrap gap-1.5">
