@@ -43,6 +43,12 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
     restoreMocks: true,
+    // The default 5s is measured per test but spent on a machine running the
+    // whole suite in parallel. The slowest test here types a multi-line
+    // textarea through userEvent: ~2s alone, over 5s under load. It failed on
+    // a full run and passed in isolation, which is a flake, not a regression —
+    // and a suite that goes red for scheduling reasons stops being evidence.
+    testTimeout: 15_000,
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
