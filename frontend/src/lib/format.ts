@@ -266,10 +266,22 @@ const ENUM_LABELS: Record<string, string> = {
   "past-week": "Última semana",
   past_24_hours: "Últimas 24 horas",
   "past-24h": "Últimas 24 horas",
-  // Application event types
+  // Application event types. Six of these were missing, so the trail fell back
+  // to `humanizeSnakeCase` and printed "Job found" and "Cover letter generated"
+  // in the middle of a Portuguese screen.
   created: "Criada",
+  job_found: "Vaga encontrada",
+  job_analyzed: "Vaga comparada com o seu perfil",
+  score_assigned: "Nota atribuída",
   prepare_started: "Preenchimento iniciado",
   prepared: "Preparada",
+  form_opened: "Formulário aberto",
+  form_step_completed: "Etapa do formulário concluída",
+  form_changed: "O formulário da vaga mudou",
+  question_answered: "Pergunta respondida",
+  cover_letter_generated: "Carta de apresentação gerada",
+  resume_uploaded: "Currículo anexado",
+  awaiting_review: "Parada para a sua revisão",
   user_edited: "Editada por você",
   user_approved: "Aprovada por você",
   resume_adapted: "Currículo adaptado",
@@ -277,10 +289,68 @@ const ENUM_LABELS: Record<string, string> = {
   discarded: "Descartada",
   outcome_changed: "Desfecho alterado",
   checkpoint: "Verificação de segurança",
+  error: "Erro",
 };
 
 export function enumLabel(value: string): string {
   return ENUM_LABELS[value] ?? humanizeSnakeCase(value);
+}
+
+/** Fields the backend names in a `user_edited` payload, in the user's words. */
+const EDITED_FIELDS: Record<string, string> = {
+  cover_letter: "a carta de apresentação",
+  screening_answers: "as respostas de triagem",
+  resume_filename: "o currículo anexado",
+};
+
+/**
+ * The second line of a trail entry, composed here rather than taken from the API.
+ *
+ * The engine writes `message` in English — "Opened the Easy Apply form (4
+ * steps)", "AI scored this job 86/100" — which is fine as a server log and wrong
+ * as interface copy on a Portuguese screen. It is also redundant: the posting's
+ * title is the page heading, the score is beside it, and the step count is a
+ * badge under it, so the sentences were repeating what the reader had just
+ * read.
+ *
+ * So the known events say their piece in Portuguese, using the payload where it
+ * carries something the screen does not already show. Anything unrecognised —
+ * and every error, where the text *is* the information — keeps the original
+ * message rather than being silently dropped.
+ */
+export function applicationEventDetail(event: {
+  event_type: string;
+  message: string | null;
+  payload?: Record<string, unknown> | null;
+  is_error?: boolean;
+}): string | null {
+  if (event.is_error || event.event_type === "error") return event.message;
+
+  if (event.event_type === "user_edited") {
+    const fields = Array.isArray(event.payload?.fields)
+      ? (event.payload?.fields as unknown[]).filter(
+          (field): field is string => typeof field === "string",
+        )
+      : [];
+    const named = fields.map((field) => EDITED_FIELDS[field] ?? field);
+    // Three identical "the user edited the application" rows said nothing about
+    // what changed; the payload has known it all along.
+    return named.length > 0 ? `Você alterou ${joinTerms(named)}.` : null;
+  }
+
+  const composed: Record<string, string> = {
+    job_found: "Encontrada por uma busca sua.",
+    job_analyzed: "Comparada com o seu currículo; a nota está no topo desta página.",
+    form_opened: "A automação abriu o formulário da vaga.",
+    question_answered: "Resposta preenchida a partir do seu perfil, para você conferir.",
+    cover_letter_generated: "Rascunho gerado para você revisar e editar.",
+    awaiting_review: "Preenchida e parada aqui. Nada sai sem a sua aprovação.",
+    user_approved: "Você aprovou o envio desta candidatura.",
+    submitted: "Enviada ao portal da vaga.",
+    resume_adapted: "Uma versão do seu currículo foi derivada para esta vaga.",
+    form_changed: "As perguntas mudaram desde a sua revisão, então o envio foi recusado.",
+  };
+  return composed[event.event_type] ?? event.message;
 }
 
 /* -------------------------------------------------------------------------- */

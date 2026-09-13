@@ -9,7 +9,13 @@ import { Card, CardHeader, MetaRow, Note, Skeleton } from '@/components/primitiv
 import { ScoreBadge } from '@/components/ScoreBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { useApplication, useSessionStatus } from '@/hooks/useApi';
-import { badgeClass, enumLabel, formatDateTime, formatTime } from '@/lib/format';
+import {
+  applicationEventDetail,
+  badgeClass,
+  enumLabel,
+  formatDateTime,
+  formatTime,
+} from '@/lib/format';
 import { cn, safeExternalUrl } from '@/lib/utils';
 import type { ApplicationEvent } from '@/types/api';
 
@@ -27,7 +33,10 @@ function Timeline({ events }: { events: ApplicationEvent[] }) {
   return (
     <ol className="relative space-y-4 pl-5">
       <span aria-hidden className="absolute inset-y-1 left-[5px] w-px bg-line" />
-      {events.map((event) => (
+      {events.map((event) => {
+        // Composed here, in the interface's language — see the function.
+        const detail = applicationEventDetail(event);
+        return (
         <li key={event.id} className="relative">
           <span
             aria-hidden
@@ -45,20 +54,23 @@ function Timeline({ events }: { events: ApplicationEvent[] }) {
             >
               {enumLabel(event.event_type)}
             </p>
+            {/* No monospace: these are timestamps in a narrative, not a column
+                of figures to compare down the page. */}
             <time
               dateTime={event.created_at}
-              className="tabular shrink-0 font-mono text-2xs text-content-subtle"
+              className="tabular shrink-0 text-2xs text-content-subtle"
             >
               {formatTime(event.created_at)}
             </time>
           </div>
-          {event.message ? (
+          {detail ? (
             <p className="mt-0.5 break-words text-xs leading-relaxed text-content-muted">
-              {event.message}
+              {detail}
             </p>
           ) : null}
         </li>
-      ))}
+        );
+      })}
     </ol>
   );
 }
