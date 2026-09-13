@@ -1,9 +1,10 @@
-import { Trash2, TriangleAlert } from 'lucide-react';
+import { Download, Trash2, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { Button, Card, CardHeader, Field, Input } from '@/components/primitives';
-import { deleteAccount } from '@/services/auth';
+import { useToast } from '@/components/ToastProvider';
+import { deleteAccount, downloadAccountExport } from '@/services/auth';
 import { errorMessage } from '@/services/client';
 
 /** Everything the deletion takes, named rather than summarised as "your data". */
@@ -29,10 +30,23 @@ const ERASED = [
  */
 export function DangerZone() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  const download = async () => {
+    setDownloading(true);
+    try {
+      await downloadAccountExport();
+    } catch (caught) {
+      toast.error('Não foi possível baixar os seus dados', errorMessage(caught));
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const close = () => {
     setOpen(false);
@@ -76,9 +90,19 @@ export function DangerZone() {
             ))}
           </ul>
           <p className="mt-2.5 text-xs leading-relaxed text-content-muted">
-            Não há período de carência e não há cópia de segurança do nosso lado. Se você quer
-            ficar com o seu histórico, exporte o CSV das candidaturas antes.
+            Não há período de carência e não há cópia de segurança do nosso lado. Leve os seus
+            dados antes — o arquivo tem tudo que está listado acima, menos os PDFs e as
+            credenciais.
           </p>
+          <Button
+            className="mt-2.5"
+            size="sm"
+            loading={downloading}
+            icon={<Download aria-hidden className="h-4 w-4" />}
+            onClick={() => void download()}
+          >
+            Baixar os meus dados (JSON)
+          </Button>
           <p className="mt-1.5 text-xs leading-relaxed text-content-muted">
             Isto não desfaz nada que você já enviou: candidaturas que saíram estão com o
             empregador, e a sua conta do LinkedIn continua existindo.

@@ -1,4 +1,10 @@
-import { api, clearToken, notifyUnauthorized, setToken } from "@/services/client";
+import {
+  api,
+  clearToken,
+  downloadFile,
+  notifyUnauthorized,
+  setToken,
+} from "@/services/client";
 import type { LoginRequest, RegisterRequest, TokenResponse, User } from "@/types/api";
 
 /** POST /api/auth/register — stores the returned token. */
@@ -27,6 +33,18 @@ export function fetchCurrentUser(signal?: AbortSignal): Promise<User> {
 /** Local-only: the JWT is stateless, so there is nothing to revoke server-side. */
 export function logout(): void {
   clearToken();
+}
+
+/**
+ * GET /api/users/me/export — every row this account holds, as one JSON file.
+ *
+ * The name comes from the server, which stamps it with the date it was taken.
+ */
+export function downloadAccountExport(): Promise<void> {
+  return downloadFile("/users/me/export", {
+    fallbackName: "smart-job-apply.json",
+    errorDetail: "Não foi possível exportar os seus dados.",
+  });
 }
 
 /**

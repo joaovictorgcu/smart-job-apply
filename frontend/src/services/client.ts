@@ -213,6 +213,48 @@ export const api = {
   upload,
 };
 
+/** The server's own `Content-Disposition` filename, when it sent one. */
+function filenameFromResponse(response: Response): string | null {
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+/**
+ * Fetch a file and hand it to the browser's download machinery.
+ *
+ * Bypasses the JSON wrapper on purpose — the response is a blob, not a parsed
+ * body — but keeps the one thing the wrapper exists for: the bearer token.
+ *
+ * `fallbackName` is used only when the server names nothing. Preferring the
+ * server's name is what lets an export carry the date it was taken without the
+ * two sides having to agree on how to spell it.
+ */
+export async function downloadFile(
+  path: string,
+  { fallbackName, errorDetail }: { fallbackName: string; errorDetail: string },
+): Promise<void> {
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(`${API_BASE}${path}`, { headers });
+  if (!response.ok) {
+    if (response.status === 401) notifyUnauthorized();
+    throw new ApiError(response.status, errorDetail);
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filenameFromResponse(response) ?? fallbackName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 /**
  * Absolute ws:// or wss:// URL for the live event stream.
  *

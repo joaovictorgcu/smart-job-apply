@@ -25,6 +25,7 @@ vi.mock("react-router-dom", async () => {
 
 vi.mock("@/services/auth", () => ({
   deleteAccount: vi.fn(),
+  downloadAccountExport: vi.fn(),
   login: vi.fn(),
   register: vi.fn(),
   logout: vi.fn(),
@@ -50,6 +51,25 @@ describe("DangerZone", () => {
     expect(screen.getByText(/sessão do linkedin guardada/i)).toBeInTheDocument();
     expect(screen.getByText(/trilha de auditoria/i)).toBeInTheDocument();
     expect(screen.getByText(/não há período de carência/i)).toBeInTheDocument();
+  });
+
+  it("offers the data before offering to destroy it", async () => {
+    authMock.downloadAccountExport.mockResolvedValue(undefined);
+    renderWithProviders(<DangerZone />);
+
+    await userEvent.click(screen.getByRole("button", { name: /baixar os meus dados/i }));
+
+    await waitFor(() => expect(authMock.downloadAccountExport).toHaveBeenCalled());
+    expect(authMock.deleteAccount).not.toHaveBeenCalled();
+  });
+
+  it("a failed download says so and changes nothing", async () => {
+    authMock.downloadAccountExport.mockRejectedValue(new Error("Servidor fora do ar."));
+    renderWithProviders(<DangerZone />);
+
+    await userEvent.click(screen.getByRole("button", { name: /baixar os meus dados/i }));
+
+    expect(await screen.findByText(/não foi possível baixar/i)).toBeInTheDocument();
   });
 
   it("asks a second time before showing the password field", async () => {

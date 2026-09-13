@@ -1,4 +1,4 @@
-import { api, API_BASE, ApiError, getToken } from "@/services/client";
+import { api, downloadFile } from "@/services/client";
 import { buildQuery } from "@/lib/utils";
 import type {
   Application,
@@ -91,25 +91,11 @@ export function fetchApplicationEvents(
  * Bypasses the JSON wrapper on purpose: the response is a blob handed straight
  * to the browser's download machinery.
  */
-export async function downloadApplicationsCsv(): Promise<void> {
-  const headers: Record<string, string> = {};
-  const token = getToken();
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const response = await fetch(`${API_BASE}/applications/export`, { headers });
-  if (!response.ok) {
-    throw new ApiError(response.status, "Não foi possível exportar o CSV.");
-  }
-
-  const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "candidaturas.csv";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+export function downloadApplicationsCsv(): Promise<void> {
+  return downloadFile("/applications/export", {
+    fallbackName: "candidaturas.csv",
+    errorDetail: "Não foi possível exportar o CSV.",
+  });
 }
 
 /** POST /api/ai/review/{applicationId} — second-pass AI review of the draft. */
