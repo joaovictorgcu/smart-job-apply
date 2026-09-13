@@ -29,7 +29,9 @@ import asyncio
 import os
 import shutil
 import sys
+import time
 from pathlib import Path
+from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 BACKEND_DIR = PROJECT_ROOT / "backend"
@@ -212,14 +214,69 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def wipe(data_dir: Path, *, attempts: int = 5, pause: float = 0.4) -> list[Path]:
+    """Delete the throwaway data directory. Returns what would not go.
+
+    On Windows a file open by another process cannot be unlinked, and the
+    process in question is predictable: the previous demo's headless Chromium,
+    still letting go of `browser_profiles/user_1/.../leveldb/000003.log` a
+    moment after the server it belonged to exited. A plain `rmtree` loses that
+    race and takes the whole demo down with `WinError 32` before a single line
+    of the app has run.
+
+    So: retry briefly, then keep going. A browser profile left behind is a stale
+    cache, not state the demo reads — but the database is different, and
+    `main` refuses to start if that is what survived.
+    """
+    if not data_dir.exists():
+        return []
+
+    survivors: list[Path] = []
+
+    def _remember(_func: Any, path: str, _exc: BaseException) -> None:
+        survivors.append(Path(path))
+
+    for attempt in range(1, attempts + 1):
+        survivors = []
+        shutil.rmtree(data_dir, onexc=_remember)
+        if not survivors:
+            return []
+        if attempt < attempts:
+            time.sleep(pause)
+    return survivors
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     data_dir = Path(args.data_dir).resolve()
 
-    if args.fresh and data_dir.exists():
-        shutil.rmtree(data_dir)
+    if args.fresh:
+        left = wipe(data_dir)
+        stubborn_database = [path for path in left if path.suffix in (".db", ".sqlite")]
+        if stubborn_database:
+            print(
+                "Could not delete the demo database — another demo server is "
+                f"probably still running:\n  {stubborn_database[0]}",
+                file=sys.stderr,
+            )
+            return 1
+        if left:
+            # Worth saying, and not worth stopping for: the files are a browser
+            # cache whose owner is on its way out.
+            print(f"Note: {len(left)} file(s) were still locked and stayed behind.")
     data_dir.mkdir(parents=True, exist_ok=True)
+    _run_server(args, data_dir)
+    return 0
 
+
+def _run_server(args: argparse.Namespace, data_dir: Path) -> None:
+    """Configure, seed and serve. Split from `main` so the wipe can be tested.
+
+    Everything here has a side effect a test must not have — it edits the
+    environment, creates a database and blocks on uvicorn — which is why the
+    decisions `main` makes about a failed wipe are on the other side of this
+    boundary.
+    """
     # Set before importing anything that reads settings: `get_settings` is cached
     # on first call, so a later change would not be seen.
     os.environ.update(demo_environment(data_dir, port=args.port))
@@ -244,7 +301,6 @@ def main(argv: list[str] | None = None) -> int:
     import uvicorn
 
     uvicorn.run("app.main:app", host="127.0.0.1", port=args.port, log_level="info")
-    return 0
 
 
 if __name__ == "__main__":
