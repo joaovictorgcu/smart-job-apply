@@ -16,6 +16,7 @@ from __future__ import annotations
 import pytest
 
 from app.automation.contracts import FormAnswer, SearchFilters
+from app.automation.engine.answers import is_cover_letter_field
 from app.automation.errors import (
     AlreadyAppliedError,
     EasyApplyUnavailableError,
@@ -160,12 +161,41 @@ async def test_open_easy_apply_reports_the_form_it_can_see(
         "Years of Python experience?",
         "Are you authorized to work in this country?",
         "Level of English",
+        # Reported because the form does contain it. It stops being a *question*
+        # one layer up, in `is_cover_letter_field` — the modal fills this box
+        # from the generated letter, and asking the screening model about it
+        # flagged every posting for review. What this layer sees is the form.
+        "Cover letter",
     }
     assert by_label["City"].kind == "text"
     assert by_label["City"].current_value == "São Paulo, Brazil"
     assert by_label["Years of Python experience?"].kind == "number"
+    assert by_label["Cover letter"].kind == "textarea"
     # The file input is a resume upload, not a question to answer.
     assert "Resume" not in by_label
+
+
+async def test_the_cover_letter_box_is_reported_but_never_a_screening_question(
+    logged_in_service: LinkedInBrowserService,
+) -> None:
+    """The distinction the browser layer must not blur.
+
+    `open_easy_apply` describes the form, so the letter box belongs in what it
+    returns — the fingerprint and the event are built from it. Deciding it is
+    not something to *ask the model* is a separate judgement, made against the
+    same question objects this layer produces, and this test pins the seam
+    between the two so neither side can drift into the other.
+    """
+    questions = await logged_in_service.open_easy_apply("4010000001")
+
+    letters = [question for question in questions if is_cover_letter_field(question)]
+
+    assert [question.label for question in letters] == ["Cover letter"]
+    assert not any(
+        is_cover_letter_field(question)
+        for question in questions
+        if question.label != "Cover letter"
+    )
 
 
 async def test_open_easy_apply_reports_only_the_visible_step(
