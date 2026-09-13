@@ -93,7 +93,7 @@ class TestTheLiveRepository:
         # A guard defined but never registered is worse than no guard at all.
         defined = {name for name in vars(guards) if name.startswith("g") and name[1:2].isdigit()}
         assert {guard.__name__ for guard in guards.ALL_GUARDS} == defined
-        assert len(guards.ALL_GUARDS) == 8
+        assert len(guards.ALL_GUARDS) == 10
 
     def test_a_compliant_fake_repository_reports_nothing(self, repo: Path) -> None:
         assert guards.run_all(repo) == []
@@ -342,6 +342,117 @@ class TestG7ReservedLogKeys:
             'log.info("x", extra={"action": "engine.submit", "user_id": 1, "run_id": 2})\n',
         )
         assert guards.g7_reserved_log_keys(repo) == []
+
+
+class TestG9LayerBoundaries:
+    """The dependency table in docs/architecture.md, tested as a rule.
+
+    The regression these exist for already happened once: every service in the
+    repository imported FastAPI, because the exception class it raises to say
+    "not found" lived in the HTTP package. Prose said that was forbidden and
+    nothing checked it for months.
+    """
+
+    @pytest.mark.parametrize(
+        ("module", "source"),
+        [
+            ("services/job_service.py", "from fastapi import HTTPException\n"),
+            ("services/job_service.py", "from app.api.errors import NotFoundError\n"),
+            ("models/job.py", "from app.services.job_service import list_jobs\n"),
+            ("database/session.py", "from app.ai.client import score\n"),
+            ("api/routes/jobs.py", "from app.automation.linkedin.service import Service\n"),
+            ("schemas/job.py", "from sqlalchemy import select\n"),
+            ("websocket/manager.py", "from app.services.job_service import list_jobs\n"),
+            ("observability/logging.py", "from fastapi import Request\n"),
+            ("portals/registry.py", "from app.api.errors import NotFoundError\n"),
+        ],
+    )
+    def test_an_upward_import_is_reported(self, repo: Path, module: str, source: str) -> None:
+        write(repo, module, source)
+        violations = guards.g9_layer_boundaries(repo)
+        assert len(violations) == 1
+        assert violations[0].guard == "G9"
+        assert violations[0].path == f"backend/app/{module}"
+        assert violations[0].line == 1
+
+    def test_the_direction_that_is_allowed_passes(self, repo: Path) -> None:
+        # Downward is the whole point: a service may reach the models, the
+        # domain and the framework-free errors.
+        write(
+            repo,
+            "services/job_service.py",
+            "from sqlalchemy import select\n"
+            "from app.errors import NotFoundError\n"
+            "from app.models import Job\n"
+            "from app.domain.scoring import decide\n",
+        )
+        assert guards.g9_layer_boundaries(repo) == []
+
+    def test_every_rule_names_a_package_that_exists(self) -> None:
+        # A rule pointed at a directory nobody created scans nothing and passes
+        # forever. That is the failure mode this guard is most exposed to.
+        app = REPO_ROOT / "backend" / "app"
+        missing = [rule.package for rule in guards.LAYER_RULES if not (app / rule.package).is_dir()]
+        assert missing == []
+
+
+class TestG10FrontendLayerBoundaries:
+    @pytest.fixture
+    def frontend(self, tmp_path: Path) -> Path:
+        (tmp_path / "frontend" / "src" / "lib").mkdir(parents=True)
+        return tmp_path
+
+    def write_tsx(self, repo: Path, relative_path: str, source: str) -> None:
+        path = repo / "frontend" / "src" / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source, encoding="utf-8")
+
+    @pytest.mark.parametrize(
+        ("module", "source"),
+        [
+            ("lib/format.ts", "import { Card } from '@/components/primitives';\n"),
+            ("lib/format.ts", 'import { Jobs } from "@/pages/Jobs";\n'),
+            ("services/jobs.ts", "import { useToast } from '@/hooks/useToast';\n"),
+            ("components/JobCard.tsx", "import { Jobs } from '@/pages/Jobs';\n"),
+            ("types/api.ts", "import { fold } from '@/lib/highlight';\n"),
+        ],
+    )
+    def test_an_upward_import_is_reported(self, frontend: Path, module: str, source: str) -> None:
+        self.write_tsx(frontend, module, source)
+        violations = guards.g10_frontend_layer_boundaries(frontend)
+        assert len(violations) == 1
+        assert violations[0].guard == "G10"
+        assert violations[0].path == f"frontend/src/{module}"
+
+    def test_a_relative_climb_is_reported_wherever_it_is(self, frontend: Path) -> None:
+        self.write_tsx(
+            frontend, "pages/Jobs.tsx", "import { JobCard } from '../components/JobCard';\n"
+        )
+        violations = guards.g10_frontend_layer_boundaries(frontend)
+        assert len(violations) == 1
+        assert violations[0].guard == "G10"
+        assert "@/" in violations[0].message
+
+    def test_a_sibling_import_is_fine(self, frontend: Path) -> None:
+        # `./Sibling` says "next to me", which stays true when the folder moves.
+        self.write_tsx(frontend, "components/JobCard.tsx", "import { Badge } from './Badge';\n")
+        assert guards.g10_frontend_layer_boundaries(frontend) == []
+
+    def test_the_allowed_direction_passes(self, frontend: Path) -> None:
+        self.write_tsx(
+            frontend,
+            "components/JobCard.tsx",
+            "import { splitByTerms } from '@/lib/highlight';\n"
+            "import { useJobs } from '@/hooks/useApi';\n"
+            "import type { Job } from '@/types/api';\n",
+        )
+        self.write_tsx(frontend, "lib/highlight.ts", "import type { Job } from '@/types/api';\n")
+        assert guards.g10_frontend_layer_boundaries(frontend) == []
+
+    def test_a_repository_without_a_frontend_is_not_a_failure(self, tmp_path: Path) -> None:
+        # The guard runs from CI at the repository root; a checkout that has no
+        # frontend directory must report nothing rather than crash.
+        assert guards.g10_frontend_layer_boundaries(tmp_path) == []
 
 
 class TestTheCommandLine:

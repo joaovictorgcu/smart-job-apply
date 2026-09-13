@@ -83,8 +83,27 @@ SUBMIT_ALLOWED_PACKAGE = "automation/engine/"
 PLAYWRIGHT_ALLOWED_FILE = "automation/browser.py"
 PLAYWRIGHT_ALLOWED_PACKAGE = "automation/linkedin/"
 
-# `app/domain/` is the pure core: no network, no ORM, no framework.
-DOMAIN_FORBIDDEN_IMPORTS = ("sqlalchemy", "anthropic", "playwright", "fastapi", "app.models")
+# `app/domain/` is the pure core: no network, no ORM, no framework, and none of
+# the layers built on top of it either. A rule that can only be tested by
+# standing up the thing it is a rule about is not a rule anyone will test.
+DOMAIN_FORBIDDEN_IMPORTS = (
+    "sqlalchemy",
+    "anthropic",
+    "playwright",
+    "fastapi",
+    "app.models",
+    "app.database",
+    "app.services",
+    "app.api",
+    "app.automation",
+    "app.ai",
+)
+
+# The exception, and the only one: `app/ai/schemas.py` is the shape of what the
+# model returns, not a client for it — plain pydantic, no SDK, no I/O. The
+# scoring rules are written against `JobScore`, so forbidding it would mean
+# copying the type rather than depending on it.
+DOMAIN_ALLOWED_MODULES = ("app.ai.schemas",)
 
 # Packages whose error handling must never be silent.
 NO_SILENT_EXCEPT_PACKAGES = ("domain", "ai")
@@ -352,6 +371,8 @@ def g5_domain_purity(root: Path) -> list[Violation]:
     violations: list[Violation] = []
     for path in python_files(domain):
         for imported, line in imported_modules(parse(path)):
+            if any(imports_package(imported, allowed) for allowed in DOMAIN_ALLOWED_MODULES):
+                continue
             for forbidden in DOMAIN_FORBIDDEN_IMPORTS:
                 if imports_package(imported, forbidden):
                     violations.append(
@@ -526,6 +547,204 @@ def g8_production_ports_are_loopback(root: Path) -> list[Violation]:
     return violations
 
 
+# --- G9 ---------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class LayerRule:
+    """One row of the dependency table in docs/architecture.md, as code.
+
+    `package` is a directory under `backend/app/`. `forbidden` is what a module
+    in it may not import, matched on package prefix. `why` is printed on a
+    violation, because a boundary nobody can explain is a boundary someone will
+    delete the first time it is inconvenient.
+    """
+
+    package: str
+    forbidden: tuple[str, ...]
+    why: str
+
+
+# The arrows point one way: the layer that owns the rules never imports the
+# layer that owns the transport. The table in docs/architecture.md said this in
+# prose, and until this guard existed only two of its rows were enforced — the
+# unenforced ones had already drifted. Every service imported FastAPI to raise
+# "not found", because the exception class lived in the HTTP package.
+LAYER_RULES: tuple[LayerRule, ...] = (
+    LayerRule(
+        "services",
+        ("fastapi", "playwright", "app.api"),
+        "Services own the rules. Raising `app.errors.NotFoundError` must not "
+        "require the web framework, and a service importing `app.api` has "
+        "turned the dependency arrow around.",
+    ),
+    LayerRule(
+        "models",
+        ("fastapi", "app.services", "app.api", "app.automation", "app.ai"),
+        "The tables are the bottom of the stack. Anything they import, every "
+        "layer above them imports too.",
+    ),
+    LayerRule(
+        "database",
+        ("fastapi", "app.services", "app.api", "app.automation", "app.ai"),
+        "Session and engine setup is infrastructure; it must not know which "
+        "features exist.",
+    ),
+    LayerRule(
+        "api",
+        ("playwright", "anthropic", "app.automation.linkedin", "app.automation.browser"),
+        "The HTTP layer talks to services and contracts. A route holding a "
+        "`Page` or an SDK client is a route that cannot be tested without one.",
+    ),
+    LayerRule(
+        "schemas",
+        ("fastapi", "sqlalchemy", "app.services", "app.api", "app.automation"),
+        "Schemas are the wire shapes. They are imported by nearly everything, "
+        "so they must cost nothing to import.",
+    ),
+    LayerRule(
+        "websocket",
+        ("sqlalchemy", "app.services", "app.api"),
+        "The socket layer broadcasts what it is handed; it does not query.",
+    ),
+    LayerRule(
+        "observability",
+        ("fastapi", "app.services", "app.api", "app.automation", "app.ai"),
+        "Logging is imported by every layer, including the lowest. A cycle here "
+        "breaks the import of the whole application.",
+    ),
+    LayerRule(
+        "portals",
+        ("fastapi", "sqlalchemy", "app.services", "app.api"),
+        "A portal descriptor is data about a job board, not a feature.",
+    ),
+)
+
+
+def g9_layer_boundaries(root: Path) -> list[Violation]:
+    """Every row of the layering table in docs/architecture.md, enforced."""
+    app = app_root(root)
+    violations: list[Violation] = []
+    for rule in LAYER_RULES:
+        for path in python_files(app / rule.package):
+            for imported, line in imported_modules(parse(path)):
+                for forbidden in rule.forbidden:
+                    if imports_package(imported, forbidden):
+                        violations.append(
+                            Violation(
+                                "G9",
+                                relative(path, root),
+                                line,
+                                f"app/{rule.package}/ imports `{imported}`. {rule.why}",
+                            )
+                        )
+    return violations
+
+
+# --- G10 --------------------------------------------------------------------
+
+
+# The same idea on the other side of the wire. The frontend has no
+# compiler-enforced packages, so the only thing between it and a ball of mud is
+# which directory a file lives in and what that directory may reach for.
+FRONTEND_ROOT = "frontend/src"
+
+FRONTEND_LAYER_RULES: tuple[LayerRule, ...] = (
+    LayerRule(
+        "lib",
+        ("components", "pages", "hooks", "services", "test"),
+        "lib/ is pure functions over plain values. That is what makes it "
+        "testable without rendering anything, and reusable from anywhere.",
+    ),
+    LayerRule(
+        "services",
+        ("components", "pages", "hooks"),
+        "services/ is the API client. It must not know that a screen exists.",
+    ),
+    LayerRule(
+        "components",
+        ("pages",),
+        "A component that reaches for a page is a page. Pass what it needs in "
+        "as props instead.",
+    ),
+    LayerRule(
+        "types",
+        ("components", "pages", "hooks", "services", "lib"),
+        "types/ is the shape of the API and nothing else. Everything imports "
+        "it, so it must import nothing.",
+    ),
+)
+
+# `import x from "@/lib/y"`, `export { x } from '@/lib/y'`, and anything that
+# climbs out of its own directory.
+FRONTEND_IMPORT = re.compile(
+    r"""^[^\S\n]*(?:import|export)\b[^'"\n]*?from\s*['"](?P<target>[^'"]+)['"]""",
+    re.MULTILINE,
+)
+
+
+def frontend_files(base: Path) -> list[Path]:
+    if not base.exists():
+        return []
+    return sorted(
+        path
+        for pattern in ("*.ts", "*.tsx")
+        for path in base.rglob(pattern)
+        if "node_modules" not in path.parts
+    )
+
+
+def g10_frontend_layer_boundaries(root: Path) -> list[Violation]:
+    """The same one-way arrows in `frontend/src`, plus: always import via `@/`.
+
+    The relative-path half matters more than it looks. `../../lib/format` and
+    `@/lib/format` resolve to the same module, but the first encodes where the
+    *importer* sits, so moving a file rewrites imports that have nothing to do
+    with the move and the diff of a refactor stops being readable. One spelling
+    means a file can be moved by moving it.
+    """
+    base = root / FRONTEND_ROOT
+    violations: list[Violation] = []
+
+    for path in frontend_files(base):
+        location = path.relative_to(base).as_posix()
+        layer = location.split("/")[0] if "/" in location else ""
+        rules = [rule for rule in FRONTEND_LAYER_RULES if rule.package == layer]
+        text = path.read_text(encoding="utf-8")
+
+        for match in FRONTEND_IMPORT.finditer(text):
+            target = match.group("target")
+            line = text.count("\n", 0, match.start()) + 1
+
+            if target.startswith("../"):
+                violations.append(
+                    Violation(
+                        "G10",
+                        relative(path, root),
+                        line,
+                        f"imports `{target}` by climbing out of its own folder. "
+                        "Use the `@/` alias, so the import says what it wants "
+                        "rather than where the importer happens to live.",
+                    )
+                )
+                continue
+
+            if not target.startswith("@/"):
+                continue
+            imported_layer = target[2:].split("/")[0]
+            for rule in rules:
+                if imported_layer in rule.forbidden:
+                    violations.append(
+                        Violation(
+                            "G10",
+                            relative(path, root),
+                            line,
+                            f"src/{rule.package}/ imports `{target}`. {rule.why}",
+                        )
+                    )
+    return violations
+
+
 ALL_GUARDS: tuple[Callable[[Path], list[Violation]], ...] = (
     g1_assisted_mode_default,
     g2_user_settings_defaults,
@@ -535,6 +754,8 @@ ALL_GUARDS: tuple[Callable[[Path], list[Violation]], ...] = (
     g6_silent_broad_except,
     g7_reserved_log_keys,
     g8_production_ports_are_loopback,
+    g9_layer_boundaries,
+    g10_frontend_layer_boundaries,
 )
 
 
